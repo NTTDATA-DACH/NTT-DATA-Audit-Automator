@@ -4,9 +4,9 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The Google Cloud region for the resources."
+  description = "The Google Cloud region for the resources. Must support Vertex AI Vector Search."
   type        = string
-  default     = "europe-west1"
+  default     = "europe-west4" # A region that supports the service
 }
 
 variable "customer_id" {
@@ -15,11 +15,7 @@ variable "customer_id" {
   default     = "hisolutions"
 }
 
-variable "gcs_bucket_name" {
-  description = "The name of the GCS bucket for audit data."
-  type        = string
-  default     = "bsi_audit_data"
-}
+# The gcs_bucket_name variable has been removed.
 
 variable "vpc_network_name" {
   description = "The name of the VPC network to create for the Vertex AI endpoint."
