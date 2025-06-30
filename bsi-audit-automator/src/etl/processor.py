@@ -27,6 +27,11 @@ class EtlProcessor:
         """Executes the full ETL pipeline."""
         # 1. Extract: Get file list from GCS
         source_files = self.gcs_client.list_source_files()
+
+        if self.config.is_test_mode:
+            logging.warning("TEST MODE: Limiting processing to the first source file only.")
+            source_files = source_files[:1]
+
         if not source_files:
             logging.warning("No source files found. Exiting ETL process.")
             return
