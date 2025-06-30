@@ -4,6 +4,10 @@ import logging
 
 from src.config import config
 from src.logging_setup import setup_logging
+from src.clients.gcs_client import GcsClient
+from src.clients.ai_client import AiClient
+from src.etl.processor import EtlProcessor
+
 
 def main():
     """
