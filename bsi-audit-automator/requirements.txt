@@ -1,0 +1,12 @@
+# GCP and Vertex AI
+google-cloud-aiplatform
+google-cloud-storage
+google-generativeai
+
+# For local development, to load .env files
+python-dotenv
+
+# For data processing and validation
+unstructured # A powerful library for parsing various document types like PDF
+langchain # For document chunking logic
+jsonschema # For validating AI model outputs
