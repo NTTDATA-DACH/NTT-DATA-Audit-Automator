@@ -1,160 +1,218 @@
 {
     "bsiAuditReport": {
-      "metadata": {
-        "customerId": "",
-        "auditType": "Zertifizierungsaudit",
-        "auditId": "",
-        "reportDate": "YYYY-MM-DD"
-      },
-      "managementtauglicheZusammenfassung": {
-        "chapterNumber": "1",
-        "title": "Management-taugliche Zusammenfassung",
-        "content": [
-          {
-            "type": "prose",
-            "text": "The executive summary text will be generated here."
-          },
-          {
-            "type": "finding",
-            "label": "Zusammenfassende Auditschlussfolgerung",
-            "findingText": null
-          },
-          {
-            "type": "finding",
-            "label": "Zusammenfassung der Stärken",
-            "findingText": null
-          },
-          {
-            "type": "table",
-            "title": "Zusammenfassung der festgestellten Nicht-Konformitäten",
-            "headers": ["Typ", "Anzahl"],
-            "rows": [
-              { "Typ": "Hauptabweichung(en)", "Anzahl": 0 },
-              { "Typ": "Nebenabweichung(en)", "Anzahl": 0 }
-            ]
-          }
-        ]
+      "titlePage": {
+        "reportTitle": "Auditbericht im Rahmen der Zertifizierung nach ISO 27001 auf der Basis von IT-Grundschutz",
+        "auditedInstitution": null,
+        "certificationId": null
       },
       "allgemeines": {
-        "chapterNumber": "2",
+        "chapterNumber": "1",
         "title": "Allgemeines",
-        "auftragsgrundlage": {
-          "subchapterNumber": "2.1",
-          "title": "Auftragsgrundlage",
-          "content": [{ "type": "prose", "text": null }]
-        },
-        "auditteam": {
-          "subchapterNumber": "2.2",
-          "title": "Auditteam",
-          "teamMembers": []
-        },
-        "ansprechpartnerBeimAuditierten": {
-          "subchapterNumber": "2.3",
-          "title": "Ansprechpartner beim Auditierten",
-          "participants": []
-        },
-        "geltungsbereich": {
-          "subchapterNumber": "2.4",
-          "title": "Geltungsbereich (Informationsverbund)",
-          "content": [{ "type": "prose", "text": null }]
-        },
-        "vertraulichkeitshinweis": {
-          "subchapterNumber": "2.5",
-          "title": "Vertraulichkeitshinweis und Haftungsbeschränkung",
-          "content": [{ "type": "prose", "text": "Dieser Bericht ist vertraulich..." }]
-        }
-      },
-      "feststellungenAusDerDokumentenpruefung": {
-        "chapterNumber": "3",
-        "title": "Feststellungen aus der Dokumentenprüfung",
-        "aktualitaetDerReferenzdokumente": {
-          "subchapterNumber": "3.1",
-          "title": "Aktualität der Referenzdokumente",
-          "content": [
+        "versionshistorie": {
+          "subchapterNumber": "1.1",
+          "title": "Versionshistorie",
+          "tableId": "Tabelle 1",
+          "history": [
             {
-              "type": "prose",
-              "text": "Die Aktualität der verwendeten Referenzdokumente muss festgestellt werden."
-            },
-            {
-              "type": "question",
-              "id": "3.1.1",
-              "questionText": "Wurden alle Referenzdokumente A.0 gemäß den Vorgaben von A.0.3 Lenkung von Dokumenten überarbeitet?",
-              "answer": null,
-              "answerType": "boolean"
-            },
-            {
-              "type": "question",
-              "id": "3.1.2",
-              "questionText": "Wurden alle Dateien zu den Referenzdokumenten A.1, A.2, A.3, A.5 und A.6 für das Audit neu erstellt?",
-              "answer": null,
-              "answerType": "boolean"
-            },
-            {
-              "type": "question",
-              "id": "3.1.3",
-              "questionText": "Wurden alle Maßnahmen im A.4 IT-Grundschutz-Check innerhalb der letzten 12 Monate neu bewertet?",
-              "answer": null,
-              "answerType": "boolean"
-            },
-            {
-              "type": "question",
-              "id": "3.1.4",
-              "questionText": "Datum der letzten inhaltlichen Änderung im Referenzdokument A.4 IT-Grundschutz-Check",
-              "answer": null,
-              "answerType": "date"
-            },
-            {
-              "type": "finding",
-              "id": "3.1.5",
-              "label": "Feststellung",
-              "findingText": null
+              "datum": null,
+              "version": null,
+              "verfasser": null,
+              "bemerkungen": null
             }
           ]
         },
-        "sicherheitsleitlinieUndRichtlinien": {
-          "subchapterNumber": "3.2",
-          "title": "Sicherheitsleitlinie und -richtlinien",
-          "content": [{ "type": "finding", "label": "Feststellung", "findingText": null }]
-        }
-      },
-      "feststellungenAusDerAuditdurchfuehrungVorOrt": {
-        "chapterNumber": "4",
-        "title": "Feststellungen aus der Auditdurchführung vor Ort",
-        "content": [{ "type": "prose", "text": "Summary of on-site findings..."}],
-        "findings": [],
-        "nonConformities": []
-      },
-      "auditbewertungUndEmpfehlung": {
-        "chapterNumber": "5",
-        "title": "Auditbewertung und Empfehlung",
-        "zusammenfassendeBewertung": {
-          "subchapterNumber": "5.1",
-          "title": "Zusammenfassende Bewertung",
-          "content": [{ "type": "finding", "label": "Bewertung", "findingText": null }]
+        "auditierteInstitution": {
+          "subchapterNumber": "1.2",
+          "title": "Auditierte Institution",
+          "tableId": "Tabelle 2",
+          "contactInfo": {
+            "institution": null,
+            "strasseHausnummer": null,
+            "plzOrt": null,
+            "email": null
+          },
+          "tableId_ansprechpartner": "Tabelle 3",
+          "contactPerson": {
+            "name": null,
+            "funktion": null,
+            "telefon": null,
+            "email": null,
+            "abweichendeAnschrift": null
+          }
         },
-        "empfehlungZurZertifizierung": {
-          "subchapterNumber": "5.2",
-          "title": "Empfehlung zur Zertifizierung (for certification audits)",
-          "content": [{ "type": "finding", "label": "Empfehlung", "findingText": null }]
+        "auditteam": {
+          "subchapterNumber": "1.3",
+          "title": "Auditteam",
+          "leadAuditor": { "tableId": "Tabelle 4", "data": {} },
+          "auditors": { "tableId": "Tabelle 5", "data": [] },
+          "experts": { "tableId": "Tabelle 6", "data": [] },
+          "consultants": { "tableId": "Tabelle 7", "data": [] }
         },
-        "empfehlungZurAufrechterhaltung": {
-          "subchapterNumber": "5.3",
-          "title": "Empfehlung zur Aufrechterhaltung der Zertifizierung (for surveillance audits)",
-          "content": [{ "type": "finding", "label": "Empfehlung", "findingText": null }]
-        }
-      },
-      "anlagen": {
-        "chapterNumber": "6",
-        "title": "Anlagen",
-        "listOfParticipants": {
-          "subchapterNumber": "6.1",
-          "title": "Liste der Gesprächspartner",
-          "participants": []
+        "informationsverbund": {
+          "subchapterNumber": "1.4",
+          "title": "Informationsverbund",
+          "content": [
+            { "type": "prose", "label": "Kurzbezeichnung", "text": null },
+            { "type": "prose", "label": "Kurzbeschreibung", "text": null }
+          ]
         },
-        "listOfDocuments": {
-          "subchapterNumber": "6.2",
-          "title": "Liste der geprüften Dokumente",
+        "audittyp": {
+          "subchapterNumber": "1.5",
+          "title": "Audittyp",
+          "content": [{ "type": "prose", "text": null }]
+        },
+        "auditprojektierung": {
+          "subchapterNumber": "1.6",
+          "title": "Auditprojektierung",
+          "tableId_phasen": "Tabelle 8",
+          "phases": [],
+          "tableId_anmerkungen": "Tabelle 9",
+          "notes": null
+        },
+        "absprachen": {
+          "subchapterNumber": "1.7",
+          "title": "Absprachen",
+          "tableId": "Tabelle 10",
+          "agreements": []
+        },
+        "formaleGrundlagenAuditierung": {
+          "subchapterNumber": "1.8",
+          "title": "Formale Grundlagen der Auditierung",
+          "tableId": "Tabelle 11",
           "documents": []
+        },
+        "inhaltlicheGrundlagen": {
+          "subchapterNumber": "1.9",
+          "title": "Inhaltliche Grundlagen",
+          "content": [{ "type": "prose", "label": "Verweis der Liste für Referenzdokumente", "text": null }]
+        },
+        "toolbasierteAuditUnterstuetzung": {
+          "subchapterNumber": "1.10",
+          "title": "Toolbasierte Audit-Unterstützung",
+          "content": [
+            { "type": "prose", "label": "Tool", "text": null },
+            { "type": "prose", "label": "Version", "text": null },
+            { "type": "prose", "label": "Stand des IT-Grundschutz-Kompendiums", "text": null }
+          ]
+        }
+      },
+      "voraudit": {
+        "chapterNumber": "2",
+        "title": "Voraudit",
+        "tableId": "Tabelle 12",
+        "content": [
+          {
+            "type": "question",
+            "questionText": "Wurde ein Voraudit durchgeführt?",
+            "answer": null, "answerType": "boolean"
+          },
+          { "type": "finding", "label": "Prüfumfang des Voraudits", "findingText": null },
+          { "type": "finding", "label": "Feststellung", "findingText": null }
+        ]
+      },
+      "dokumentenpruefung": {
+        "chapterNumber": "3",
+        "title": "Dokumentenprüfung",
+        "subsections": [
+          { "subchapterNumber": "3.1", "title": "Aktualität der Referenzdokumente", "tableId": "Tabelle 13", "content": [] },
+          { "subchapterNumber": "3.2", "title": "Sicherheitsleitlinie und -richtlinien in A.0", "tableId": "Tabelle 14", "content": [] },
+          { "subchapterNumber": "3.3", "title": "Strukturanalyse A.1", "subsections": [
+              { "subchapterNumber": "3.3.1", "title": "Definition des Informationsverbundes", "tableId": "Tabelle 15" },
+              { "subchapterNumber": "3.3.2", "title": "Bereinigter Netzplan", "tableId": "Tabelle 16" },
+              { "subchapterNumber": "3.3.3", "title": "Liste der Geschäftsprozesse", "tableId": "Tabelle 17" },
+              { "subchapterNumber": "3.3.4", "title": "Liste der Anwendungen", "tableId": "Tabelle 18" },
+              { "subchapterNumber": "3.3.5", "title": "Liste der IT-Systeme", "tableId": "Tabelle 19" },
+              { "subchapterNumber": "3.3.6", "title": "Liste der Räume, Gebäude und Standorte", "tableId": "Tabelle 20" },
+              { "subchapterNumber": "3.3.7", "title": "Liste der Kommunikationsverbindungen", "tableId": "Tabelle 21" },
+              { "subchapterNumber": "3.3.8", "title": "Stichprobendokumentation der Strukturanalyse", "tableId": "Tabelle 22" },
+              { "subchapterNumber": "3.3.9", "title": "Liste der Dienstleister", "tableId": "Tabelle 24" },
+              { "subchapterNumber": "3.3.10", "title": "Ergebnis der Strukturanalyse", "tableId": "Tabelle 25" }
+          ]},
+          { "subchapterNumber": "3.4", "title": "Schutzbedarfsfeststellung A.2", "subsections": [] },
+          { "subchapterNumber": "3.5", "title": "Modellierung des Informationsverbundes A.3", "subsections": [] },
+          { "subchapterNumber": "3.6", "title": "IT-Grundschutz-Check A.4", "subsections": [] },
+          { "subchapterNumber": "3.7", "title": "Risikoanalyse A.5", "subsections": [] },
+          { "subchapterNumber": "3.8", "title": "Realisierungsplan A.6", "subsections": [] },
+          { "subchapterNumber": "3.9", "title": "Ergebnis der Dokumentenprüfung", "tableId": "Tabelle 44", "content": [] }
+        ]
+      },
+      "erstellungEinesPruefplans": {
+        "chapterNumber": "4",
+        "title": "Erstellung eines Prüfplans",
+        "auditplanung": {
+          "subchapterNumber": "4.1",
+          "title": "Auditplanung",
+          "subsections": [
+            { "subchapterNumber": "4.1.1", "title": "Auswahl Bausteine Erst-/Rezertifizierungsverfahren", "tableId": "Tabelle 45" },
+            { "subchapterNumber": "4.1.2", "title": "Auswahl Bausteine 1. Überwachungsaudit", "tableId": "Tabelle 46" },
+            { "subchapterNumber": "4.1.3", "title": "Auswahl Bausteine 2. Überwachungsaudit", "tableId": "Tabelle 47" },
+            { "subchapterNumber": "4.1.4", "title": "Auswahl Standorte", "tableId": "Tabelle 48" },
+            { "subchapterNumber": "4.1.5", "title": "Auswahl Maßnahmen aus der Risikoanalyse", "tableId": "Tabelle 49" }
+          ]
+        }
+      },
+      "vorOrtAudit": {
+        "chapterNumber": "5",
+        "title": "Vor-Ort-Audit",
+        "subsections": [
+          { "subchapterNumber": "5.1", "title": "Wirksamkeit des Sicherheitsmanagementsystems", "tableId": "Tabelle 50" },
+          { "subchapterNumber": "5.2", "title": "Änderungen am Informationsverbund", "tableId": "Tabelle 51" },
+          { "subchapterNumber": "5.3", "title": "Behebung der Abweichungen und Empfehlungen", "tableId": "Tabelle 52" },
+          { "subchapterNumber": "5.4", "title": "Einhaltung der Auflagen", "tableIds": ["Tabelle 53", "Tabelle 54", "Tabelle 55"] },
+          { "subchapterNumber": "5.5", "title": "Verifikation des IT-Grundschutz-Checks", "subsections": [
+              { "subchapterNumber": "5.5.1", "title": "Zusammenfassung des IT-Grundschutz-Checks", "tableId": "Tabelle 56" },
+              { "subchapterNumber": "5.5.2", "title": "Einzelergebnisse des IT-Grundschutz-Checks", "tableIds": ["Tabelle 57", "58", "59", "60", "61"] },
+              { "subchapterNumber": "5.5.3", "title": "Ergebnis Verifikation des IT-Grundschutz-Checks", "tableId": "Tabelle 62" }
+          ]},
+          { "subchapterNumber": "5.6", "title": "Risikoanalyse A.5", "subsections": [
+              { "subchapterNumber": "5.6.1", "title": "Zusammenfassung der Risikoanalyse", "tableId": "Tabelle 63" },
+              { "subchapterNumber": "5.6.2", "title": "Einzelergebnisse der Risikoanalyse", "tableIds": ["Tabelle 64", "65", "66", "67", "68"] },
+              { "subchapterNumber": "5.6.3", "title": "Ergebnis Risikoanalyse", "tableId": "Tabelle 69" }
+          ]}
+        ]
+      },
+      "gesamtvotum": {
+        "chapterNumber": "6",
+        "title": "Gesamtvotum",
+        "content": [
+          { "type": "finding", "label": "Gesamteinschätzung und Begründung des Auditteamleiters", "findingText": null },
+          { "type": "finding", "label": "Votum", "findingText": null }
+        ],
+        "signature": {
+          "date": null,
+          "auditorSignature": null
+        }
+      },
+      "anhang": {
+        "chapterNumber": "7",
+        "title": "Anhang",
+        "referenzdokumente": {
+          "subchapterNumber": "7.1",
+          "title": "Referenzdokumente",
+          "tableId": "Tabelle 70"
+        },
+        "abweichungenUndEmpfehlungen": {
+          "subchapterNumber": "7.2",
+          "title": "Abweichungen und Empfehlungen",
+          "tableId": "Tabelle 71"
+        }
+      },
+      "anhangZumAuditbericht": {
+        "chapterNumber": "8",
+        "title": "Anhang zum Auditbericht",
+        "versionshistorieDesMusters": {
+          "subchapterNumber": "8.1",
+          "title": "Versionshistorie des Musters",
+          "tableId": "Tabelle 72"
+        },
+        "ausfuellhilfe": {
+          "subchapterNumber": "8.2",
+          "title": "Ausfüllhilfe für den Auditbericht"
+        },
+        "grundlagen": {
+          "subchapterNumber": "8.3",
+          "title": "Grundlagen für den Auditbericht",
+          "tableId": "Tabelle 73"
         }
       }
     }
