@@ -14,7 +14,9 @@ from google.genai.types import (
 from src.config import AppConfig
 
 # Constants for the AI client
-EMBEDDING_MODEL_NAME = "gemini-embedding-exp-03-07"
+#EMBEDDING_MODEL_NAME = "gemini-embedding-exp-03-07"
+EMBEDDING_MODEL_NAME = "gemini-embedding-001"
+EMBEDDING_MODEL_NAME = "text-embedding-004"
 EMBEDDING_TASK_TYPE = "RETRIEVAL_DOCUMENT"
 EMBEDDING_BATCH_SIZE = 2048  # API limit for text-embedding-004 is 100
 
@@ -28,9 +30,9 @@ class AiClient:
         self.client = genai.Client(
             vertexai=True,
             project=config.gcp_project_id,
-            location="global",
+            location=config.vertex_ai_region
         )
-        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region 'global'.")
+        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
