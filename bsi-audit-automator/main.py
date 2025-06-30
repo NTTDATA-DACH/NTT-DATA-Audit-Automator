@@ -46,10 +46,12 @@ def main():
         # Here we will instantiate and call our controller classes based on the args.
         if args.run_etl:
             logging.info("Starting ETL phase...")
-            # from src.etl.processor import EtlProcessor
-            # etl_processor = EtlProcessor(config)
-            # etl_processor.run()
-            logging.info("Placeholder: ETL phase would run here.")
+            # Instantiate clients and processor
+            gcs_client = GcsClient(config)
+            ai_client = AiClient(config)
+            etl_processor = EtlProcessor(config, gcs_client, ai_client)
+            etl_processor.run()
+
 
         elif args.run_stage:
             logging.info(f"Starting single audit stage: {args.run_stage}...")
