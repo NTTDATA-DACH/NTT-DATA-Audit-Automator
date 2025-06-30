@@ -49,8 +49,8 @@ class AiClient:
             for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
                 batch = texts[i:i + EMBEDDING_BATCH_SIZE]
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
-                # Use the instantiated client for the API call
-                result = self.client.embed_content(
+                # The client is configured once and used implicitly by the top-level functions.
+                result = genai.embed_content(
                     model=f"models/{EMBEDDING_MODEL_NAME}",
                     content=batch,
                     task_type=EMBEDDING_TASK_TYPE
