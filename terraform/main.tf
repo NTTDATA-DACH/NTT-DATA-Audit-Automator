@@ -77,5 +77,8 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   display_name = "bsi-audit-endpoint-${var.customer_id}"
   description  = "Endpoint for querying the BSI audit index."
   region       = var.region
-  network      = google_compute_network.bsi_vpc.id
+  # --- FIX FOR PROJECT NUMBER ERROR ---
+  # Manually construct the network string using the project NUMBER, not the ID.
+  # This matches the specific format required by this API.
+  network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
 }

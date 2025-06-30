@@ -3,6 +3,11 @@ variable "project_id" {
   type        = string
 }
 
+variable "project_number" {
+  description = "The unique numeric identifier for the Google Cloud project."
+  type        = string
+}
+
 variable "region" {
   description = "The Google Cloud region for the resources. Must support Vertex AI Vector Search."
   type        = string
