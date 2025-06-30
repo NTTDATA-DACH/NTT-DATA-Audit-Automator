@@ -4,6 +4,7 @@ from typing import List
 
 # Per imperative, use these specific imports for Vertex AI
 from google import genai
+from google.genai import types
 from google.genai.types import (
     GenerateContentConfig,
     GoogleSearch,
@@ -27,9 +28,9 @@ class AiClient:
         self.client = genai.Client(
             vertexai=True,
             project=config.gcp_project_id,
-            location=config.vertex_ai_region,
+            location="global",
         )
-        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
+        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region 'global'.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
@@ -52,8 +53,8 @@ class AiClient:
                 # The client is configured once and used implicitly by the top-level functions.
                 result = self.client.models.embed_content(
                     model=f"models/{EMBEDDING_MODEL_NAME}",
-                    content=batch,
-                    task_type=EMBEDDING_TASK_TYPE
+                    contents=batch,
+                    config=types.EmbedContentConfig(task_type=EMBEDDING_TASK_TYPE)
                 )
                 all_embeddings.extend(result['embedding'])
             
