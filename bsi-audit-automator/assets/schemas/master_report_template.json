@@ -1,237 +1,161 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "BSI Grundschutz Audit Report",
-    "description": "A comprehensive schema for a BSI Grundschutz audit report, based on Muster_Auditbericht_Kompendium_V3.0.",
-    "type": "object",
-    "properties": {
-      "bsiAuditReport": {
-        "type": "object",
-        "properties": {
-          "metadata": {
-            "type": "object",
-            "description": "Contains all metadata related to the audit and report.",
-            "properties": {
-              "customerId": { "type": "string", "description": "Unique identifier for the customer." },
-              "auditType": { "type": "string", "description": "Specifies the type of audit.", "enum": ["Zertifizierungsaudit", "Überwachungsaudit"] },
-              "auditId": { "type": "string", "description": "Unique ID for this specific audit." },
-              "auditPeriod": {
-                "type": "object",
-                "properties": {
-                  "startDate": { "type": "string", "format": "date", "description": "Start date of the audit period." },
-                  "endDate": { "type": "string", "format": "date", "description": "End date of the audit period." }
-                },
-                "required": ["startDate", "endDate"]
-              },
-              "reportDate": { "type": "string", "format": "date", "description": "Date the report was generated." },
-              "reportVersion": { "type": "string", "description": "Version of this report." }
-            },
-            "required": ["customerId", "auditType", "auditId", "auditPeriod", "reportDate"]
+    "bsiAuditReport": {
+      "metadata": {
+        "customerId": "",
+        "auditType": "Zertifizierungsaudit",
+        "auditId": "",
+        "reportDate": "YYYY-MM-DD"
+      },
+      "managementtauglicheZusammenfassung": {
+        "chapterNumber": "1",
+        "title": "Management-taugliche Zusammenfassung",
+        "content": [
+          {
+            "type": "prose",
+            "text": "The executive summary text will be generated here."
           },
-          "chapter1_summary": {
-            "type": "object",
-            "description": "Chapter 1: Management-taugliche Zusammenfassung.",
-            "properties": {
-              "executiveSummary": { "type": "string", "description": "A high-level summary for management." },
-              "auditConclusion": { "type": "string", "description": "Overall conclusion, e.g., 'Zertifizierung empfohlen'." },
-              "summaryOfStrengths": { "type": "array", "items": { "type": "string" }, "description": "List of key strengths identified." },
-              "summaryOfNonConformities": {
-                "type": "object",
-                "properties": {
-                  "major": { "type": "integer", "description": "Count of major non-conformities." },
-                  "minor": { "type": "integer", "description": "Count of minor non-conformities." }
-                },
-                "required": ["major", "minor"]
-              }
-            }
+          {
+            "type": "finding",
+            "label": "Zusammenfassende Auditschlussfolgerung",
+            "findingText": null
           },
-          "chapter2_general": {
-            "type": "object",
-            "description": "Chapter 2: Allgemeines.",
-            "properties": {
-              "basisOfOrder": { "type": "string", "description": "2.1 Auftragsgrundlage." },
-              "auditTeam": {
-                "type": "array",
-                "description": "2.2 Auditteam.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string" },
-                    "role": { "type": "string", "enum": ["Lead Auditor", "Auditor", "Technischer Experte"] }
-                  },
-                  "required": ["name", "role"]
-                }
-              },
-              "customerParticipants": {
-                "type": "array",
-                "description": "2.3 Ansprechpartner beim Auditierten.",
-                "items": {
-                  "type": "object",
-                  "properties": { "name": { "type": "string" }, "role": { "type": "string" } },
-                  "required": ["name", "role"]
-                }
-              },
-              "scope": {
-                "type": "object",
-                "description": "2.4 Geltungsbereich (Informationsverbund).",
-                "properties": {
-                  "description": { "type": "string" },
-                  "organizationalUnits": { "type": "array", "items": { "type": "string" } },
-                  "businessProcesses": { "type": "array", "items": { "type": "string" } },
-                  "physicalLocations": { "type": "array", "items": { "type": "string" } },
-                  "applicationsAndItSystems": { "type": "array", "items": { "type": "string" } },
-                  "personnelGroups": { "type": "array", "items": { "type": "string" } },
-                  "networkScope": { "type": "string" }
-                }
-              },
-              "confidentialityNotice": { "type": "string", "description": "Standard confidentiality notice." }
-            }
+          {
+            "type": "finding",
+            "label": "Zusammenfassung der Stärken",
+            "findingText": null
           },
-          "chapter3_documentReviewFindings": {
-            "type": "object",
-            "description": "Chapter 3: Feststellungen aus der Dokumentenprüfung.",
-            "properties": {
-              "section3_1_policyActuality": {
-                "type": "object", "description": "3.1 Aktualität, Vollständigkeit und Freigabe der Leitlinie.",
-                "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-              },
-              "section3_2_securityPolicyContent": {
-                "type": "object", "description": "3.2 Sicherheitsleitlinie und -richtlinien.",
-                "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-              },
-              "section3_3_securityConcept": {
-                "type": "object", "description": "3.3 Sicherheitskonzept.",
-                "properties": {
-                  "subsection3_3_1_structureAndStrategy": {
-                    "type": "object", "description": "3.3.1 Struktur des Sicherheitskonzepts und Umsetzungsstrategie.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_2_targetObjects": {
-                    "type": "object", "description": "3.3.2 Festlegung der zu betrachtenden Zielobjekte.",
-                    "properties": {
-                      "findings": { "type": "string" },
-                      "table": { "type": "array", "items": {
-                        "type": "object",
-                        "properties": { "targetObject": {"type": "string"}, "responsible": {"type": "string"}, "status": {"type": "string"} },
-                        "required": ["targetObject", "responsible", "status"]
-                      }},
-                      "isCompliant": { "type": ["boolean", "null"] }
-                    }
-                  },
-                  "subsection3_3_3_businessProcesses": {
-                    "type": "object", "description": "3.3.3 Liste der Geschäftsprozesse.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_4_structureAnalysis": {
-                    "type": "object", "description": "3.3.4 Strukturanalyse.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_5_protectionNeeds": {
-                    "type": "object", "description": "3.3.5 Schutzbedarfsfeststellung.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_6_modeling": {
-                    "type": "object", "description": "3.3.6 Modellierung.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_7_consolidatedRequirements": {
-                    "type": "object", "description": "3.3.7 Konsolidierte Liste der Anforderungen.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  },
-                  "subsection3_3_8_implementationStatus": {
-                    "type": "object", "description": "3.3.8 Umsetzungsstand der Sicherheitsanforderungen.",
-                    "properties": { "findings": { "type": "string" }, "isCompliant": { "type": ["boolean", "null"] } }
-                  }
-                }
-              }
-            }
-          },
-          "chapter4_onSiteAuditFindings": {
-            "type": "object",
-            "description": "Chapter 4: Feststellungen aus der Auditdurchführung vor Ort.",
-            "properties": {
-              "onSiteAuditSummary": { "type": "string" },
-              "findings": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "bausteinId": { "type": "string" },
-                    "bausteinName": { "type": "string" },
-                    "requirementId": { "type": "string" },
-                    "requirementText": { "type": "string" },
-                    "findingDescription": { "type": "string" },
-                    "evidence": { "type": "string" },
-                    "assessment": { "type": "string", "enum": ["erfüllt", "teilweise erfüllt", "nicht erfüllt", "nicht anwendbar"] },
-                    "isNonConformity": { "type": "boolean" },
-                    "nonConformityId": { "type": ["string", "null"] }
-                  },
-                  "required": ["bausteinId", "requirementId", "assessment"]
-                }
-              },
-              "nonConformities": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": { "type": "string" },
-                    "type": { "type": "string", "enum": ["Hauptabweichung", "Nebenabweichung", "Verbesserungspotenzial"] },
-                    "description": { "type": "string" },
-                    "reference": { "type": "string" },
-                    "correctiveActionRequired": { "type": "string" }
-                  },
-                  "required": ["id", "type", "description", "reference"]
-                }
-              }
-            }
-          },
-          "chapter5_auditEvaluationAndRecommendation": {
-            "type": "object",
-            "description": "Chapter 5: Auditbewertung und Empfehlung.",
-            "properties": {
-              "section5_1_summaryEvaluation": { "type": "string", "description": "5.1 Zusammenfassende Bewertung." },
-              "section5_2_certificationAuditRecommendation": {
-                "type": "object", "description": "5.2 Empfehlung zur Zertifizierung.",
-                "properties": {
-                  "recommendation": { "type": ["string", "null"], "enum": ["Zertifizierung empfohlen", "Zertifizierung mit Auflagen empfohlen", "Zertifizierung nicht empfohlen", null] },
-                  "justification": { "type": "string" }
-                }
-              },
-              "section5_3_surveillanceAuditRecommendation": {
-                "type": "object", "description": "5.3 Empfehlung zur Aufrechterhaltung der Zertifizierung.",
-                "properties": {
-                  "recommendation": { "type": ["string", "null"], "enum": ["Aufrechterhaltung des Zertifikats empfohlen", "Aussetzung des Zertifikats empfohlen", "Entzug des Zertifikats empfohlen", null] },
-                  "justification": { "type": "string" }
-                }
-              },
-              "section5_4_correctiveActionFollowUp": {
-                "type": "object", "description": "5.4 Umgang mit festgestellten Abweichungen.",
-                "properties": {
-                  "statusOfPreviousFindings": { "type": "string" },
-                  "deadlineForNewFindings": { "type": "string", "format": "date" }
-                }
-              }
-            }
-          },
-          "chapter6_appendices": {
-            "type": "object",
-            "description": "Chapter 6: Anlagen.",
-            "properties": {
-              "appendicesList": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "reference": { "type": "string" },
-                    "title": { "type": "string" },
-                    "content": { "type": ["array", "string"], "items": { "type": "string" } }
-                  },
-                  "required": ["reference", "title", "content"]
-                }
-              }
-            }
+          {
+            "type": "table",
+            "title": "Zusammenfassung der festgestellten Nicht-Konformitäten",
+            "headers": ["Typ", "Anzahl"],
+            "rows": [
+              { "Typ": "Hauptabweichung(en)", "Anzahl": 0 },
+              { "Typ": "Nebenabweichung(en)", "Anzahl": 0 }
+            ]
           }
+        ]
+      },
+      "allgemeines": {
+        "chapterNumber": "2",
+        "title": "Allgemeines",
+        "auftragsgrundlage": {
+          "subchapterNumber": "2.1",
+          "title": "Auftragsgrundlage",
+          "content": [{ "type": "prose", "text": null }]
         },
-        "required": ["metadata", "chapter1_summary", "chapter2_general", "chapter3_documentReviewFindings", "chapter4_onSiteAuditFindings", "chapter5_auditEvaluationAndRecommendation"]
+        "auditteam": {
+          "subchapterNumber": "2.2",
+          "title": "Auditteam",
+          "teamMembers": []
+        },
+        "ansprechpartnerBeimAuditierten": {
+          "subchapterNumber": "2.3",
+          "title": "Ansprechpartner beim Auditierten",
+          "participants": []
+        },
+        "geltungsbereich": {
+          "subchapterNumber": "2.4",
+          "title": "Geltungsbereich (Informationsverbund)",
+          "content": [{ "type": "prose", "text": null }]
+        },
+        "vertraulichkeitshinweis": {
+          "subchapterNumber": "2.5",
+          "title": "Vertraulichkeitshinweis und Haftungsbeschränkung",
+          "content": [{ "type": "prose", "text": "Dieser Bericht ist vertraulich..." }]
+        }
+      },
+      "feststellungenAusDerDokumentenpruefung": {
+        "chapterNumber": "3",
+        "title": "Feststellungen aus der Dokumentenprüfung",
+        "aktualitaetDerReferenzdokumente": {
+          "subchapterNumber": "3.1",
+          "title": "Aktualität der Referenzdokumente",
+          "content": [
+            {
+              "type": "prose",
+              "text": "Die Aktualität der verwendeten Referenzdokumente muss festgestellt werden."
+            },
+            {
+              "type": "question",
+              "id": "3.1.1",
+              "questionText": "Wurden alle Referenzdokumente A.0 gemäß den Vorgaben von A.0.3 Lenkung von Dokumenten überarbeitet?",
+              "answer": null,
+              "answerType": "boolean"
+            },
+            {
+              "type": "question",
+              "id": "3.1.2",
+              "questionText": "Wurden alle Dateien zu den Referenzdokumenten A.1, A.2, A.3, A.5 und A.6 für das Audit neu erstellt?",
+              "answer": null,
+              "answerType": "boolean"
+            },
+            {
+              "type": "question",
+              "id": "3.1.3",
+              "questionText": "Wurden alle Maßnahmen im A.4 IT-Grundschutz-Check innerhalb der letzten 12 Monate neu bewertet?",
+              "answer": null,
+              "answerType": "boolean"
+            },
+            {
+              "type": "question",
+              "id": "3.1.4",
+              "questionText": "Datum der letzten inhaltlichen Änderung im Referenzdokument A.4 IT-Grundschutz-Check",
+              "answer": null,
+              "answerType": "date"
+            },
+            {
+              "type": "finding",
+              "id": "3.1.5",
+              "label": "Feststellung",
+              "findingText": null
+            }
+          ]
+        },
+        "sicherheitsleitlinieUndRichtlinien": {
+          "subchapterNumber": "3.2",
+          "title": "Sicherheitsleitlinie und -richtlinien",
+          "content": [{ "type": "finding", "label": "Feststellung", "findingText": null }]
+        }
+      },
+      "feststellungenAusDerAuditdurchfuehrungVorOrt": {
+        "chapterNumber": "4",
+        "title": "Feststellungen aus der Auditdurchführung vor Ort",
+        "content": [{ "type": "prose", "text": "Summary of on-site findings..."}],
+        "findings": [],
+        "nonConformities": []
+      },
+      "auditbewertungUndEmpfehlung": {
+        "chapterNumber": "5",
+        "title": "Auditbewertung und Empfehlung",
+        "zusammenfassendeBewertung": {
+          "subchapterNumber": "5.1",
+          "title": "Zusammenfassende Bewertung",
+          "content": [{ "type": "finding", "label": "Bewertung", "findingText": null }]
+        },
+        "empfehlungZurZertifizierung": {
+          "subchapterNumber": "5.2",
+          "title": "Empfehlung zur Zertifizierung (for certification audits)",
+          "content": [{ "type": "finding", "label": "Empfehlung", "findingText": null }]
+        },
+        "empfehlungZurAufrechterhaltung": {
+          "subchapterNumber": "5.3",
+          "title": "Empfehlung zur Aufrechterhaltung der Zertifizierung (for surveillance audits)",
+          "content": [{ "type": "finding", "label": "Empfehlung", "findingText": null }]
+        }
+      },
+      "anlagen": {
+        "chapterNumber": "6",
+        "title": "Anlagen",
+        "listOfParticipants": {
+          "subchapterNumber": "6.1",
+          "title": "Liste der Gesprächspartner",
+          "participants": []
+        },
+        "listOfDocuments": {
+          "subchapterNumber": "6.2",
+          "title": "Liste der geprüften Dokumente",
+          "documents": []
+        }
       }
     }
   }
