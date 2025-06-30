@@ -1,0 +1,20 @@
+# Git / version control
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Python cache and virtual environment
+__pycache__/
+*.pyc
+.venv
+venv/
+
+# Environment variables - should be passed at runtime, not baked into the image
+.env
+
+# IDE / Editor specific
+.vscode/
+.idea/
