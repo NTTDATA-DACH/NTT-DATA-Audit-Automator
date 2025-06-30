@@ -21,7 +21,7 @@ export CUSTOMER_ID="kunde-x"
 
 # --- Cloud Resource Configuration (Get these from Terraform output) ---
 # To get the bucket name, run: terraform output -raw bsi_audit_bucket_name
-export BUCKET_NAME="" # e.g., bsi-audit-kunde-x-kunde-x-audit-data
+export BUCKET_NAME="bsi-audit-kunde-x-kunde-x-audit-data" # e.g., bsi-audit-kunde-x-kunde-x-audit-data
 
 # To get the index endpoint ID, run: terraform output -raw vertex_ai_index_endpoint_id
 export INDEX_ENDPOINT_ID="8256523084039716864" # e.g., 8256523084039716864

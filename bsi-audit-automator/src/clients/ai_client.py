@@ -1,7 +1,15 @@
 # src/clients/ai_client.py
 import logging
 from typing import List
-import google.generativeai as genai
+
+# Per imperative, use these specific imports for Vertex AI
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig,
+    GoogleSearch,
+    HttpOptions,
+    Tool,
+)
 from src.config import AppConfig
 
 # Constants for the AI client
@@ -15,30 +23,34 @@ class AiClient:
     def __init__(self, config: AppConfig):
         """Initializes the Vertex AI client."""
         self.config = config
-        genai.configure(
+        # Per imperative, instantiate a client for Vertex AI usage
+        self.client = genai.Client(
+            vertexai=True,
             project=config.gcp_project_id,
             location=config.vertex_ai_region,
         )
-        logging.info(f"Vertex AI Client configured for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
+        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generates vector embeddings for a list of text chunks.
-
         Args:
             texts: A list of text strings to embed.
-
         Returns:
             A list of vector embeddings, one for each input text.
         """
-        logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'.")
+        if not texts:
+            logging.warning("get_embeddings called with no texts. Returning empty list.")
+            return []
+        
+        logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'...")
         all_embeddings = []
         try:
             for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
                 batch = texts[i:i + EMBEDDING_BATCH_SIZE]
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
-                # The genai library handles the direct API call
-                result = genai.embed_content(
+                # Use the instantiated client for the API call
+                result = self.client.embed_content(
                     model=f"models/{EMBEDDING_MODEL_NAME}",
                     content=batch,
                     task_type=EMBEDDING_TASK_TYPE
