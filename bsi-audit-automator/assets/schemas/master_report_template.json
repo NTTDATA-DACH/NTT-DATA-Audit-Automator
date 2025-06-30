@@ -254,6 +254,181 @@
               "rows": []
             }
           }
-        }
-      }
+        },
+        "vorOrtAudit": {
+              "chapterNumber": "5",
+              "title": "Vor-Ort-Audit",
+              "description": "Während des Vor-Ort-Audits wird das Sicherheitskonzept / ISMS durch den Auditor geprüft. Die nachfolgenden Prüfpunkte werden mit einer Feststellung zu den Einzelprüfungen geschlossen. Das Votum bezieht sich auf den Stand nach einer möglichen Nachbesserung durch den Antragsteller. Abweichungen und Empfehlungen werden in den Feldern zu der jeweiligen Feststellung aufgezählt und einheitlich über die Liste der Abweichungen und Empfehlungen in Kapitel 7.2 “Abweichungen und Empfehlungen“ dokumentiert und nachverfolgt.",
+              "wirksamkeitDesSicherheitsmanagementsystems": {
+                "subchapterNumber": "5.1",
+                "title": "Wirksamkeit des Sicherheitsmanagementsystems",
+                "description": "Das Sicherheitsmanagementsystem bleibt aufrechterhalten, wenn alle wichtigen Prozesse des Informationsverbundes dokumentiert sind und diese Prozesse vollständig etabliert sind.",
+                "tableId": "Tabelle 50",
+                "content": [
+                  { "type": "question", "questionText": "Ist das ISMS effektiv und effizient im Einsatz? (Interview, Gesamteindruck)", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 4 organisiert?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Werden die in den Sicherheitsleitlinien vorgegebenen Ziele erreicht?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Werden alle wichtigen Prozesse des Informationsverbundes dokumentiert?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 5 dokumentiert?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Sind die Informationen konform zum BSI-Standard 200-2, Kapitel 5.1 klassifiziert?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Wird der Verbesserungsprozess gelebt und das ISMS kontinuierlich verbessert?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Erfolgt die Überprüfung des Informationssicherheitsprozesses anhand von Kennzahlen?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Erfolgt die Bewertung des ISMS mit Hilfe eines Reifegradmodells?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Wird die Umsetzung von Maßnahmen des Realisierungsplans überprüft?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Erfolgt die Übernahme der Gesamtverantwortung durch eine Managementbewertung?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Datum der letzten Managementbewertung:", "answer": null, "answerType": "date" },
+                  { "type": "finding", "label": "Feststellung:", "findingText": null }
+                ]
+              },
+              "aenderungenAmInformationsverbund": {
+                "subchapterNumber": "5.2",
+                "title": "Änderungen am Informationsverbund",
+                "description": "Alle Änderungen am Informationsverbund müssen geprüft werden. Änderungen am Informationsverbund, die Auswirkungen auf die Aufrechterhaltung des Zertifikats haben, müssen insbesondere geprüft werden.",
+                "tableId": "Tabelle 51",
+                "content": [
+                  { "type": "question", "questionText": "Liegen Änderungen am Informationsverbund vor?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Sind alle Änderungen am Informationsverbund der Zertifizierungsstelle des BSI mitgeteilt wurden?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Erfordern die Änderungen am Informationsverbund eine Rezertifizierung?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Sind die Änderungen in der Dokumentation des Sicherheitskonzeptes kontinuierlich eingeflossen?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Sind die dokumentierten Änderungen gemäß IT-Grundschutz-Methodik (BSI-Standard 200-2) und des IT-Grundschutz-Kompendiums umgesetzt?", "answer": null, "answerType": "boolean" },
+                  { "type": "question", "questionText": "Wird durch den Wegfall / die Hinzunahme von Komponenten die Sicherheit des Informationsverbundes beeinträchtigt?", "answer": null, "answerType": "boolean" },
+                  { "type": "finding", "label": "Feststellung:", "findingText": null }
+                ]
+              },
+              "verifikationDesITGrundschutzChecks": {
+                "subchapterNumber": "5.5",
+                "title": "Verifikation des IT-Grundschutz-Checks",
+                "zusammenfassung": {
+                  "subchapterNumber": "5.5.1",
+                  "title": "Zusammenfassung des IT-Grundschutz-Checks",
+                  "description": "Der Auditor prüft im IT-Grundschutz-Check, inwiefern jede einzelne Anforderung umgesetzt wird. Die Ergebnisse des IT-Grundschutz-Checks A.4 liegen vor.",
+                  "tableId": "Tabelle 56",
+                  "content": [
+                    { "type": "question", "questionText": "Stimmt der im IT-Grundschutz-Check festgestellte Umsetzungsstatus zu den Anforderungen mit dem tatsächlich vorhandenen Informationssicherheitszustand des jeweiligen Zielobjekts überein?", "answer": null, "answerType": "boolean" },
+                    { "type": "question", "questionText": "Ist die Begründung der entbehrlichen Anforderungen zulässig und nachvollziehbar? Der Auditor begründet diesen Sachverhalt explizit in der Bausteinprüfung.", "answer": null, "answerType": "boolean" },
+                    { "type": "question", "questionText": "Sind alle Anforderungen mit dem Umsetzungsstatus “teilweise“ oder \"nein\" im Referenzdokument A.6 enthalten?", "answer": null, "answerType": "boolean" },
+                    { "type": "finding", "label": "Feststellung:", "findingText": null }
+                  ]
+                },
+                "einzelergebnisse": {
+                  "subchapterNumber": "5.5.2",
+                  "title": "Einzelergebnisse des IT-Grundschutz-Checks",
+                  "description": "Für jeden im Rahmen der Auditplanung ausgewählten Baustein überprüft der Auditor durch Inspektion des jeweiligen Zielobjekts, ob die Anforderungen angemessen umgesetzt werden. Das Ergebnis der einzelnen Überprüfungen ist im Folgenden dokumentiert.",
+                  "bausteinPruefungen": [
+                    {
+                      "baustein": null,
+                      "zielobjekt": null,
+                      "auditiertAm": null,
+                      "auditor": null,
+                      "befragtWurde": null,
+                      "anforderungen": [
+                        {
+                          "nummer": null,
+                          "anforderung": null,
+                          "bewertung": null,
+                          "dokuAntragsteller": null,
+                          "pruefmethode": [],
+                          "auditfeststellung": null,
+                          "abweichungen": null
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "ergebnisVerifikation": {
+                  "subchapterNumber": "5.5.3",
+                  "title": "Ergebnis Verifikation des IT-Grundschutz-Checks",
+                  "description": "Ein kurzes Votum des Auditteamleiters zur Verifikation des IT-Grundschutz-Checks wird gegeben.",
+                  "tableId": "Tabelle 62",
+                  "content": [{ "type": "finding", "label": "Votum Verifikation des IT-Grundschutz-Checks:", "findingText": null }]
+                }
+              },
+              "risikoanalyseA5": {
+                  "subchapterNumber": "5.6",
+                  "title": "Risikoanalyse A.5",
+                  "zusammenfassung": {
+                      "subchapterNumber": "5.6.1",
+                      "title": "Zusammenfassung der Risikoanalyse",
+                      "description": "Als Ergebnis der Risikoanalyse A.5 sind für Zielobjekte mit hohem oder sehr hohem Schutzbedarf zusätzliche Maßnahmen herangezogen worden. Der Auditor muss den Umsetzungsstatus der Maßnahmen prüfen.",
+                      "tableId": "Tabelle 63",
+                      "content": [
+                          { "type": "question", "questionText": "Gibt es im Informationsverbund Zielobjekte mit einem Schutzbedarf \"hoch\" oder \"sehr hoch\"?", "answer": null, "answerType": "boolean" },
+                          { "type": "question", "questionText": "Stimmt der im IT-Grundschutz-Check festgestellte Umsetzungsstatus zusätzlicher Maßnahmen für Zielobjekte mit hohem oder sehr hohem Schutzbedarf mit dem tatsächlich vorhandenen Informationssicherheitszustand des jeweiligen Zielobjekts überein?", "answer": null, "answerType": "boolean" },
+                          { "type": "question", "questionText": "Sind alle zusätzlichen Maßnahmen aus der Risikoanalyse als umgesetzt gekennzeichnet?", "answer": null, "answerType": "boolean" },
+                          { "type": "question", "questionText": "Sind alle zusätzlichen Maßnahmen mit dem Umsetzungsstatus “teilweise“ oder \"nein\" im Referenzdokument A.6 enthalten?", "answer": null, "answerType": "boolean" },
+                          { "type": "finding", "label": "Feststellung:", "findingText": null }
+                      ]
+                  },
+                  "einzelergebnisse": {
+                      "subchapterNumber": "5.6.2",
+                      "title": "Einzelergebnisse der Risikoanalyse",
+                      "description": "Für jede im Rahmen der Auditplanung ausgewählte zusätzliche Maßnahme aus der Risikoanalyse überprüft der Auditor durch Inspektion des jeweiligen Zielobjekts, ob diese zusätzlichen Maßnahmen angemessen umgesetzt sind.",
+                      "massnahmenPruefungen": [
+                          {
+                              "massnahme": null,
+                              "zielobjekt": null,
+                              "auditiertAm": null,
+                              "auditor": null,
+                              "befragtWurde": null,
+                              "details": {
+                                  "nummer": null,
+                                  "beschreibung": null,
+                                  "bewertung": null,
+                                  "dokuAntragsteller": null,
+                                  "pruefmethode": [],
+                                  "auditfeststellung": null,
+                                  "abweichungen": null
+                              }
+                          }
+                      ]
+                  },
+                  "ergebnisRisikoanalyse": {
+                      "subchapterNumber": "5.6.3",
+                      "title": "Ergebnis Risikoanalyse",
+                      "description": "Ein kurzes Votum des Auditteamleiters zur Risikoanalyse wird gegeben.",
+                      "tableId": "Tabelle 69",
+                      "content": [{ "type": "finding", "label": "Votum Risikoanalyse:", "findingText": null }]
+                  }
+              }
+            },
+                "anhang": {
+                  "chapterNumber": "7",
+                  "title": "Anhang",
+                  "referenzdokumente": {
+                    "subchapterNumber": "7.1",
+                    "title": "Referenzdokumente",
+                    "description": "Der Dateiname der externen Liste der Referenzdokumente lautet: [Dateiname]. Der Antragsteller hat die nachfolgende Übersicht der Referenzdokumente an den Auditteamleiter übergeben.",
+                    "table": {
+                      "tableId": "Tabelle 70",
+                      "title": "Liste der Referenzdokumente",
+                      "headers": [
+                        "Nr.",
+                        "Kurzbezeichnung",
+                        "Dateiname / Verweis",
+                        "Version, Datum",
+                        "Relevante Änderungen"
+                      ],
+                      "rows": []
+                    }
+                  },
+                  "abweichungenUndEmpfehlungen": {
+                    "subchapterNumber": "7.2",
+                    "title": "Abweichungen und Empfehlungen",
+                    "description": "Während der Sichtung der Referenzdokumente sowie des Vor-Ort-Audits wurden folgenden Abweichungen und Empfehlungen festgestellt. Der Auditteamleiter beschreibt die Abweichungen und Empfehlungen kurz und referenziert auf diese an den entsprechenden Stellen im Auditbericht.",
+                    "table": {
+                      "tableId": "Tabelle 71",
+                      "title": "Liste Abweichungen und Empfehlungen",
+                      "headers": [
+                        "Typ und Nr.",
+                        "Abweichung / Empfehlung",
+                        "Behebungsfrist / Nachweis",
+                        "Status der Behebung"
+                      ],
+                      "rows": []
+                    }
+                  }
+                }
+              
+          }
+      
   }
