@@ -2,13 +2,10 @@
 import logging
 import json
 import uuid
-from pathlib import Path
-import tempfile
 from typing import List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import fitz  # PyMuPDF
 
-# The UnstructuredFileLoader is deprecated. Use the new UnstructuredLoader instead.
-from langchain_unstructured import UnstructuredLoader
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -34,14 +31,11 @@ class EtlProcessor:
             logging.warning("No source files found. Exiting ETL process.")
             return
 
-        # Use a temporary directory to avoid polluting the local filesystem
-        with tempfile.TemporaryDirectory() as temp_dir:
-            logging.info(f"Created temporary directory for processing: {temp_dir}")
-            # 2. Transform Part 1: Chunk documents
-            all_chunks = self._chunk_documents(source_files, temp_dir)
-            if not all_chunks:
-                logging.error("No chunks were created from the source documents.")
-                return
+        # 2. Transform Part 1: Chunk documents
+        all_chunks = self._chunk_documents(source_files)
+        if not all_chunks:
+            logging.error("No chunks were created from the source documents.")
+            return
 
         # 3. Transform Part 2: Generate embeddings
         chunk_texts = [chunk['text'] for chunk in all_chunks]
@@ -56,35 +50,45 @@ class EtlProcessor:
         
         logging.info(f"ETL process complete. Index data uploaded to gs://{self.config.bucket_name}/{destination_path}")
 
-    def _chunk_documents(self, source_files: List[Any], temp_dir: str) -> List[Dict[str, Any]]:
-        """Reads files from GCS, chunks them, and adds metadata."""
+    def _chunk_documents(self, source_files: List[Any]) -> List[Dict[str, Any]]:
+        """Reads files from GCS, extracts text with PyMuPDF, and chunks them."""
         all_chunks_with_metadata = []
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP
         )
-        temp_path = Path(temp_dir)
 
         for blob in source_files:
+            # We only process PDFs for now
+            if not blob.name.lower().endswith(".pdf"):
+                logging.info(f"Skipping non-PDF file: {blob.name}")
+                continue
+
             logging.info(f"Processing document: {blob.name}")
             try:
-                local_file_path = temp_path / Path(blob.name).name
-                with open(local_file_path, "wb") as temp_file:
-                    temp_file.write(self.gcs_client.download_blob_as_bytes(blob))
+                # Read the PDF file directly from GCS bytes into memory
+                pdf_bytes = self.gcs_client.download_blob_as_bytes(blob)
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                 
-                # Use the modern, non-deprecated loader
-                loader = UnstructuredLoader(str(local_file_path))
-                docs = loader.load()
+                # Extract text from all pages and concatenate
+                full_text = "".join(page.get_text() for page in doc)
+                doc.close()
+
+                if not full_text.strip():
+                    logging.warning(f"No text extracted from {blob.name}. It may be an image-only PDF.")
+                    continue
+
+                # Use LangChain to split the single large text string
+                chunks = text_splitter.split_text(full_text)
                 
-                chunks = text_splitter.split_documents(docs)
-                
-                for i, chunk in enumerate(chunks):
+                for i, chunk_text in enumerate(chunks):
                     all_chunks_with_metadata.append({
                         "id": str(uuid.uuid4()), # A unique ID for each chunk
                         "source_document": blob.name,
-                        "text": chunk.page_content
+                        "text": chunk_text
                     })
                 logging.info(f"Created {len(chunks)} chunks for {blob.name}")
+
             except Exception as e:
                 logging.error(f"Failed to process {blob.name}: {e}", exc_info=True)
                 continue # Move to the next file
