@@ -1,0 +1,177 @@
+{
+    "bsiAuditReport": {
+      "metadata": {
+        "customerId": "",
+        "auditType": "Zertifizierungsaudit", // or "Überwachungsaudit"
+        "auditId": "",
+        "auditPeriod": {
+          "startDate": "YYYY-MM-DD",
+          "endDate": "YYYY-MM-DD"
+        },
+        "reportDate": "YYYY-MM-DD",
+        "reportVersion": "1.0"
+      },
+      "chapter1_summary": {
+        "executiveSummary": "",
+        "auditConclusion": "", // e.g., "Zertifizierung empfohlen", "Zertifikat wird aufrechterhalten"
+        "summaryOfStrengths": [],
+        "summaryOfNonConformities": {
+          "major": 0,
+          "minor": 0
+        }
+      },
+      "chapter2_general": {
+        "basisOfOrder": "", // 2.1 Auftragsgrundlage
+        "auditTeam": [ // 2.2 Auditteam
+          {
+            "name": "",
+            "role": "Lead Auditor" // e.g., Lead Auditor, Auditor, Technischer Experte
+          }
+        ],
+        "customerParticipants": [ // 2.3 Ansprechpartner beim Auditierten
+          {
+            "name": "",
+            "role": "" // e.g., CISO, IT-Leiter
+          }
+        ],
+        "scope": { // 2.4 Geltungsbereich (Informationsverbund)
+          "description": "",
+          "organizationalUnits": [],
+          "businessProcesses": [],
+          "physicalLocations": [],
+          "applicationsAndItSystems": [],
+          "personnelGroups": [],
+          "networkScope": ""
+        },
+        "confidentialityNotice": "Dieser Bericht ist vertraulich und ausschließlich für den Adressaten bestimmt..."
+      },
+      "chapter3_documentReviewFindings": {
+        // 3.1 Aktualität, Vollständigkeit und Freigabe der Leitlinie
+        "section3_1_policyActuality": {
+          "findings": "",
+          "isCompliant": null
+        },
+        // 3.2 Sicherheitsleitlinie und -richtlinien
+        "section3_2_securityPolicyContent": {
+          "findings": "",
+          "isCompliant": null
+        },
+        // 3.3 Sicherheitskonzept
+        "section3_3_securityConcept": {
+          // 3.3.1 Struktur des Sicherheitskonzepts und Umsetzungsstrategie
+          "subsection3_3_1_structureAndStrategy": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.2 Festlegung der zu betrachtenden Zielobjekte
+          "subsection3_3_2_targetObjects": {
+            "findings": "",
+            "table": [
+              {
+                "targetObject": "",
+                "responsible": "",
+                "status": ""
+              }
+            ],
+            "isCompliant": null
+          },
+          // 3.3.3 Liste der Geschäftsprozesse
+          "subsection3_3_3_businessProcesses": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.4 Strukturanalyse
+          "subsection3_3_4_structureAnalysis": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.5 Schutzbedarfsfeststellung
+          "subsection3_3_5_protectionNeeds": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.6 Modellierung
+          "subsection3_3_6_modeling": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.7 Konsolidierte Liste der Anforderungen
+          "subsection3_3_7_consolidatedRequirements": {
+            "findings": "",
+            "isCompliant": null
+          },
+          // 3.3.8 Umsetzungsstand der Sicherheitsanforderungen
+          "subsection3_3_8_implementationStatus": {
+            "findings": "",
+            "isCompliant": null
+          }
+        }
+      },
+      "chapter4_onSiteAuditFindings": {
+        // General statement on the on-site audit
+        "onSiteAuditSummary": "",
+        // Detailed findings per requirement/control
+        "findings": [
+          {
+            "bausteinId": "", // e.g., "CON.1"
+            "bausteinName": "", // e.g., "Informationssicherheits- und Datenschutz-Management"
+            "requirementId": "", // e.g., "CON.1.A1"
+            "requirementText": "",
+            "findingDescription": "",
+            "evidence": "",
+            "assessment": null, // "erfüllt", "teilweise erfüllt", "nicht erfüllt", "nicht anwendbar"
+            "isNonConformity": false,
+            "nonConformityId": null // Link to the ID in the list below
+          }
+        ],
+        // Consolidated list of all non-conformities
+        "nonConformities": [
+          {
+            "id": "A-01",
+            "type": "Hauptabweichung", // or "Nebenabweichung", "Verbesserungspotenzial"
+            "description": "",
+            "reference": "CON.1.A1", // The requirement ID
+            "correctiveActionRequired": ""
+          }
+        ]
+      },
+      "chapter5_auditEvaluationAndRecommendation": {
+        // 5.1 Zusammenfassende Bewertung
+        "section5_1_summaryEvaluation": "",
+        // 5.2 (For Certification Audits)
+        "section5_2_certificationAuditRecommendation": {
+          "recommendation": null, // "Zertifizierung empfohlen", "Zertifizierung mit Auflagen empfohlen", "Zertifizierung nicht empfohlen"
+          "justification": ""
+        },
+        // 5.3 (For Surveillance Audits)
+        "section5_3_surveillanceAuditRecommendation": {
+          "recommendation": null, // "Aufrechterhaltung des Zertifikats empfohlen", "Aussetzung des Zertifikats empfohlen", "Entzug des Zertifikats empfohlen"
+          "justification": ""
+        },
+        // 5.4 Umgang mit festgestellten Abweichungen
+        "section5_4_correctiveActionFollowUp": {
+          "statusOfPreviousFindings": "",
+          "deadlineForNewFindings": "YYYY-MM-DD"
+        }
+      },
+      "chapter6_appendices": {
+        "appendicesList": [
+          {
+            "reference": "Anlage 1",
+            "title": "Liste der Gesprächspartner",
+            "content": [] // list of names
+          },
+          {
+            "reference": "Anlage 2",
+            "title": "Liste der geprüften Dokumente",
+            "content": [] // list of document titles
+          },
+          {
+            "reference": "Anlage 3",
+            "title": "Geltungsbereich des Zertifikats",
+            "content": ""
+          }
+        ]
+      }
+    }
+  }
