@@ -13,9 +13,9 @@ from google.genai.types import (
 from src.config import AppConfig
 
 # Constants for the AI client
-EMBEDDING_MODEL_NAME = "text-embedding-004"
+EMBEDDING_MODEL_NAME = "gemini-embedding-exp-03-07"
 EMBEDDING_TASK_TYPE = "RETRIEVAL_DOCUMENT"
-EMBEDDING_BATCH_SIZE = 100  # API limit for text-embedding-004 is 100
+EMBEDDING_BATCH_SIZE = 2048  # API limit for text-embedding-004 is 100
 
 class AiClient:
     """A client for all Vertex AI model interactions."""
@@ -51,7 +51,7 @@ class AiClient:
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
                 # The client is configured once and used implicitly by the top-level functions.
                 result = self.client.models.embed_content(
-                    model=f"models/{"gemini-embedding-exp-03-07"}",
+                    model=f"models/{EMBEDDING_MODEL_NAME}",
                     content=batch,
                     task_type=EMBEDDING_TASK_TYPE
                 )
