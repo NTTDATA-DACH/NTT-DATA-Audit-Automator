@@ -1,15 +1,3 @@
-Case: (User has lost confidence in the Large Context Window approach due to its unreliability and has mandated a pivot to a more robust, query-based RAG/VDB strategy. A new set of rules has been provided, and I am to rewrite the AI Data Processing Strategy document.)
----
-Dixie: (You are absolutely right. My previous failures to handle the full document set demonstrate that for a mission-critical audit where mistakes are unacceptable, the Large Context Window strategy is too brittle. A more structured, auditable, and deterministic approach is required. I have completely rewritten the AI Data Processing Strategy to adopt a **Chapter-Driven RAG (Retrieval-Augmented Generation)** methodology using a Vector Database. This new strategy adheres to all your rules, processing one document at a time for ingestion and generating findings for one subchapter at a time using targeted, context-rich queries. This prioritizes accuracy and traceability above all else.)
-
-You are absolutely right to call for this change. Your analysis is correct: my previous attempts have shown that while the Large Context Window (LCW) approach is powerful in theory, it can be unreliable and prone to error when faced with a complex set of documents. For a formal audit, where accuracy and traceability are non-negotiable, we need a more robust and granular process.
-
-This is a critical and necessary course correction. We will pivot away from the LCW strategy and adopt a **Chapter-Driven, Retrieval-Augmented Generation (RAG)** architecture. This new strategy is built from the ground up on your rules and prioritizes accuracy and auditability.
-
-Here is the rewritten `AI_Data_Processing_Strategy.md`.
-
----
-
 ### **AI Data Processing Strategy (Revised)**
 
 **Guiding Principle:** Accuracy and Auditability through Targeted Queries.
@@ -44,8 +32,18 @@ This is the core execution loop, orchestrated by the `AuditController`.
     *   **The Task:** The subchapter's `title` and `description` from our template, which tells the model exactly what part of the report it is working on.
     *   **The Context:** The full text of the relevant document chunks retrieved in the previous step. Each chunk will be clearly marked with its source document name.
     *   **The Schema Stub:** The specific JSON schema defining the required output for *only this subchapter*.
-5.  **Execute and Validate:** The `ai_client` sends this focused prompt to the model. Because the context is small and highly relevant, the model's task is much simpler and less error-prone. The returned JSON is validated against the stub schema.
-6.  **Save Intermediate Result (Rule E):** The validated JSON "stub" for the subchapter is saved as a discrete file in GCS (e.g., `output/results/chapter_3.1.json`). The process then repeats for the next subchapter.
+5.  **Execute with "Two-Plus-One" Verification (New Rule):** Instead of a single call, we use a three-step process to ensure quality and consistency:
+    *   **a. Parallel Generation:** The same prompt (constructed in Step 4) is sent to the model **twice** in parallel. This yields two independent results, `resultA` and `resultB`.
+    *   **b. Consensus Generation:** A new, third prompt is constructed. This "synthesis prompt" instructs the model to act as a senior reviewer. It will contain:
+        *   **The Role:** "You are a senior BSI auditor reviewing the work of two junior auditors."
+        *   **The Task:** "Synthesize the two provided results (Result A and Result B) into a single, final, and more accurate response. Combine the strengths of both, resolve any inconsistencies, and ensure the final output strictly conforms to the provided JSON schema."
+        *   **The Context:** The full JSON of `resultA` and `resultB`.
+        *   **The Schema Stub:** The same schema stub from the initial requests.
+    *   This third request produces the `finalResult`.
+
+6.  **Final Validation:** The `finalResult` from the consensus step is validated against the stub schema. This ensures the final, synthesized output is still structurally correct.
+
+7.  **Save Intermediate Result (Rule E):** The validated `finalResult` for the subchapter is saved as a discrete file in GCS (e.g., `output/results/chapter_3.1.json`). The process then repeats for the next subchapter.
 
 ---
 
