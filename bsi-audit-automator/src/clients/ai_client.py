@@ -50,8 +50,8 @@ class AiClient:
                 batch = texts[i:i + EMBEDDING_BATCH_SIZE]
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
                 # The client is configured once and used implicitly by the top-level functions.
-                result = genai.embed_content(
-                    model=f"models/{EMBEDDING_MODEL_NAME}",
+                result = self.client.models.embed_content(
+                    model=f"models/{"gemini-embedding-exp-03-07"}",
                     content=batch,
                     task_type=EMBEDDING_TASK_TYPE
                 )
