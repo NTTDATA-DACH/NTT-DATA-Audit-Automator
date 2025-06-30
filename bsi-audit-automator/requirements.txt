@@ -9,5 +9,6 @@ python-dotenv
 # For data processing and validation
 unstructured # A powerful library for parsing various document types like PDF
 langchain # For document chunking logic
+langchain-unstructured # Replacement for the deprecated UnstructuredFileLoader
 langchain-community # Required for UnstructuredFileLoader
 jsonschema # For validating AI model outputs

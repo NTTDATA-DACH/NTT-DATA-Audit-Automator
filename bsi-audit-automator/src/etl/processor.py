@@ -3,10 +3,12 @@ import logging
 import json
 import uuid
 from pathlib import Path
+import tempfile
 from typing import List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import UnstructuredFileLoader
 
+# The UnstructuredFileLoader is deprecated. Use the new UnstructuredLoader instead.
+from langchain_unstructured import UnstructuredLoader
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -32,11 +34,14 @@ class EtlProcessor:
             logging.warning("No source files found. Exiting ETL process.")
             return
 
-        # 2. Transform Part 1: Chunk documents
-        all_chunks = self._chunk_documents(source_files)
-        if not all_chunks:
-            logging.error("No chunks were created from the source documents.")
-            return
+        # Use a temporary directory to avoid polluting the local filesystem
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logging.info(f"Created temporary directory for processing: {temp_dir}")
+            # 2. Transform Part 1: Chunk documents
+            all_chunks = self._chunk_documents(source_files, temp_dir)
+            if not all_chunks:
+                logging.error("No chunks were created from the source documents.")
+                return
 
         # 3. Transform Part 2: Generate embeddings
         chunk_texts = [chunk['text'] for chunk in all_chunks]
@@ -51,22 +56,24 @@ class EtlProcessor:
         
         logging.info(f"ETL process complete. Index data uploaded to gs://{self.config.bucket_name}/{destination_path}")
 
-    def _chunk_documents(self, source_files: List[Any]) -> List[Dict[str, Any]]:
+    def _chunk_documents(self, source_files: List[Any], temp_dir: str) -> List[Dict[str, Any]]:
         """Reads files from GCS, chunks them, and adds metadata."""
         all_chunks_with_metadata = []
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP
         )
+        temp_path = Path(temp_dir)
 
         for blob in source_files:
             logging.info(f"Processing document: {blob.name}")
             try:
-                # unstructured requires a local file path
-                with open(Path(blob.name).name, "wb") as temp_file:
+                local_file_path = temp_path / Path(blob.name).name
+                with open(local_file_path, "wb") as temp_file:
                     temp_file.write(self.gcs_client.download_blob_as_bytes(blob))
                 
-                loader = UnstructuredFileLoader(Path(blob.name).name)
+                # Use the modern, non-deprecated loader
+                loader = UnstructuredLoader(str(local_file_path))
                 docs = loader.load()
                 
                 chunks = text_splitter.split_documents(docs)
