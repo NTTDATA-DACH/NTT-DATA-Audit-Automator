@@ -1,7 +1,6 @@
 # GCP and Vertex AI
-google-cloud-aiplatform
 google-cloud-storage
-google-generativeai
+google-genai
 
 # For local development, to load .env files
 python-dotenv
