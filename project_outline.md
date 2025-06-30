@@ -85,6 +85,7 @@ This is a critical architectural pattern for ensuring reliability.
 
 **4.5. Code and Asset Management**
 *   **Externalized Assets:** All prompts must be stored in external `.txt` files and all JSON schemas in external `.json` files. This separation of logic and assets is mandatory.
+*   **Customer Data:** The customer documents are located in one directory the following GCS URI: [GCS_DATA_URI]
 
 **4.6. Testing and Logging**
 *   **Test Mode (`TEST="true"`):**
