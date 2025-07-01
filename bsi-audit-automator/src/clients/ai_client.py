@@ -14,11 +14,10 @@ from google.genai.types import (
 from src.config import AppConfig
 
 # Constants for the AI client
-#EMBEDDING_MODEL_NAME = "gemini-embedding-exp-03-07"
 EMBEDDING_MODEL_NAME = "gemini-embedding-001"
-EMBEDDING_MODEL_NAME = "text-embedding-004"
+# EMBEDDING_MODEL_NAME = "text-embedding-005"
 EMBEDDING_TASK_TYPE = "RETRIEVAL_DOCUMENT"
-EMBEDDING_BATCH_SIZE = 2048  # API limit for text-embedding-004 is 100
+EMBEDDING_BATCH_SIZE = 1  # gemini-embedding supports 1, ; set 250 for text-embedding-005
 
 class AiClient:
     """A client for all Vertex AI model interactions."""
@@ -30,7 +29,9 @@ class AiClient:
         self.client = genai.Client(
             vertexai=True,
             project=config.gcp_project_id,
+            #location="global",  
             location=config.vertex_ai_region
+            #http_options=types.HttpOptions(api_version='v1')
         )
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
@@ -54,11 +55,16 @@ class AiClient:
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
                 # The client is configured once and used implicitly by the top-level functions.
                 result = self.client.models.embed_content(
-                    model=f"models/{EMBEDDING_MODEL_NAME}",
+                    # model=f"models/{EMBEDDING_MODEL_NAME}",
+                    model=EMBEDDING_MODEL_NAME,     # <-- NO “models/” prefix
                     contents=batch,
-                    config=types.EmbedContentConfig(task_type=EMBEDDING_TASK_TYPE)
+                    config=types.EmbedContentConfig(
+                        task_type=EMBEDDING_TASK_TYPE,
+                        output_dimensionality=768
+                        )
                 )
-                all_embeddings.extend(result['embedding'])
+                # all_embeddings.extend(result['embedding'])
+                all_embeddings.append(result.embeddings[0].values)
             
             logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
             return all_embeddings
