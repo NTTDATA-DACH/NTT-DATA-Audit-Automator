@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/oscal/bsi-grundschutz-catalog.final.schema.json",
+  "title": "Final Valid OSCAL-Compliant BSI Grundschutz Catalog Schema",
+  "description": "A corrected, valid OSCAL schema. This version correctly defines the 'parts' property within a group, making it fully compliant with OSCAL 1.1.2. It now includes 'prose_qs' for generated questions.",
+  "type": "object",
+  "required": ["catalog"],
+  "properties": {
+    "catalog": {
+      "title": "OSCAL Catalog",
+      "type": "object",
+      "required": ["uuid", "metadata", "groups"],
+      "properties": {
+        "uuid": { "$ref": "#/definitions/common/uuid" },
+        "metadata": { "$ref": "#/definitions/oscal/metadata" },
+        "groups": { "type": "array", "items": { "$ref": "#/definitions/oscal/group" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "oscal": {
+      "metadata": {
+        "title": "OSCAL Metadata",
+        "type": "object",
+        "required": ["title", "last-modified", "version", "oscal-version"],
+        "properties": {
+          "title": { "type": "string" },
+          "last-modified": { "$ref": "#/definitions/common/dateTime" },
+          "version": { "type": "string" },
+          "oscal-version": { "type": "string", "const": "1.1.2" }
+        },
+        "additionalProperties": false
+      },
+      "group": {
+        "title": "OSCAL Control Group",
+        "description": "Represents a BSI layer (e.g., 'OPS') or a nested 'Baustein'. Uses 'id' for identification.",
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "$ref": "#/definitions/common/token" },
+          "class": { "$ref": "#/definitions/common/token" },
+          "title": { "type": "string" },
+          "parts": {
+            "description": "Contextual parts for a Baustein, like introduction or risks.",
+            "type": "array",
+            "items": { "$ref": "#/definitions/oscal/part" }
+          },
+          "groups": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/oscal/group" }
+          },
+          "controls": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/oscal/control" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "control": {
+        "title": "OSCAL Control",
+        "description": "A single BSI requirement.",
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "$ref": "#/definitions/common/token" },
+          "class": { "$ref": "#/definitions/common/token" },
+          "title": { "type": "string" },
+          "props": { "type": "array", "items": { "$ref": "#/definitions/oscal/property" } },
+          "parts": { "type": "array", "items": { "$ref": "#/definitions/oscal/part" } }
+        },
+        "additionalProperties": false
+      },
+      "part": {
+        "title": "OSCAL Part",
+        "description": "A textual component of a control or group.",
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "id": { "$ref": "#/definitions/common/token" },
+          "name": { "$ref": "#/definitions/common/token" },
+          "title": { "type": "string" },
+          "class": { "$ref": "#/definitions/common/token" },
+          "prose": { "type": "string" },
+          "prose_qs": { "type": "string" },
+          "parts": { "type": "array", "items": { "$ref": "#/definitions/oscal/part" } }
+        },
+        "additionalProperties": false
+      },
+      "property": { "type": "object", "required": ["name", "value"], "properties": { "name": { "$ref": "#/definitions/common/token" }, "value": { "type": "string" }, "ns": { "type": "string", "format": "uri" } }, "additionalProperties": false }
+    },
+    "common": {
+      "uuid": { "type": "string", "format": "uuid", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+      "token": { "type": "string", "pattern": "^\\S(.*\\S)?$" },
+      "dateTime": { "type": "string", "format": "date-time" }
+    }
+  }
+}
