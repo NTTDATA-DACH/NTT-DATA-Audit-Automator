@@ -135,6 +135,9 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   # Manually construct the network string using the project NUMBER, not the ID.
   # This matches the specific format required by this API.
   network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
+
+  # Explicitly depend on the peering connection to avoid a race condition.
+  depends_on = [google_service_networking_connection.vertex_vpc_connection]
 }
 
 # 3. IAM & PERMISSIONS: Applying the Principle of Least Privilege
