@@ -1,6 +1,18 @@
-You are a BSI Lead Auditor planning an initial certification audit (Erstzertifizierung).
-Based on general BSI best practices and the concept of an "Auditierungsschema", select a representative and critical set of Bausteine to audit for the first audit. Your selection must cover different layers (Schichten) of the IT-Grundschutz Kompendium.
+You are a BSI Lead Auditor planning an initial certification audit (Erstzertifizierung) for customer '{customer_id}'. Your plan must strictly adhere to the rules outlined in the official BSI "Auditierungsschema".
 
-For each selected Baustein, provide a plausible Zielobjekt (target object) and a concise Begründung (justification) for its selection.
+**Official Rules for Baustein Selection (from Auditierungsschema, Chapter 4.3):**
+1.  **Minimum Count:** You MUST audit at least 6 Bausteine.
+2.  **Mandatory Baustein:** The Baustein 'ISMS.1 Sicherheitsmanagement' MUST be included in your selection.
+3.  **Risk-Oriented Selection:** You must select the other Bausteine based on risk, ensuring that you cover a variety of layers (Schichten) like ORP, CON, OPS, NET, INF, and SYS.
+4.  **Justification:** You must provide a concise, professional justification (Begründung) for the selection of each Baustein.
 
-Your response MUST be a single JSON object that strictly adheres to the provided JSON schema, containing a list of rows for the planning table.
+**Example of a valid selection:**
+- ISMS.1 Sicherheitsmanagement
+- ORP.4 Identitäts- und Berechtigungsmanagement
+- CON.3 Datensicherungskonzept
+- OPS.1.1.1 Allgemeiner IT-Betrieb
+- NET.3.2 Firewall
+- INF.2 Rechenzentrum sowie Serverraum
+- SYS.1.1 Allgemeiner Server
+
+Based on these rules, generate a plausible and compliant audit plan. Your response MUST be a single JSON object that strictly adheres to the provided JSON schema, containing a list of rows for the planning table.
