@@ -1,0 +1,28 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Subchapter 5.1 Wirksamkeit des Sicherheitsmanagementsystems",
+    "type": "object",
+    "properties": {
+      "answers": {
+        "type": "array",
+        "items": [
+          { "type": "boolean", "description": "Ist das ISMS effektiv und effizient im Einsatz?" },
+          { "type": "boolean", "description": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 4 organisiert?" },
+          { "type": "boolean", "description": "Werden die in den Sicherheitsleitlinien vorgegebenen Ziele erreicht?" },
+          { "type": "boolean", "description": "Werden alle wichtigen Prozesse des Informationsverbundes dokumentiert?" },
+          { "type": "boolean", "description": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 5 dokumentiert?" },
+          { "type": "boolean", "description": "Sind die Informationen konform zum BSI-Standard 200-2, Kapitel 5.1 klassifiziert?" },
+          { "type": "boolean", "description": "Wird der Verbesserungsprozess gelebt und das ISMS kontinuierlich verbessert?" },
+          { "type": "boolean", "description": "Erfolgt die Überprüfung des Informationssicherheitsprozesses anhand von Kennzahlen?" },
+          { "type": "boolean", "description": "Erfolgt die Bewertung des ISMS mit Hilfe eines Reifegradmodells?" },
+          { "type": "boolean", "description": "Wird die Umsetzung von Maßnahmen des Realisierungsplans überprüft?" },
+          { "type": "boolean", "description": "Erfolgt die Übernahme der Gesamtverantwortung durch eine Managementbewertung?" },
+          { "type": "string", "format": "date", "description": "Datum der letzten Managementbewertung" }
+        ]
+      },
+      "findingText": {
+        "type": "string"
+      }
+    },
+    "required": ["answers", "findingText"]
+  }

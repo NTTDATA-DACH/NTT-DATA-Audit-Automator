@@ -56,17 +56,14 @@ class AiClient:
             for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
                 batch = texts[i:i + EMBEDDING_BATCH_SIZE]
                 logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
-                # The client is configured once and used implicitly by the top-level functions.
                 result = self.client.models.embed_content(
-                    # model=f"models/{EMBEDDING_MODEL_NAME}",
-                    model=EMBEDDING_MODEL_NAME,     # <-- NO “models/” prefix
+                    model=EMBEDDING_MODEL_NAME,
                     contents=batch,
                     config=types.EmbedContentConfig(
                         task_type=EMBEDDING_TASK_TYPE,
                         output_dimensionality=768
                         )
                 )
-                # all_embeddings.extend(result['embedding'])
                 all_embeddings.append(result.embeddings[0].values)
             
             logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
@@ -79,52 +76,45 @@ class AiClient:
         """
         Generates a JSON response from the AI model, enforcing a specific schema.
         This is a placeholder for the full async, retry, and validation logic.
-
-        Args:
-            prompt: The full text prompt for the model.
-            json_schema: A dictionary representing the JSON schema for the output.
-
-        Returns:
-            A dictionary with the validated data from the model.
         """
         logging.info("AI Client: Generating JSON response (placeholder implementation).")
-
-        # In a real implementation, this would use self.client.aio.models.generate_content
-        # with JSON mode enabled and would perform validation.
         
-        # --- Start of Placeholder Logic ---
         dummy_response = {}
         props = json_schema.get("properties", {})
 
-        # Check if the schema expects a list of rows (like in Chapter 4)
-        if "rows" in props and props["rows"].get("type") == "array":
+        # Handle Chapter 5.5.2 schema
+        if "bausteinPruefungen" in props:
+            dummy_response["bausteinPruefungen"] = [{
+                "baustein": "ISMS.1 Sicherheitsmanagement",
+                "zielobjekt": "Gesamtes ISMS",
+                "auditiertAm": "2024-07-15",
+                "auditor": "A. Auditor",
+                "befragtWurde": "I.S. Beauftragter",
+                "anforderungen": [{
+                    "nummer": "ISMS.1.A1",
+                    "anforderung": "Leitlinie zur Informationssicherheit",
+                    "bewertung": "Korrekt",
+                    "dokuAntragsteller": "Siehe Dokument 'Sicherheitsleitlinie v1.2'",
+                    "pruefmethode": ["D", "I"],
+                    "auditfeststellung": "Die Leitlinie ist aktuell, vom Management freigegeben und allen Mitarbeitern bekannt gemacht worden. Stichproben bei Interviews bestätigten dies.",
+                    "abweichungen": "Keine."
+                }]
+            }]
+        # Handle Chapter 4 schema
+        elif "rows" in props and props["rows"].get("type") == "array":
             dummy_response["rows"] = [
-                {
-                    "Schicht": "ORP",
-                    "Baustein": "ORP.4 Identitäts- und Berechtigungsmanagement",
-                    "Zielobjekt": "Active Directory",
-                    "Begruendung zur Auswahl": "Kritische Komponente für den Zugriff auf alle Systeme."
-                },
-                {
-                    "Schicht": "INF",
-                    "Baustein": "INF.2 Clients unter Windows",
-                    "Zielobjekt": "Standard-Mitarbeiter-Notebooks",
-                    "Begruendung zur Auswahl": "Hohe Angriffsfläche und Verbreitung in der Organisation."
-                }
+                {"Schicht": "ORP", "Baustein": "ORP.4 Identitäts- und Berechtigungsmanagement", "Zielobjekt": "Active Directory", "Begruendung zur Auswahl": "Kritische Komponente für den Zugriff auf alle Systeme."},
+                {"Schicht": "INF", "Baustein": "INF.2 Clients unter Windows", "Zielobjekt": "Standard-Mitarbeiter-Notebooks", "Begruendung zur Auswahl": "Hohe Angriffsfläche und Verbreitung in der Organisation."}
             ]
-        # Check if the schema expects answers and a finding (like in Chapter 3)
+        # Handle Chapter 3 & 5 generic schema
         elif "answers" in props and "findingText" in props:
             dummy_response["answers"] = []
-            dummy_response["findingText"] = "Alle Dokumente wurden geprüft und für angemessen befunden. Es wurden keine Abweichungen festgestellt."
+            dummy_response["findingText"] = "Alle Elemente wurden geprüft und für angemessen befunden. Es wurden keine Abweichungen festgestellt."
             answer_items = props["answers"].get("items", [])
             for item in answer_items:
-                if item.get("type") == "boolean":
-                    dummy_response["answers"].append(True)
-                elif item.get("format") == "date":
-                    dummy_response["answers"].append("2024-01-01")
-                else:
-                    dummy_response["answers"].append("Placeholder")
+                if item.get("type") == "boolean": dummy_response["answers"].append(True)
+                elif item.get("format") == "date": dummy_response["answers"].append("2024-01-01")
+                else: dummy_response["answers"].append("Placeholder")
         
         logging.info("AI Client: Successfully generated and validated dummy JSON response.")
         return dummy_response
-        # --- End of Placeholder Logic ---
