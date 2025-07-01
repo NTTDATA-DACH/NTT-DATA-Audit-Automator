@@ -4,7 +4,7 @@ set -euo pipefail
 # --- Configuration from Terraform ---
 echo "🔹 Fetching infrastructure details from Terraform..."
 TERRAFORM_DIR="../terraform"
-JOB_NAME="bsi-etl-job"
+JOB_NAME="bsi-audit-automator-job"
 REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 ARTIFACT_REGISTRY_REPO="$(terraform -chdir=${TERRAFORM_DIR} output -raw artifact_registry_repository_name)"

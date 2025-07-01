@@ -1,0 +1,103 @@
+#!/bin/bash
+set -euo pipefail
+
+# ===================================================================
+# INTERACTIVE SCRIPT TO EXECUTE ANY BSI AUDIT TASK
+# ===================================================================
+
+# --- Script Usage ---
+usage() {
+  echo "Usage: $0 <CUSTOMER_ID>"
+  echo "Interactively selects and executes a BSI audit task for a specific customer."
+  echo
+  echo "Arguments:"
+  echo "  CUSTOMER_ID   Identifier for the customer (e.g., 'customer-abc')."
+  exit 1
+}
+
+# --- Argument Validation ---
+if [[ $# -ne 1 ]]; then
+  usage
+fi
+CUSTOMER_ID="$1"
+TEST_MODE="false"
+
+# --- Dynamic Values from Terraform ---
+echo "🔹 Fetching infrastructure details from Terraform..."
+TERRAFORM_DIR="../terraform"
+GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
+VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
+BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
+INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
+
+# --- INTERACTIVE SELECTION: Audit Type ---
+echo "🔹 Please select the audit type."
+audit_types=("Zertifizierungsaudit" "Überwachungsaudit")
+PS3="Select audit type number: "
+select AUDIT_TYPE in "${audit_types[@]}"; do
+  if [[ -n "$AUDIT_TYPE" ]]; then
+    echo "Selected audit type: $AUDIT_TYPE"
+    break
+  else
+    echo "Invalid selection. Try again."
+  fi
+done
+
+# --- INTERACTIVE SELECTION: Task/Stage ---
+echo "🔹 Please select the task to execute."
+tasks=("Run ETL (Embedding)" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
+PS3="Select task number: "
+declare TASK_ARGS # This will hold the arguments for main.py
+
+select task in "${tasks[@]}"; do
+  case $task in
+    "Run ETL (Embedding)")
+      TASK_ARGS="--run-etl"
+      break
+      ;;
+    "Run Single Audit Stage")
+      echo "🔹 Please select the stage to run."
+      stages=("Chapter-1" "Chapter-3" "Chapter-4" "Chapter-5")
+      PS3_STAGE="Select stage number: "
+      select STAGE_NAME in "${stages[@]}"; do
+        if [[ -n "$STAGE_NAME" ]]; then
+          TASK_ARGS="--run-stage,${STAGE_NAME}"
+          break
+        else
+          echo "Invalid stage selection. Try again."
+        fi
+      done
+      break
+      ;;
+    "Run All Audit Stages")
+      TASK_ARGS="--run-all-stages"
+      break
+      ;;
+    "Generate Final Report")
+      TASK_ARGS="--generate-report"
+      break
+      ;;
+    "Quit")
+      echo "Exiting."
+      exit 0
+      ;;
+    *)
+      echo "Invalid option $REPLY. Please try again."
+      ;;
+  esac
+done
+
+# --- Final gcloud Execution ---
+echo "🚀 Executing task for customer '${CUSTOMER_ID}' with args: [main.py ${TASK_ARGS}]"
+
+# NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
+# command arguments of the deployed job, allowing us to run any task.
+gcloud run jobs execute "bsi-audit-automator-job" \
+  --region "${VERTEX_AI_REGION}" \
+  --project "${GCP_PROJECT_ID}" \
+  --wait \
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},CUSTOMER_ID=${CUSTOMER_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=${CUSTOMER_ID}/source_documents/,OUTPUT_PREFIX=${CUSTOMER_ID}/output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE}" \
+  --args "${TASK_ARGS}"
+
+echo "✅ Job execution for customer '${CUSTOMER_ID}' finished."
