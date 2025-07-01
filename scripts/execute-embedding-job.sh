@@ -5,10 +5,24 @@ set -euo pipefail
 # B: EXECUTE JOB FOR A CUSTOMER (Run this for each audit)
 # ===================================================================
 
+# --- Script Usage ---
+usage() {
+  echo "Usage: $0 <CUSTOMER_ID> <AUDIT_TYPE>"
+  echo "Executes the BSI ETL job for a specific customer and audit type."
+  echo
+  echo "Arguments:"
+  echo "  CUSTOMER_ID   Identifier for the customer (e.g., 'customer-abc')."
+  echo "  AUDIT_TYPE    The type of audit being performed (e.g., 'Zertifizierungsaudit')."
+  exit 1
+}
+
 # --- Configuration ---
-# Set customer-specific variables here. These are the only values you should need to change.
-CUSTOMER_ID="kunde-x"
-AUDIT_TYPE="Zertifizierungsaudit"
+# Validate and accept command-line arguments.
+if [[ $# -ne 2 ]]; then
+  usage
+fi
+CUSTOMER_ID="$1"
+AUDIT_TYPE="$2"
 # Set to true for a dry run without calling the PaLM API.
 TEST_MODE="false"
 

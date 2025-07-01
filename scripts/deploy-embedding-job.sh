@@ -1,27 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
-# The name of the Cloud Run Job
+# --- Configuration from Terraform ---
+echo "🔹 Fetching infrastructure details from Terraform..."
+TERRAFORM_DIR="../terraform"
 JOB_NAME="bsi-etl-job"
-# The Google Cloud region where the job will be deployed.
-# Assumes a terraform output named 'region'.
-REGION="$(terraform -chdir=../terraform output -raw region)"
-# The name of your Artifact Registry repository, fetched from Terraform.
-# Assumes a terraform output named 'artifact_registry_repository_name'.
-ARTIFACT_REGISTRY_REPO="$(terraform -chdir=../terraform output -raw artifact_registry_repository_name)"
-# The full image name in Artifact Registry.
-IMAGE_URI="${REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
+REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
+PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
+ARTIFACT_REGISTRY_REPO="$(terraform -chdir=${TERRAFORM_DIR} output -raw artifact_registry_repository_name)"
+SERVICE_ACCOUNT="$(terraform -chdir=${TERRAFORM_DIR} output -raw service_account_email)"
+IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
 
+# --- 1. Build and Push Container Image ---
+echo "🚀 Building and pushing container image to Artifact Registry..."
+echo "Image URI: ${IMAGE_URI}"
+gcloud builds submit . --tag "${IMAGE_URI}" --project "${PROJECT_ID}"
+
+# --- 2. Deploy Cloud Run Job ---
+echo "📦 Deploying Cloud Run Job '${JOB_NAME}'..."
 gcloud run jobs deploy "${JOB_NAME}" \
-  --source . \
   --image "${IMAGE_URI}" \
   --tasks 1 \
   --max-retries 3 \
   --memory 4Gi \
   --cpu 2 \
   --region "${REGION}" \
-  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --project "${PROJECT_ID}" \
   --task-timeout "7200" \
   --command "python" \
   --args "main.py,--run-etl" \
-  --service-account "$(terraform -chdir=../terraform output -raw service_account_email)"
+  --service-account "${SERVICE_ACCOUNT}"
+
+echo "✅ Deployment complete."
