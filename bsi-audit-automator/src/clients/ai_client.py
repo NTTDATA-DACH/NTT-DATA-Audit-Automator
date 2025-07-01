@@ -93,11 +93,23 @@ class AiClient:
         # with JSON mode enabled and would perform validation.
         
         # Simulate a successful response for demonstration purposes.
+        # This generic response should satisfy most of our simple schemas.
         dummy_response = {
-            "chapter_1_2": { "content": f"Der Geltungsbereich für {self.config.customer_id} umfasst das zentrale ISMS." },
-            "chapter_1_4": { "content": "Lead Auditor: M. Mustermann, Technischer Experte: E. Mustermann." },
-            "chapter_1_5": { "content": "Der Auditplan umfasste Dokumentenprüfung, Interviews und technische Stichproben." }
+            "answers": [],
+            "findingText": "Alle Dokumente wurden geprüft und für angemessen befunden. Es wurden keine Abweichungen festgestellt."
         }
+        
+        # Create dummy answers based on the schema
+        props = json_schema.get("properties", {})
+        if "answers" in props:
+            answer_items = props["answers"].get("items", [])
+            for item in answer_items:
+                if item.get("type") == "boolean":
+                    dummy_response["answers"].append(True)
+                elif item.get("format") == "date":
+                    dummy_response["answers"].append("2024-01-01")
+                else:
+                    dummy_response["answers"].append("Placeholder")
 
         logging.info("AI Client: Successfully generated and validated dummy JSON response.")
         return dummy_response

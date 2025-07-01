@@ -9,7 +9,7 @@ from src.clients.gcs_client import GcsClient
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
     MASTER_TEMPLATE_PATH = "assets/schemas/master_report_template.json"
-    STAGES_TO_AGGREGATE = ["Chapter-1"]
+    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3"]
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
@@ -21,8 +21,11 @@ class ReportGenerator:
         with open(self.MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
             report = json.load(f)
         
-        report['customer'] = self.config.customer_id
-        report['auditType'] = self.config.audit_type
+        # Populate top-level info
+        report['bsiAuditReport']['titlePage']['auditedInstitution'] = self.config.customer_id
+        # This is a simplification; a real app might map this differently.
+        report['bsiAuditReport']['allgemeines']['audittyp']['content'] = self.config.audit_type
+
         logging.info("Master report template loaded.")
 
         for stage_name in self.STAGES_TO_AGGREGATE:
@@ -41,15 +44,61 @@ class ReportGenerator:
         )
         logging.info(f"Final report saved to: gs://{self.config.bucket_name}/{final_report_path}")
 
+    def _populate_chapter_1(self, report: dict, stage_data: dict):
+        """Populates Chapter 1 data from the 'Chapter-1' stage stub."""
+        # Note: Chapter 1 is not implemented based on the new template.
+        # This function is a placeholder for if we re-implement it.
+        logging.warning("Population logic for Chapter 1 is not implemented for the new template.")
+        pass
+
+    def _populate_chapter_3(self, report: dict, stage_data: dict):
+        """Populates Chapter 3 data from the 'Chapter-3' stage stub."""
+        chapter_3_target = report['bsiAuditReport']['dokumentenpruefung']
+
+        for subchapter_key, result in stage_data.items():
+            if result is None:
+                logging.warning(f"Skipping population for failed subchapter: {subchapter_key}")
+                continue
+
+            target_section = None
+            if subchapter_key == "definitionDesInformationsverbundes":
+                target_section = chapter_3_target.get("strukturanalyseA1", {}).get(subchapter_key)
+            else:
+                target_section = chapter_3_target.get(subchapter_key)
+                
+            if not target_section:
+                logging.warning(f"Could not find target section for '{subchapter_key}' in report template.")
+                continue
+            
+            # Populate answers and finding
+            content_list = target_section.get("content", [])
+            answers = result.get("answers", [])
+            
+            # Find the finding object and update it
+            for item in content_list:
+                if item.get("type") == "finding":
+                    item["findingText"] = result.get("findingText")
+                    break
+            
+            # Populate answers in order
+            answer_idx = 0
+            for item in content_list:
+                if item.get("type") == "question":
+                    if answer_idx < len(answers):
+                        item["answer"] = answers[answer_idx]
+                        answer_idx += 1
+                    else:
+                        logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'")
+                        break
+
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
         """Deterministically maps data from a stage stub into the report object."""
         logging.info(f"Populating report with data from stage: {stage_name}")
         if stage_name == "Chapter-1":
-            if 'chapter_1_2' in stage_data:
-                report['chapters']['1']['subchapters']['1.2']['content'] = stage_data['chapter_1_2']['content']
-            if 'chapter_1_4' in stage_data:
-                report['chapters']['1']['subchapters']['1.4']['content'] = stage_data['chapter_1_4']['content']
-            if 'chapter_1_5' in stage_data:
-                report['chapters']['1']['subchapters']['1.5']['content'] = stage_data['chapter_1_5']['content']
+            # The old Chapter-1 structure doesn't match the new template.
+            # We skip it for now.
+            self._populate_chapter_1(report, stage_data)
+        elif stage_name == "Chapter-3":
+            self._populate_chapter_3(report, stage_data)
         else:
             logging.warning(f"No population logic defined for stage: {stage_name}")

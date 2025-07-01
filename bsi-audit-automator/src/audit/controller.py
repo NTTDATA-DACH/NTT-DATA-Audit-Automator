@@ -8,6 +8,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.audit.stages.stage_1_general import Chapter1Runner
+from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 
 class AuditController:
     """Orchestrates the entire staged audit process."""
@@ -19,6 +20,7 @@ class AuditController:
         # Define the sequence of all audit stages and their runners
         self.audit_stages = {
             "Chapter-1": Chapter1Runner(config, ai_client),
+            "Chapter-3": Chapter3Runner(config, ai_client),
             # Add other stage runners here as they are developed
         }
         logging.info("Audit Controller initialized.")

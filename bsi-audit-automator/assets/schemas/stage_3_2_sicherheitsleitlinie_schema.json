@@ -1,0 +1,19 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Subchapter 3.2 Sicherheitsleitlinie und -richtlinien in A.0",
+    "type": "object",
+    "properties": {
+      "answers": {
+        "type": "array",
+        "items": [
+          { "type": "boolean" },
+          { "type": "boolean" },
+          { "type": "boolean" }
+        ]
+      },
+      "findingText": {
+        "type": "string"
+      }
+    },
+    "required": ["answers", "findingText"]
+  }

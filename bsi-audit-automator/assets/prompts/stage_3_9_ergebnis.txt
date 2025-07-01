@@ -1,0 +1,7 @@
+You are a BSI security auditor providing a final verdict on the document review phase.
+Based on the analysis of all previous sections (3.1 through 3.8), answer the following question and provide a summary verdict ("Votum").
+
+The question to answer is:
+1. Ist eine Fortführung des Audits mit der Vor-Ort-Prüfung möglich?
+
+Your response MUST be a single JSON object that strictly adheres to the provided JSON schema.
