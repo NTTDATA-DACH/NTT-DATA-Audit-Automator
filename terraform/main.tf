@@ -19,13 +19,39 @@ provider "google-beta" {
   region  = var.region
 }
 
+# --- NEW: MANAGE PROJECT APIS DECLARATIVELY ---
+# This section enables all necessary APIs for the project.
+# It replaces the need for the manual `enable_apis.sh` script.
+
+locals {
+  apis_to_enable = [
+    "run.googleapis.com",                 # Cloud Run Jobs
+    "cloudbuild.googleapis.com",          # Cloud Build (for deploying from source)
+    "artifactregistry.googleapis.com",    # Artifact Registry (to store images)
+    "aiplatform.googleapis.com",          # Vertex AI (for embeddings and Vector Search)
+    "storage.googleapis.com",             # Cloud Storage
+    "cloudresourcemanager.googleapis.com", # Required by many services
+    "compute.googleapis.com"              # Required for creating VPC Networks
+  ]
+}
+
+resource "google_project_service" "project_apis" {
+  for_each = toset(local.apis_to_enable)
+
+  project                    = var.project_id
+  service                    = each.key
+  disable_on_destroy         = false # Keep APIs enabled even after destroy
+}
+
 # --- CHANGE: ADDED BUCKET CREATION ---
 # This resource now creates the GCS bucket for our project automatically.
+# It depends on the APIs being enabled first.
 resource "google_storage_bucket" "bsi_audit_bucket" {
   name                        = "${var.project_id}-${var.customer_id}-audit-data"
   location                    = var.region # Ensures bucket is in the same region as Vertex AI
   force_destroy               = true       # Allows 'terraform destroy' to delete the bucket even if it has files
   uniform_bucket_level_access = true
+  depends_on = [google_project_service.project_apis]
 }
 
 # --- NEW: ARTIFACT REGISTRY REPOSITORY ---
@@ -36,6 +62,7 @@ resource "google_artifact_registry_repository" "bsi_repo" {
   repository_id = "bsi-audit-repo"
   description   = "Docker repository for BSI Audit Automator jobs"
   format        = "DOCKER"
+  depends_on = [google_project_service.project_apis]
 }
 
 # --- NEW: DEDICATED SERVICE ACCOUNT ---
@@ -43,6 +70,7 @@ resource "google_artifact_registry_repository" "bsi_repo" {
 resource "google_service_account" "bsi_job_sa" {
   account_id   = var.service_account_id
   display_name = "Service Account for BSI Audit Automator Job"
+  depends_on = [google_project_service.project_apis]
 }
 
 # 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
@@ -50,6 +78,7 @@ resource "google_service_account" "bsi_job_sa" {
 resource "google_compute_network" "bsi_vpc" {
   name                    = var.vpc_network_name
   auto_create_subnetworks = false
+  depends_on = [google_project_service.project_apis]
 }
 
 resource "google_compute_global_address" "peering_range" {
