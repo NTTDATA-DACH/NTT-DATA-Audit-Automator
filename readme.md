@@ -38,10 +38,9 @@ Upload the customer's documentation (PDFs, etc.) to the GCS bucket created by Te
     ```bash
     # Example using gsutil
     BUCKET_NAME="<name-from-terraform-output>"
-    CUSTOMER_ID="<your-customer-id>"
     LOCAL_DOCS_FOLDER="./customer_docs/"
 
-    gsutil rsync -r "${LOCAL_DOCS_FOLDER}" "gs://${BUCKET_NAME}/${CUSTOMER_ID}/source_documents/"
+    gsutil rsync -r "${LOCAL_DOCS_FOLDER}" "gs://${BUCKET_NAME}/source_documents/"
     ```
 
 ### Step 4: Execute an Audit Task
@@ -50,7 +49,7 @@ All pipeline tasks are run using the interactive `execute-audit-task.sh` script.
 
 ```bash
 # From the project root directory:
-bash ./scripts/execute-audit-task.sh <your-customer-id>
+bash ./scripts/execute-audit-task.sh
 ```
 The script will prompt you to select:
 1.  **The Audit Type:** (e.g., `Zertifizierungsaudit`).
@@ -149,7 +148,7 @@ Each "Chapter" is an independent stage orchestrated by the `AuditController`.
 *   **Purpose:** To generate the report's appendix.
 *   **Logic:** This is a hybrid stage combining deterministic logic and AI summarization.
     1.  **Subchapter 7.1 (Reference Documents):** This part is **deterministic**. It calls the `gcs_client` to list all files in the customer's source GCS folder and formats them into a table.
-    2.  **Subchapter 7.2 (Deviations):** This part **uses AI**. It loads the `Chapter-5.json` results, extracts all noted deviations, and passes this raw list to the AI to be summarized into a formal table.
+    2.  **Subchapter 7.2 (Deviations):** This part **uses AI**. It loads the results from both `Chapter-3.json` and `Chapter-5.json`, extracts all noted deviations and negative findings, and passes this raw list to the AI to be summarized into a formal table.
 
 ---
 
@@ -162,25 +161,20 @@ Each "Chapter" is an independent stage orchestrated by the `AuditController`.
 ### `scripts/execute-audit-task.sh`
 *   **When to use:** This is your primary script for running any part of the audit pipeline.
 *   **What it does:** It's an interactive script that:
-    1.  Takes a `CUSTOMER_ID` as an argument.
-    2.  Fetches necessary cloud resource details from your Terraform state.
-    3.  Prompts you to select the `AUDIT_TYPE`.
-    4.  Prompts you to select the specific **task** you want to run (e.g., ETL, Chapter-5, Generate Report).
-    5.  Constructs the appropriate `gcloud run jobs execute` command, passing the correct environment variables and command-line arguments to `main.py`.
+    1.  Fetches the `CUSTOMER_ID` and other necessary cloud resource details from your Terraform state.
+    2.  Prompts you to select the `AUDIT_TYPE`.
+    3.  Prompts you to select the specific **task** you want to run (e.g., ETL, Chapter-5, Generate Report).
+    4.  Constructs the appropriate `gcloud run jobs execute` command, passing the correct environment variables and command-line arguments to `main.py`.
+
+### `scripts/envs.sh`
+*   **When to use:** For local development and debugging only.
+*   **What it does:** A convenience script to set up your local shell with the same environment variables that the cloud job uses. It dynamically pulls values from your Terraform state. You must run `source ./envs.sh` from the project root to use it.
 
 ---
 
 ## Manual Review & Editing: The Report Editor (`report_editor.html`)
 
 The `report_editor.html` file is a standalone, browser-based utility designed for the final, manual review and editing of the generated audit report. While the pipeline automates the data gathering and initial drafting, this tool empowers a human auditor to make final adjustments, correct nuances, and sign off on the content before submission.
-
-### Key Features
-*   **Load Local JSON:** Securely loads a report JSON file directly from your local disk.
-*   **Dynamic Rendering:** Automatically renders the entire nested JSON structure into a readable and editable web form.
-*   **Chapter Filtering:** Provides buttons to instantly show or hide entire chapters, making it easy to navigate the large report.
-*   **Full Editability:** All text fields, booleans (as dropdowns), and tables are fully editable.
-*   **Export Changes:** Allows you to export all your edits back into a new, cleanly formatted JSON file (`edited_report.json`).
-*   **Self-Contained:** The tool is a single HTML file with no external dependencies. It runs entirely in your browser and does not require a web server or internet connection.
 
 ### How to Use
 1.  **Open:** Open the `report_editor.html` file in a modern web browser (e.g., Chrome, Firefox).
@@ -195,7 +189,7 @@ This tool is intended to be used **after** the `--generate-report` task has been
 
 ## Configuration
 
-The application is configured entirely via environment variables passed by the `execute-audit-task.sh` script.
+The application is configured entirely via environment variables passed by the `execute-audit-task.sh` script or loaded locally by `envs.sh`.
 
 | Variable | Required? | Description |
 | :--- | :---: | :--- |

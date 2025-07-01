@@ -1,39 +1,54 @@
 #!/bin/bash
 #
-# Environment variable setup for the BSI Audit Automator project.
+# DYNAMIC Environment variable setup for local BSI Audit Automator development.
 #
-# IMPORTANT:
-# This script must be "sourced" to set the variables in your current shell.
-# Do NOT execute it directly.
+# This script dynamically fetches configuration from your Terraform state,
+# ensuring your local environment matches the cloud deployment.
+#
+# PREREQUISITES:
+#   - You must have run 'terraform apply' in the ./terraform directory.
+#   - You must have the 'terraform' CLI installed and in your PATH.
 #
 # USAGE:
-#   1. Fill in the placeholder values below.
-#   2. Run the following command from your terminal:
-#      source envs.sh
+#   Run this command from the project root (the 'bsi-audit-automator' directory):
+#      source ./envs.sh
 #
+set -e # Exit on error
 
-echo "Setting up environment variables for the BSI Audit project..."
+TERRAFORM_DIR="./terraform"
 
-# --- Core Project & Customer Configuration ---
-export GCP_PROJECT_ID="bsi-audit-kunde-x"
-export GCP_PROJECT_NUMBER="905207908720" # Required by some GCP APIs
-export CUSTOMER_ID="kunde-x"
+if [ ! -d "$TERRAFORM_DIR" ]; then
+    echo "❌ Error: Terraform directory not found at '$TERRAFORM_DIR'. Please run this script from the project root."
+    return 1
+fi
+if ! command -v terraform &> /dev/null; then
+    echo "❌ Error: 'terraform' command not found. Please install Terraform."
+    return 1
+fi
 
-# --- Cloud Resource Configuration (Get these from Terraform output) ---
-export BUCKET_NAME="bsi-audit-kunde-x-kunde-x-audit-data"
-export INDEX_ENDPOINT_ID="8256523084039716864"
-export VERTEX_AI_REGION="europe-west4"
+echo "🔹 Fetching infrastructure details from Terraform..."
 
-# --- Data Path & Audit Configuration ---
-# With the new simpler GCS layout, these prefixes no longer depend on CUSTOMER_ID
+# --- Dynamic Values from Terraform ---
+export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
+export GCP_PROJECT_NUMBER="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_number)"
+export CUSTOMER_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw customer_id)"
+export VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
+export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
+INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+export INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
+
+# --- Static Values for Local Development ---
+# These prefixes now reflect the simpler GCS layout.
 export SOURCE_PREFIX="source_documents/"
 export OUTPUT_PREFIX="output/"
 
-# Set the type of audit being performed
+# Manually set the audit type and test mode for your local run
 export AUDIT_TYPE="Zertifizierungsaudit"
-
-# --- Development & Testing Configuration ---
 export TEST="true"
 
-echo "✅ Environment variables configured successfully."
-echo "You can now run the Python application."
+set +e
+echo "✅ Environment variables configured successfully for customer '${CUSTOMER_ID}'."
+echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
+echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
+echo "   - TEST mode:      ${TEST}"
+echo "You can now run the Python application locally (e.g., 'python main.py --generate-report')."
