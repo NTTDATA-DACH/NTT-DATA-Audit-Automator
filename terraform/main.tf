@@ -31,8 +31,9 @@ locals {
     "aiplatform.googleapis.com",          # Vertex AI (for embeddings and Vector Search)
     "storage.googleapis.com",             # Cloud Storage
     "cloudresourcemanager.googleapis.com", # Required by many services
-    "compute.googleapis.com",              # Required for creating VPC Networks
-    "servicenetworking.googleapis.com"     # Required for creating VPC Networks
+    "compute.googleapis.com",            # Required for creating VPC Networks
+    "servicenetworking.googleapis.com",  # Required for creating VPC Networks
+    "iam.googleapis.com"                 # Required for creating Service Accounts and IAM bindings
   ]
 }
 
