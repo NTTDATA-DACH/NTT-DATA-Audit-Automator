@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSI Audit Report Editor</title>
+    <style>
+        :root {
+            --primary-color: #003359;
+            --secondary-color: #0073e6;
+            --background-color: #f4f7fa;
+            --text-color: #333;
+            --border-color: #d1d9e6;
+            --header-bg: #fff;
+            --card-bg: #fff;
+            --button-bg: #005cbf;
+            --button-hover-bg: #004a99;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--header-bg);
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--primary-color);
+            font-size: 1.8em;
+        }
+        #controls { display: flex; align-items: center; gap: 15px; }
+        #controls button, #controls input[type="file"]::file-selector-button {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        #controls button:hover, #controls input[type="file"]::file-selector-button:hover { background-color: var(--button-hover-bg); }
+        #controls button:disabled { background-color: #999; cursor: not-allowed; }
+        
+        #chapter-filter-buttons { margin-top: 10px; padding-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; }
+        #chapter-filter-buttons button { background-color: var(--secondary-color); }
+        #chapter-filter-buttons button:hover { background-color: var(--primary-color); }
+
+        .chapter {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-top: 25px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .chapter h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .subchapter {
+            margin-top: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #eef;
+        }
+        h3 { color: var(--primary-color); font-weight: 600; }
+        h4 { color: #555; }
+        p.description { color: #555; font-style: italic; }
+        
+        .content-item, .prose-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #f0f0f0;
+            border-radius: 4px;
+        }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; }
+        input[type="text"], input[type="date"], select, textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 1em;
+        }
+        textarea { min-height: 80px; resize: vertical; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+        }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        td input { padding: 4px; }
+        #report-container { padding-top: 20px; }
+        #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>BSI Audit Report Editor</h1>
+        <div id="controls">
+            <input type="file" id="json-file-input" accept=".json">
+            <button id="export-json-button" disabled>Export to JSON</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="chapter-filter-buttons"></div>
+        <div id="report-container">
+            <p id="initial-message">Load your <code>master_report_template.json</code> to begin.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('json-file-input');
+            const exportButton = document.getElementById('export-json-button');
+            const reportContainer = document.getElementById('report-container');
+            const filterContainer = document.getElementById('chapter-filter-buttons');
+            const initialMessage = document.getElementById('initial-message');
+
+            let reportData = null;
+
+            fileInput.addEventListener('change', handleFileSelect);
+            exportButton.addEventListener('click', handleExport);
+
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        reportData = JSON.parse(e.target.result);
+                        initialMessage.style.display = 'none';
+                        renderReport(reportData);
+                        createFilterButtons(reportData);
+                        exportButton.disabled = false;
+                    } catch (error) {
+                        alert('Error parsing JSON file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            function createFilterButtons(data) {
+                filterContainer.innerHTML = '';
+                const chapters = data?.bsiAuditReport || {};
+
+                // "Show All" button
+                const allButton = document.createElement('button');
+                allButton.textContent = 'Show All';
+                allButton.onclick = () => filterView('all');
+                filterContainer.appendChild(allButton);
+
+                // Buttons for each chapter
+                Object.keys(chapters).forEach(key => {
+                    if (typeof chapters[key] === 'object' && chapters[key]?.title) {
+                        const button = document.createElement('button');
+                        button.textContent = `${chapters[key].chapterNumber || ''} ${chapters[key].title}`;
+                        button.onclick = () => filterView(key);
+                        filterContainer.appendChild(button);
+                    }
+                });
+            }
+
+            function filterView(chapterKey) {
+                const allChapters = reportContainer.querySelectorAll('.chapter');
+                allChapters.forEach(chapter => {
+                    if (chapterKey === 'all' || chapter.dataset.chapterKey === chapterKey) {
+                        chapter.style.display = 'block';
+                    } else {
+                        chapter.style.display = 'none';
+                    }
+                });
+            }
+
+            function renderReport(data) {
+                reportContainer.innerHTML = '';
+                const report = data.bsiAuditReport;
+                if (!report) return;
+
+                for (const key in report) {
+                    const chapterData = report[key];
+                    if (typeof chapterData === 'object' && chapterData !== null) {
+                         reportContainer.appendChild(renderChapter(key, chapterData, `bsiAuditReport.${key}`));
+                    }
+                }
+            }
+            
+            function renderChapter(key, chapterData, path) {
+                const chapterDiv = document.createElement('div');
+                chapterDiv.className = 'chapter';
+                chapterDiv.dataset.chapterKey = key;
+                
+                if(chapterData.title) chapterDiv.innerHTML += `<h2>${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
+                if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
+
+                for (const subKey in chapterData) {
+                    if (subKey !== 'title' && subKey !== 'description' && subKey !== 'chapterNumber' && typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
+                         chapterDiv.appendChild(renderSection(chapterData[subKey], `${path}.${subKey}`));
+                    }
+                }
+                return chapterDiv;
+            }
+
+            function renderSection(sectionData, path) {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'subchapter';
+
+                if (sectionData.title) sectionDiv.innerHTML += `<h3>${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
+                if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
+                
+                if (Array.isArray(sectionData.content)) {
+                    sectionData.content.forEach((item, index) => {
+                        const itemPath = `${path}.content[${index}]`;
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'content-item';
+                        if (item.type === 'question') {
+                            itemDiv.appendChild(createInputField(item.questionText, item.answer, item.answerType, `${itemPath}.answer`));
+                        } else if (item.type === 'finding') {
+                            itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
+                        } else if (item.type === 'prose') {
+                             itemDiv.appendChild(createInputField(item.label, item.text, 'text', `${itemPath}.text`));
+                        }
+                        sectionDiv.appendChild(itemDiv);
+                    });
+                }
+                
+                if (sectionData.table || (sectionData.headers && sectionData.rows)) {
+                    sectionDiv.appendChild(renderTable(sectionData.table || sectionData, path));
+                }
+
+                // Recursive call for nested sections
+                for (const subKey in sectionData) {
+                    if (!['title', 'description', 'content', 'table', 'headers', 'rows', 'subchapterNumber', 'tableId'].includes(subKey) && typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
+                        sectionDiv.appendChild(renderSection(sectionData[subKey], `${path}.${subKey}`));
+                    }
+                }
+
+                return sectionDiv;
+            }
+            
+            function createInputField(label, value, type, path) {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                let input;
+                if (type === 'boolean') {
+                    input = document.createElement('select');
+                    input.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Yes</option><option value="false" ${value === false ? 'selected' : ''}>No</option><option value="" ${value === null ? 'selected' : ''}>N/A</option>`;
+                } else {
+                    input = document.createElement('input');
+                    input.type = type || 'text';
+                    input.value = value || '';
+                }
+                input.id = path;
+                input.dataset.path = path;
+                wrapper.appendChild(input);
+                return wrapper;
+            }
+
+            function createTextArea(label, value, path) {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const textarea = document.createElement('textarea');
+                textarea.id = path;
+                textarea.dataset.path = path;
+                textarea.value = value || '';
+                wrapper.appendChild(textarea);
+                return wrapper;
+            }
+
+            function renderTable(tableData, path) {
+                const table = document.createElement('table');
+                const thead = table.createTHead();
+                const tbody = table.createTBody();
+                const headerRow = thead.insertRow();
+                tableData.headers.forEach(headerText => {
+                    const th = document.createElement('th');
+                    th.textContent = headerText;
+                    headerRow.appendChild(th);
+                });
+
+                tableData.rows.forEach((rowData, rowIndex) => {
+                    const row = tbody.insertRow();
+                    tableData.headers.forEach(header => {
+                        const cell = row.insertCell();
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.value = rowData[header] || '';
+                        input.dataset.path = `${path}.rows[${rowIndex}].${header}`;
+                        cell.appendChild(input);
+                    });
+                });
+                return table;
+            }
+
+            function handleExport() {
+                if (!reportData) {
+                    alert("No data loaded to export.");
+                    return;
+                }
+
+                const updatedData = JSON.parse(JSON.stringify(reportData)); // Deep copy
+
+                const inputs = reportContainer.querySelectorAll('[data-path]');
+                inputs.forEach(input => {
+                    const path = input.dataset.path;
+                    let value = input.value;
+                    if(input.tagName === 'SELECT'){
+                        value = value === 'true' ? true : (value === 'false' ? false : null);
+                    }
+                    setValueByPath(updatedData, path, value);
+                });
+                
+                downloadObjectAsJson(updatedData, 'edited_report.json');
+            }
+
+            function setValueByPath(obj, path, value) {
+                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.'); // a.b[0].c -> ['a','b','0','c']
+                let current = obj;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    current = current[keys[i]];
+                }
+                current[keys[keys.length - 1]] = value;
+            }
+
+            function downloadObjectAsJson(exportObj, exportName) {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", exportName);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            }
+        });
+    </script>
+</body>
+</html>
