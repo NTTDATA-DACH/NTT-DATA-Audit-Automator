@@ -43,15 +43,24 @@ class GcsClient:
         logging.debug(f"Downloading blob: {blob.name}")
         return blob.download_as_bytes()
 
-    def upload_from_string(self, content: str, destination_blob_name: str):
+    def upload_from_string(self, content: str, destination_blob_name: str, content_type: str = 'application/json'):
         """
         Uploads a string content to a specified blob in GCS.
 
         Args:
             content: The string content to upload.
             destination_blob_name: The full path for the object in the bucket.
+            content_type: The MIME type of the content.
         """
         logging.info(f"Uploading content to gs://{self.bucket.name}/{destination_blob_name}")
         blob = self.bucket.blob(destination_blob_name)
-        blob.upload_from_string(content, content_type='application/jsonl')
+        blob.upload_from_string(content, content_type=content_type)
         logging.info("Upload complete.")
+
+    def read_json(self, blob_name: str) -> dict:
+        """Downloads and parses a JSON file from GCS."""
+        import json
+        logging.info(f"Attempting to read JSON from: gs://{self.bucket.name}/{blob_name}")
+        blob = self.bucket.blob(blob_name)
+        content = blob.download_as_text() # This raises NotFound if not present.
+        return json.loads(content)

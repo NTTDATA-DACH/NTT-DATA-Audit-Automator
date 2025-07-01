@@ -1,12 +1,15 @@
 # main.py
 import argparse
 import logging
+import asyncio
 
 from src.config import config
 from src.logging_setup import setup_logging
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.etl.processor import EtlProcessor
+from src.audit.controller import AuditController
+from src.audit.report_generator import ReportGenerator
 
 # bump
 
@@ -15,7 +18,6 @@ def main():
     Main entry point for the BSI Audit Automator.
     Parses command-line arguments to determine which pipeline stage to run.
     """
-    # First, set up logging so we can see output from the start.
     setup_logging(config)
 
     parser = argparse.ArgumentParser(
@@ -32,7 +34,7 @@ def main():
     group.add_argument(
         '--run-stage',
         type=str,
-        help='Run a single audit stage for a specific report subchapter (e.g., --run-stage 3.1).'
+        help='Run a single audit stage (e.g., --run-stage Chapter-1).'
     )
     group.add_argument(
         '--run-all-stages',
@@ -47,37 +49,31 @@ def main():
 
     args = parser.parse_args()
 
+    # Instantiate clients once
+    gcs_client = GcsClient(config)
+    ai_client = AiClient(config)
+
     try:
-        # Here we will instantiate and call our controller classes based on the args.
         if args.run_etl:
             logging.info("Starting ETL phase...")
-            # Instantiate clients and processor
-            gcs_client = GcsClient(config)
-            ai_client = AiClient(config)
             etl_processor = EtlProcessor(config, gcs_client, ai_client)
             etl_processor.run()
 
-
-        elif args.run_stage:
-            logging.info(f"Starting single audit stage: {args.run_stage}...")
-            # from src.audit.controller import AuditController
-            # controller = AuditController(config)
-            # controller.run_single_stage(args.run_stage)
-            logging.info(f"Placeholder: Stage {args.run_stage} would run here.")
-        
-        elif args.run_all_stages:
-            logging.info("Starting all audit stages sequentially...")
-            # from src.audit.controller import AuditController
-            # controller = AuditController(config)
-            # controller.run_all_stages()
-            logging.info("Placeholder: All stages would run here.")
-
         elif args.generate_report:
             logging.info("Starting final report assembly...")
-            # from src.audit.report_generator import ReportGenerator
-            # generator = ReportGenerator(config)
-            # generator.assemble_report()
-            logging.info("Placeholder: Report assembly would run here.")
+            generator = ReportGenerator(config, gcs_client)
+            generator.assemble_report()
+
+        else:  # These are the async audit tasks
+            controller = AuditController(config, gcs_client, ai_client)
+
+            async def run_audit_tasks():
+                if args.run_stage:
+                    await controller.run_single_stage(args.run_stage)
+                elif args.run_all_stages:
+                    await controller.run_all_stages()
+
+            asyncio.run(run_audit_tasks())
 
     except Exception as e:
         logging.critical(f"A critical error occurred in the pipeline: {e}", exc_info=True)

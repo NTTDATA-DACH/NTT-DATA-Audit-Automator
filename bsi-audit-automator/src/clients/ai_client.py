@@ -1,5 +1,6 @@
 # src/clients/ai_client.py
 import logging
+import json
 from typing import List
 
 # Per imperative, use these specific imports for Vertex AI
@@ -73,3 +74,30 @@ class AiClient:
         except Exception as e:
             logging.error(f"Failed to generate embeddings: {e}", exc_info=True)
             raise
+
+    async def generate_json_response(self, prompt: str, json_schema: dict) -> dict:
+        """
+        Generates a JSON response from the AI model, enforcing a specific schema.
+        This is a placeholder for the full async, retry, and validation logic.
+
+        Args:
+            prompt: The full text prompt for the model.
+            json_schema: A dictionary representing the JSON schema for the output.
+
+        Returns:
+            A dictionary with the validated data from the model.
+        """
+        logging.info("AI Client: Generating JSON response (placeholder implementation).")
+
+        # In a real implementation, this would use self.client.aio.models.generate_content
+        # with JSON mode enabled and would perform validation.
+        
+        # Simulate a successful response for demonstration purposes.
+        dummy_response = {
+            "chapter_1_2": { "content": f"Der Geltungsbereich für {self.config.customer_id} umfasst das zentrale ISMS." },
+            "chapter_1_4": { "content": "Lead Auditor: M. Mustermann, Technischer Experte: E. Mustermann." },
+            "chapter_1_5": { "content": "Der Auditplan umfasste Dokumentenprüfung, Interviews und technische Stichproben." }
+        }
+
+        logging.info("AI Client: Successfully generated and validated dummy JSON response.")
+        return dummy_response
