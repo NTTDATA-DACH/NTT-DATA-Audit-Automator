@@ -20,26 +20,19 @@ export GCP_PROJECT_NUMBER="905207908720" # Required by some GCP APIs
 export CUSTOMER_ID="kunde-x"
 
 # --- Cloud Resource Configuration (Get these from Terraform output) ---
-# To get the bucket name, run: terraform output -raw bsi_audit_bucket_name
-export BUCKET_NAME="bsi-audit-kunde-x-kunde-x-audit-data" # e.g., bsi-audit-kunde-x-kunde-x-audit-data
-
-# To get the index endpoint ID, run: terraform output -raw vertex_ai_index_endpoint_id
-export INDEX_ENDPOINT_ID="8256523084039716864" # e.g., 8256523084039716864
-
-# The region where you deployed your Terraform resources
+export BUCKET_NAME="bsi-audit-kunde-x-kunde-x-audit-data"
+export INDEX_ENDPOINT_ID="8256523084039716864"
 export VERTEX_AI_REGION="europe-west4"
 
 # --- Data Path & Audit Configuration ---
-# These are constructed automatically from your CUSTOMER_ID
-export SOURCE_PREFIX="${CUSTOMER_ID}/source_documents/"
-export OUTPUT_PREFIX="${CUSTOMER_ID}/output/"
+# With the new simpler GCS layout, these prefixes no longer depend on CUSTOMER_ID
+export SOURCE_PREFIX="source_documents/"
+export OUTPUT_PREFIX="output/"
 
 # Set the type of audit being performed
 export AUDIT_TYPE="Zertifizierungsaudit"
 
 # --- Development & Testing Configuration ---
-# Set to "true" for development to limit data processing and get verbose logs.
-# Set to "false" for production runs.
 export TEST="true"
 
 echo "✅ Environment variables configured successfully."

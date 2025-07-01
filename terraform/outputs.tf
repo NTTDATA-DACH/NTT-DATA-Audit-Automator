@@ -1,3 +1,8 @@
+output "customer_id" {
+  description = "The unique identifier for the customer, from variables."
+  value       = var.customer_id
+}
+
 output "vertex_ai_index_id" {
   description = "The full resource ID of the created Vertex AI Index."
   value       = google_vertex_ai_index.bsi_audit_index.id

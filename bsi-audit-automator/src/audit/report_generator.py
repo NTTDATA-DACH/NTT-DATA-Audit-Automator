@@ -14,7 +14,8 @@ class ReportGenerator:
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
         self.gcs_client = gcs_client
-        self.gcs_report_path = f"{self.config.customer_id}/report/master_report_template.json"
+        # The report template is now at a fixed path within the bucket
+        self.gcs_report_path = "report/master_report_template.json"
         logging.info("Report Generator initialized.")
 
     def _initialize_report_on_gcs(self) -> dict:
@@ -109,19 +110,13 @@ class ReportGenerator:
                 logging.warning(f"Could not find target section for '{subchapter_key}' in Chapter 5.")
 
     def _populate_chapter_7(self, report: dict, stage_data: dict):
-        """Populates Chapter 7 data from the 'Chapter-7' stage stub."""
         anhang_target = report['bsiAuditReport']['anhang']
-        
-        # Populate 7.1 Referenzdokumente
         if 'referenzdokumente' in stage_data and 'rows' in stage_data['referenzdokumente']:
             anhang_target['referenzdokumente']['table']['rows'] = stage_data['referenzdokumente']['rows']
-        
-        # Populate 7.2 Abweichungen und Empfehlungen
         if 'abweichungenUndEmpfehlungen' in stage_data and 'rows' in stage_data['abweichungenUndEmpfehlungen']:
             anhang_target['abweichungenUndEmpfehlungen']['table']['rows'] = stage_data['abweichungenUndEmpfehlungen']['rows']
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
-        """Deterministically maps data from a stage stub into the report object."""
         logging.info(f"Populating report with data from stage: {stage_name}")
         if stage_name == "Chapter-1":
             logging.warning("Population logic for Chapter 1 is not implemented for the new template.")

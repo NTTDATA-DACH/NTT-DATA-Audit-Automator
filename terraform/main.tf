@@ -104,7 +104,7 @@ resource "google_service_networking_connection" "vertex_vpc_connection" {
 locals {
   # --- CHANGE: DYNAMICALLY USE THE CREATED BUCKET ---
   # This path now refers to the bucket created above, not a variable.
-  index_contents_path = "gs://${google_storage_bucket.bsi_audit_bucket.name}/${var.customer_id}/vector_index_data/"
+  index_contents_path = "gs://${google_storage_bucket.bsi_audit_bucket.name}/vector_index_data/"
 }
 
 resource "google_vertex_ai_index" "bsi_audit_index" {

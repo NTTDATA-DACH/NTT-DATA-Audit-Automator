@@ -50,7 +50,7 @@ class EtlProcessor:
         jsonl_content = self._format_for_indexing(all_chunks, embeddings)
         
         # 5. Load: Upload the final file to GCS
-        destination_path = f"{self.config.customer_id}/vector_index_data/embeddings.jsonl"
+        destination_path = "vector_index_data/embeddings.jsonl"
         self.gcs_client.upload_from_string(jsonl_content, destination_path)
         
         logging.info(f"ETL process complete. Index data uploaded to gs://{self.config.bucket_name}/{destination_path}")
