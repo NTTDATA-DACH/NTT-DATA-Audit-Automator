@@ -4,10 +4,11 @@ set -euo pipefail
 # The name of the Cloud Run Job
 JOB_NAME="bsi-etl-job"
 # The Google Cloud region where the job will be deployed.
-REGION="europe-west4"
-# The name of your Artifact Registry repository.
-# TODO: Replace with your actual repository name.
-ARTIFACT_REGISTRY_REPO="your-repo-name"
+# Assumes a terraform output named 'region'.
+REGION="$(terraform -chdir=../terraform output -raw region)"
+# The name of your Artifact Registry repository, fetched from Terraform.
+# Assumes a terraform output named 'artifact_registry_repository_name'.
+ARTIFACT_REGISTRY_REPO="$(terraform -chdir=../terraform output -raw artifact_registry_repository_name)"
 # The full image name in Artifact Registry.
 IMAGE_URI="${REGION}-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
 
@@ -23,4 +24,4 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --task-timeout "7200" \
   --command "python" \
   --args "main.py,--run-etl" \
-  --service-account "$(terraform output -raw service_account_email)"
+  --service-account "$(terraform -chdir=../terraform output -raw service_account_email)"

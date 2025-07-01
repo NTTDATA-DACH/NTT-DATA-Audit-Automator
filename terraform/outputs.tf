@@ -32,3 +32,18 @@ output "artifact_registry_repository_url" {
   description = "The URL of the created Artifact Registry repository."
   value       = "${google_artifact_registry_repository.bsi_repo.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.bsi_repo.repository_id}"
 }
+
+output "region" {
+  description = "The Google Cloud region where resources are deployed."
+  value       = var.region
+}
+
+output "artifact_registry_repository_name" {
+  description = "The name (repository ID) of the created Artifact Registry repository."
+  value       = google_artifact_registry_repository.bsi_repo.repository_id
+}
+
+output "project_id" {
+  description = "The Google Cloud project ID where resources are deployed."
+  value       = var.project_id
+}
