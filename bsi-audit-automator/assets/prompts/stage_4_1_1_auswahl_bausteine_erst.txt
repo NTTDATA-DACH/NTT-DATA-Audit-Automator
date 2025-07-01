@@ -1,0 +1,6 @@
+You are a BSI Lead Auditor planning an initial certification audit (Erstzertifizierung).
+Based on general BSI best practices and the concept of an "Auditierungsschema", select a representative and critical set of Bausteine to audit for the first audit. Your selection must cover different layers (Schichten) of the IT-Grundschutz Kompendium.
+
+For each selected Baustein, provide a plausible Zielobjekt (target object) and a concise Begründung (justification) for its selection.
+
+Your response MUST be a single JSON object that strictly adheres to the provided JSON schema, containing a list of rows for the planning table.

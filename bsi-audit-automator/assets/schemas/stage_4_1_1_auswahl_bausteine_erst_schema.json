@@ -1,0 +1,22 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Subchapter 4.1.1 Auswahl Bausteine Erst-/Rezertifizierungsverfahren",
+    "type": "object",
+    "properties": {
+      "rows": {
+        "type": "array",
+        "description": "A list of Bausteine selected for the audit.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Schicht": { "type": "string", "description": "e.g., 'ISMS', 'ORP', 'INF'" },
+            "Baustein": { "type": "string", "description": "e.g., 'ISMS.1 Sicherheitsmanagement', 'ORP.4 Identitäts- und Berechtigungsmanagement'" },
+            "Zielobjekt": { "type": "string", "description": "The specific target object, e.g., 'Gesamtes ISMS', 'Active Directory'" },
+            "Begruendung zur Auswahl": { "type": "string", "description": "Justification for selecting this Baustein for the audit." }
+          },
+          "required": ["Schicht", "Baustein", "Zielobjekt", "Begruendung zur Auswahl"]
+        }
+      }
+    },
+    "required": ["rows"]
+  }

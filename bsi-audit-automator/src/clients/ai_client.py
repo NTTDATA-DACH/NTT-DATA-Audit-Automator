@@ -92,16 +92,30 @@ class AiClient:
         # In a real implementation, this would use self.client.aio.models.generate_content
         # with JSON mode enabled and would perform validation.
         
-        # Simulate a successful response for demonstration purposes.
-        # This generic response should satisfy most of our simple schemas.
-        dummy_response = {
-            "answers": [],
-            "findingText": "Alle Dokumente wurden geprüft und für angemessen befunden. Es wurden keine Abweichungen festgestellt."
-        }
-        
-        # Create dummy answers based on the schema
+        # --- Start of Placeholder Logic ---
+        dummy_response = {}
         props = json_schema.get("properties", {})
-        if "answers" in props:
+
+        # Check if the schema expects a list of rows (like in Chapter 4)
+        if "rows" in props and props["rows"].get("type") == "array":
+            dummy_response["rows"] = [
+                {
+                    "Schicht": "ORP",
+                    "Baustein": "ORP.4 Identitäts- und Berechtigungsmanagement",
+                    "Zielobjekt": "Active Directory",
+                    "Begruendung zur Auswahl": "Kritische Komponente für den Zugriff auf alle Systeme."
+                },
+                {
+                    "Schicht": "INF",
+                    "Baustein": "INF.2 Clients unter Windows",
+                    "Zielobjekt": "Standard-Mitarbeiter-Notebooks",
+                    "Begruendung zur Auswahl": "Hohe Angriffsfläche und Verbreitung in der Organisation."
+                }
+            ]
+        # Check if the schema expects answers and a finding (like in Chapter 3)
+        elif "answers" in props and "findingText" in props:
+            dummy_response["answers"] = []
+            dummy_response["findingText"] = "Alle Dokumente wurden geprüft und für angemessen befunden. Es wurden keine Abweichungen festgestellt."
             answer_items = props["answers"].get("items", [])
             for item in answer_items:
                 if item.get("type") == "boolean":
@@ -110,6 +124,7 @@ class AiClient:
                     dummy_response["answers"].append("2024-01-01")
                 else:
                     dummy_response["answers"].append("Placeholder")
-
+        
         logging.info("AI Client: Successfully generated and validated dummy JSON response.")
         return dummy_response
+        # --- End of Placeholder Logic ---

@@ -8,25 +8,47 @@ from src.clients.gcs_client import GcsClient
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
-    MASTER_TEMPLATE_PATH = "assets/schemas/master_report_template.json"
-    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3"]
+    LOCAL_MASTER_TEMPLATE_PATH = "assets/schemas/master_report_template.json"
+    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3", "Chapter-4"]
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
         self.gcs_client = gcs_client
+        # Define the single source of truth for the customer's report in GCS
+        self.gcs_report_path = f"{self.config.customer_id}/report/master_report_template.json"
         logging.info("Report Generator initialized.")
+
+    def _initialize_report_on_gcs(self) -> dict:
+        """
+        Ensures the report template exists on GCS for the customer.
+        If it doesn't exist, it's copied from local assets.
+        It always returns the content of the GCS report file.
+        """
+        try:
+            # If it exists, load it directly from GCS.
+            report = self.gcs_client.read_json(self.gcs_report_path)
+            logging.info(f"Loaded existing report template from GCS: {self.gcs_report_path}")
+            return report
+        except NotFound:
+            # If it doesn't exist, load the local template and upload it.
+            logging.info("No report template found on GCS. Initializing from local asset.")
+            with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                report = json.load(f)
+            
+            # Populate initial top-level info before saving
+            report['bsiAuditReport']['titlePage']['auditedInstitution'] = self.config.customer_id
+            report['bsiAuditReport']['allgemeines']['audittyp']['content'] = self.config.audit_type
+            
+            self.gcs_client.upload_from_string(
+                content=json.dumps(report, indent=2, ensure_ascii=False),
+                destination_blob_name=self.gcs_report_path
+            )
+            logging.info(f"Saved initial report template to GCS: {self.gcs_report_path}")
+            return report
 
     def assemble_report(self):
         """Loads template, populates it with GCS stubs, and saves the final report."""
-        with open(self.MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
-            report = json.load(f)
-        
-        # Populate top-level info
-        report['bsiAuditReport']['titlePage']['auditedInstitution'] = self.config.customer_id
-        # This is a simplification; a real app might map this differently.
-        report['bsiAuditReport']['allgemeines']['audittyp']['content'] = self.config.audit_type
-
-        logging.info("Master report template loaded.")
+        report = self._initialize_report_on_gcs()
 
         for stage_name in self.STAGES_TO_AGGREGATE:
             stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
@@ -34,7 +56,7 @@ class ReportGenerator:
                 stage_data = self.gcs_client.read_json(stage_output_path)
                 self._populate_report(report, stage_name, stage_data)
             except NotFound:
-                logging.error(f"Result for required stage '{stage_name}' not found. Report will be incomplete.")
+                logging.warning(f"Result for stage '{stage_name}' not found. Skipping population.")
                 continue
         
         final_report_path = f"{self.config.output_prefix}final_audit_report.json"
@@ -42,63 +64,60 @@ class ReportGenerator:
             content=json.dumps(report, indent=2, ensure_ascii=False),
             destination_blob_name=final_report_path
         )
-        logging.info(f"Final report saved to: gs://{self.config.bucket_name}/{final_report_path}")
+        logging.info(f"Final report assembled and saved to: gs://{self.config.bucket_name}/{final_report_path}")
+        # Also overwrite the master template with the newly populated data
+        self.gcs_client.upload_from_string(
+            content=json.dumps(report, indent=2, ensure_ascii=False),
+            destination_blob_name=self.gcs_report_path
+        )
+        logging.info(f"Updated master report state on GCS: gs://{self.config.bucket_name}/{self.gcs_report_path}")
 
     def _populate_chapter_1(self, report: dict, stage_data: dict):
-        """Populates Chapter 1 data from the 'Chapter-1' stage stub."""
-        # Note: Chapter 1 is not implemented based on the new template.
-        # This function is a placeholder for if we re-implement it.
         logging.warning("Population logic for Chapter 1 is not implemented for the new template.")
         pass
 
     def _populate_chapter_3(self, report: dict, stage_data: dict):
-        """Populates Chapter 3 data from the 'Chapter-3' stage stub."""
         chapter_3_target = report['bsiAuditReport']['dokumentenpruefung']
-
         for subchapter_key, result in stage_data.items():
             if result is None:
                 logging.warning(f"Skipping population for failed subchapter: {subchapter_key}")
                 continue
-
-            target_section = None
-            if subchapter_key == "definitionDesInformationsverbundes":
-                target_section = chapter_3_target.get("strukturanalyseA1", {}).get(subchapter_key)
-            else:
-                target_section = chapter_3_target.get(subchapter_key)
-                
+            target_section = chapter_3_target.get("strukturanalyseA1", {}).get(subchapter_key) if subchapter_key == "definitionDesInformationsverbundes" else chapter_3_target.get(subchapter_key)
             if not target_section:
                 logging.warning(f"Could not find target section for '{subchapter_key}' in report template.")
                 continue
-            
-            # Populate answers and finding
             content_list = target_section.get("content", [])
             answers = result.get("answers", [])
-            
-            # Find the finding object and update it
             for item in content_list:
-                if item.get("type") == "finding":
-                    item["findingText"] = result.get("findingText")
-                    break
-            
-            # Populate answers in order
+                if item.get("type") == "finding": item["findingText"] = result.get("findingText"); break
             answer_idx = 0
             for item in content_list:
                 if item.get("type") == "question":
-                    if answer_idx < len(answers):
-                        item["answer"] = answers[answer_idx]
-                        answer_idx += 1
-                    else:
-                        logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'")
-                        break
+                    if answer_idx < len(answers): item["answer"] = answers[answer_idx]; answer_idx += 1
+                    else: logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'"); break
+
+    def _populate_chapter_4(self, report: dict, stage_data: dict):
+        """Populates Chapter 4 data from the 'Chapter-4' stage stub."""
+        chapter_4_target = report['bsiAuditReport']['erstellungEinesPruefplans']['auditplanung']
+        for subchapter_key, result in stage_data.items():
+            if result is None or 'rows' not in result:
+                logging.warning(f"Skipping population for subchapter '{subchapter_key}' due to missing or invalid data.")
+                continue
+            
+            if subchapter_key in chapter_4_target:
+                chapter_4_target[subchapter_key]['rows'] = result['rows']
+                logging.debug(f"Populated {len(result['rows'])} rows for {subchapter_key}.")
+            else:
+                logging.warning(f"Could not find target section for '{subchapter_key}' in Chapter 4.")
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
         """Deterministically maps data from a stage stub into the report object."""
         logging.info(f"Populating report with data from stage: {stage_name}")
         if stage_name == "Chapter-1":
-            # The old Chapter-1 structure doesn't match the new template.
-            # We skip it for now.
             self._populate_chapter_1(report, stage_data)
         elif stage_name == "Chapter-3":
             self._populate_chapter_3(report, stage_data)
+        elif stage_name == "Chapter-4":
+            self._populate_chapter_4(report, stage_data)
         else:
             logging.warning(f"No population logic defined for stage: {stage_name}")
