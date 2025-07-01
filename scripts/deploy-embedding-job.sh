@@ -1,14 +1,17 @@
-# Set your GCP Project ID and a name for your repository
-export GCP_PROJECT_ID="bsi-audit-kunde-x"
-export AR_REPO_NAME="bsi-audit-repo" # A name for your container repository
+# ===================================================================
+# A: DEPLOY JOB BLUEPRINT (Run this once, or when code changes)
+# ===================================================================
 
-# Optional: Create the Artifact Registry repository if it doesn't exist
-gcloud artifacts repositories create "${AR_REPO_NAME}" \
-    --repository-format=docker \
-    --location=europe-west4 \
-    --description="Repository for BSI Audit Automator images"
+gcloud run jobs deploy "bsi-etl-job" \
+  --source . \
+  --tasks 1 \
+  --max-retries 3 \
+  --memory 4Gi \
+  --cpu 2 \
+  --region "europe-west4" \
+  --project "bsi-audit-kunde-x" \
+  --task-timeout "7200" \
+  --command "python" \
+  --args "main.py,--run-etl"
 
-# Build the image using Cloud Build and tag it
-gcloud builds submit . --tag "europe-west4-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO_NAME}/bsi-automator:latest"
-
-echo "Image build complete."
+echo "✅ Job 'bsi-etl-job' has been deployed."
