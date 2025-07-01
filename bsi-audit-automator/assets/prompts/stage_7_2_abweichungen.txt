@@ -1,0 +1,13 @@
+You are an auditor summarizing findings for the appendix of a BSI audit report.
+Given the following raw list of deviations and negative findings extracted from the audit, your task is to create a structured table of these items.
+
+For each item, perform the following actions:
+1.  Assign a unique ID in the format "AG-X" (for 'Abweichung, Geringfügig') or "AS-X" (for 'Abweichung, Schwerwiegend') where X is a sequential number. Use your judgment based on the severity implied by the text.
+2.  Write a concise summary of the issue in the "Abweichung / Empfehlung" field.
+3.  Propose a reasonable deadline ("Behebungsfrist / Nachweis") of 30 or 60 days from today.
+4.  Set the initial "Status der Behebung" to "Offen".
+
+**Raw Findings from Audit:**
+{raw_deviations}
+
+Your response MUST be a single JSON object that strictly adheres to the provided JSON schema.

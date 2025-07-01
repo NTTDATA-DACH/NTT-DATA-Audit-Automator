@@ -11,6 +11,7 @@ from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 from src.audit.stages.stage_4_pruefplan import Chapter4Runner
 from src.audit.stages.stage_5_vor_ort_audit import Chapter5Runner
+from src.audit.stages.stage_7_anhang import Chapter7Runner
 
 class AuditController:
     """Orchestrates the entire staged audit process."""
@@ -25,6 +26,7 @@ class AuditController:
             "Chapter-3": Chapter3Runner(config, ai_client),
             "Chapter-4": Chapter4Runner(config, ai_client),
             "Chapter-5": Chapter5Runner(config, gcs_client, ai_client),
+            "Chapter-7": Chapter7Runner(config, gcs_client, ai_client),
             # Add other stage runners here as they are developed
         }
         logging.info("Audit Controller initialized.")

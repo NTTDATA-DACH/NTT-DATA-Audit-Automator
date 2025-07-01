@@ -9,7 +9,7 @@ from src.clients.gcs_client import GcsClient
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
     LOCAL_MASTER_TEMPLATE_PATH = "assets/json/master_report_template.json"
-    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3", "Chapter-4", "Chapter-5"]
+    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3", "Chapter-4", "Chapter-5", "Chapter-7"]
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
@@ -87,21 +87,14 @@ class ReportGenerator:
                 logging.warning(f"Could not find target section for '{subchapter_key}' in Chapter 4.")
 
     def _populate_chapter_5(self, report: dict, stage_data: dict):
-        """Populates Chapter 5 data from the 'Chapter-5' stage stub."""
         chapter_5_target = report['bsiAuditReport']['vorOrtAudit']
         for subchapter_key, result in stage_data.items():
             if result is None: continue
-
-            # Handle 5.5.2 Einzelergebnisse
             if subchapter_key == "verifikationDesITGrundschutzChecks":
                 target_section = chapter_5_target.get(subchapter_key, {}).get("einzelergebnisse")
-                if target_section:
-                    target_section["bausteinPruefungen"] = result.get("bausteinPruefungen", [])
-                else:
-                    logging.warning(f"Could not find target section for '{subchapter_key}'")
+                if target_section: target_section["bausteinPruefungen"] = result.get("bausteinPruefungen", [])
+                else: logging.warning(f"Could not find target section for '{subchapter_key}'")
                 continue
-
-            # Handle generic question/answer/finding sections
             if subchapter_key in chapter_5_target:
                 target_section = chapter_5_target.get(subchapter_key)
                 content_list, answers = target_section.get("content", []), result.get("answers", [])
@@ -115,6 +108,17 @@ class ReportGenerator:
             else:
                 logging.warning(f"Could not find target section for '{subchapter_key}' in Chapter 5.")
 
+    def _populate_chapter_7(self, report: dict, stage_data: dict):
+        """Populates Chapter 7 data from the 'Chapter-7' stage stub."""
+        anhang_target = report['bsiAuditReport']['anhang']
+        
+        # Populate 7.1 Referenzdokumente
+        if 'referenzdokumente' in stage_data and 'rows' in stage_data['referenzdokumente']:
+            anhang_target['referenzdokumente']['table']['rows'] = stage_data['referenzdokumente']['rows']
+        
+        # Populate 7.2 Abweichungen und Empfehlungen
+        if 'abweichungenUndEmpfehlungen' in stage_data and 'rows' in stage_data['abweichungenUndEmpfehlungen']:
+            anhang_target['abweichungenUndEmpfehlungen']['table']['rows'] = stage_data['abweichungenUndEmpfehlungen']['rows']
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
         """Deterministically maps data from a stage stub into the report object."""
@@ -127,5 +131,7 @@ class ReportGenerator:
             self._populate_chapter_4(report, stage_data)
         elif stage_name == "Chapter-5":
             self._populate_chapter_5(report, stage_data)
+        elif stage_name == "Chapter-7":
+            self._populate_chapter_7(report, stage_data)
         else:
             logging.warning(f"No population logic defined for stage: {stage_name}")
