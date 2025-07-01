@@ -20,10 +20,13 @@ variable "customer_id" {
   default     = "hisolutions"
 }
 
-# The gcs_bucket_name variable has been removed.
-
 variable "vpc_network_name" {
   description = "The name of the VPC network to create for the Vertex AI endpoint."
   type        = string
   default     = "bsi-audit-vpc"
+}
+
+variable "service_account_id" {
+  description = "The ID for the custom service account (e.g., 'bsi-automator-sa')."
+  type        = string
 }

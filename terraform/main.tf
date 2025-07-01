@@ -13,6 +13,12 @@ provider "google" {
   region  = var.region
 }
 
+# Provider alias for resources that may have features only available in beta
+provider "google-beta" {
+  project = var.project_id
+  region  = var.region
+}
+
 # --- CHANGE: ADDED BUCKET CREATION ---
 # This resource now creates the GCS bucket for our project automatically.
 resource "google_storage_bucket" "bsi_audit_bucket" {
@@ -20,6 +26,23 @@ resource "google_storage_bucket" "bsi_audit_bucket" {
   location                    = var.region # Ensures bucket is in the same region as Vertex AI
   force_destroy               = true       # Allows 'terraform destroy' to delete the bucket even if it has files
   uniform_bucket_level_access = true
+}
+
+# --- NEW: ARTIFACT REGISTRY REPOSITORY ---
+# Create the repository to store our job's Docker images.
+resource "google_artifact_registry_repository" "bsi_repo" {
+  provider      = google-beta # The repository resource often has features in beta
+  location      = var.region
+  repository_id = "bsi-audit-repo"
+  description   = "Docker repository for BSI Audit Automator jobs"
+  format        = "DOCKER"
+}
+
+# --- NEW: DEDICATED SERVICE ACCOUNT ---
+# Create a custom Service Account for our Cloud Run Job to use.
+resource "google_service_account" "bsi_job_sa" {
+  account_id   = var.service_account_id
+  display_name = "Service Account for BSI Audit Automator Job"
 }
 
 # 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
@@ -81,4 +104,31 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   # Manually construct the network string using the project NUMBER, not the ID.
   # This matches the specific format required by this API.
   network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
+}
+
+# 3. IAM & PERMISSIONS: Applying the Principle of Least Privilege
+# -----------------------------------------------------------------
+
+# Grant our new Service Account permission to use Vertex AI.
+resource "google_project_iam_member" "sa_vertex_access" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.bsi_job_sa.email}"
+}
+
+# Grant our new Service Account permission to read/write to our specific GCS bucket.
+resource "google_storage_bucket_iam_member" "sa_gcs_access" {
+  bucket = google_storage_bucket.bsi_audit_bucket.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.bsi_job_sa.email}"
+}
+
+# Grant the default Cloud Build Service Account permission to push images
+# to our new Artifact Registry repository. This is the permission that was
+# previously missing and caused the build to fail.
+resource "google_artifact_registry_repository_iam_member" "cloudbuild_ar_writer" {
+  location   = google_artifact_registry_repository.bsi_repo.location
+  repository = google_artifact_registry_repository.bsi_repo.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${var.project_number}@cloudbuild.gserviceaccount.com"
 }

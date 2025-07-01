@@ -22,3 +22,13 @@ output "vector_index_data_gcs_path" {
   description = "The GCS path where the Python application must upload the embedding data files (e.g., index_data.jsonl). The Vertex AI Index automatically monitors this path."
   value       = local.index_contents_path
 }
+
+output "service_account_email" {
+  description = "The email of the custom service account created for the Cloud Run Job."
+  value       = google_service_account.bsi_job_sa.email
+}
+
+output "artifact_registry_repository_url" {
+  description = "The URL of the created Artifact Registry repository."
+  value       = "${google_artifact_registry_repository.bsi_repo.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.bsi_repo.repository_id}"
+}

@@ -4,7 +4,6 @@ project_id = "bsi-audit-kunde-x"
 # The unique identifier for the customer, used for naming resources.
 customer_id = "kunde-x"
 
-# --- FIX FOR PROJECT NUMBER ERROR ---
 # The unique numeric identifier for the project.
 project_number = "905207908720"
 
@@ -14,3 +13,6 @@ region = "europe-west4"
 
 # The name for the dedicated VPC network.
 vpc_network_name = "bsi-audit-vpc"
+
+# The ID for the custom service account.
+service_account_id = "bsi-automator-sa"
