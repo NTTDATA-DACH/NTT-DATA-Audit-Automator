@@ -1,6 +1,6 @@
 # Replace [YOUR_PROJECT_NUMBER] with the actual number from Step 1
-export PROJECT_NUMBER=`gcloud projects describe bsi-audit-kunde-x --format="value(projectNumber)"`
-export PROJECT_ID="bsi-audit-kunde-x"
+export PROJECT_NUMBER=`gcloud projects describe bsi-audit-2 --format="value(projectNumber)"`
+export PROJECT_ID="bsi-audit-2"
 
 # Grant the Cloud Build service account permission to write to Artifact Registry
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \

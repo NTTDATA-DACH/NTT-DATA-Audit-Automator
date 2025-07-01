@@ -3,9 +3,9 @@
 # ===================================================================
 
 # Set customer-specific variables here
-export GCP_PROJECT_ID="bsi-audit-kunde-x"
+export GCP_PROJECT_ID="bsi-audit-2"
 export CUSTOMER_ID="kunde-x"
-export BUCKET_NAME="bsi-audit-kunde-x-kunde-x-audit-data"
+export BUCKET_NAME="bsi-audit-2-audit-data"
 export INDEX_ENDPOINT_ID="8256523084039716864"
 export VERTEX_AI_REGION="europe-west4"
 export AUDIT_TYPE="Zertifizierungsaudit"

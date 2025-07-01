@@ -5,7 +5,7 @@ gcloud run jobs deploy "bsi-etl-job" \
   --memory 4Gi \
   --cpu 2 \
   --region "europe-west4" \
-  --project "bsi-audit-kunde-x" \
+  --project "bsi-audit-2" \
   --task-timeout "7200" \
   --command "python" \
   --args "main.py,--run-etl" \
