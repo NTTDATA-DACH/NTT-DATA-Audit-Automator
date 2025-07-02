@@ -4,9 +4,6 @@ project_id = "bsi-audit-2"
 # The unique identifier for the customer, used for naming resources.
 customer_id = "kunde-x"
 
-# The unique numeric identifier for the project.
-project_number = "332161338002"
-
 # The region where all resources will be deployed.
 # Must be a region that supports Vertex AI Vector Search.
 region = "europe-west4"

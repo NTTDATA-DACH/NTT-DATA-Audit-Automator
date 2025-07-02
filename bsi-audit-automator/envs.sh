@@ -15,7 +15,7 @@
 #
 set -e # Exit on error
 
-TERRAFORM_DIR="./terraform"
+TERRAFORM_DIR="../terraform"
 
 if [ ! -d "$TERRAFORM_DIR" ]; then
     echo "❌ Error: Terraform directory not found at '$TERRAFORM_DIR'. Please run this script from the project root."
@@ -30,11 +30,11 @@ echo "🔹 Fetching infrastructure details from Terraform..."
 
 # --- Dynamic Values from Terraform ---
 export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-export GCP_PROJECT_NUMBER="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_number)"
 export CUSTOMER_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw customer_id)"
 export VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
-INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+export INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+export GCP_PROJECT_NUMBER="$(echo "${INDEX_ENDPOINT_ID_FULL}" | cut -d'/' -f2)"
 export INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
 
 # --- Static Values for Local Development ---

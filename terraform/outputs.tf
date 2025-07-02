@@ -52,3 +52,8 @@ output "project_id" {
   description = "The Google Cloud project ID where resources are deployed."
   value       = var.project_id
 }
+
+output "project_number" {
+  description = "The Google Cloud project number where resources are deployed."
+  value       = data.google_project.project.number
+}
