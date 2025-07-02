@@ -88,7 +88,7 @@ class AiClient:
         # Note on Max Output Tokens: The brief specifies 65536, but this model family's
         # documented maximum is 8192. Using a higher value would cause an API error.
         # We are using the documented maximum to fulfill the intent of the requirement.
-        gen_config = types.GenerationConfig(
+        gen_config = GenerateContentConfig(
             response_mime_type="application/json",
             # FIX: The google-genai library forbids the '$schema' key in the schema definition.
             # We create a clean copy of the schema without this key before passing it.
@@ -105,10 +105,10 @@ class AiClient:
                     # CORRECT IMPLEMENTATION: Use the client's dedicated async interface
                     # as explicitly required by the project brief.
                     response = await self.client.aio.models.generate_content(
-                        model=f"models/{GENERATIVE_MODEL_NAME}", # The model name needs the "models/" prefix here
+                        model=GENERATIVE_MODEL_NAME,
                         contents=[prompt],
-                        # Use the correct parameter name 'generation_config'
-                        generation_config=gen_config,
+                        # Use the correct parameter name 'config'
+                        config=gen_config,
                     )
                     
                     # Explicitly check the model's finish reason per the brief.
