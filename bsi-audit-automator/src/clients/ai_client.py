@@ -98,15 +98,16 @@ class AiClient:
             temperature=0.2, # Lower temperature for more deterministic, factual output
         )
         
-        # Using a model object is the standard pattern from the google-genai library
-        model = self.client.get_model(GENERATIVE_MODEL_NAME)
-        
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
                     logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
-                    response = await model.generate_content_async(
+                    # CORRECT IMPLEMENTATION: Use the client's dedicated async interface
+                    # as explicitly required by the project brief.
+                    response = await self.client.aio.models.generate_content(
+                        model=f"models/{GENERATIVE_MODEL_NAME}", # The model name needs the "models/" prefix here
                         contents=[prompt],
+                        # Use the correct parameter name 'generation_config'
                         generation_config=gen_config,
                     )
                     
