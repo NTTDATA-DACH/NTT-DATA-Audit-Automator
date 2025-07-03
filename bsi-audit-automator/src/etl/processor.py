@@ -43,7 +43,7 @@ class EtlProcessor:
             return
 
         # 3. Transform Part 2: Generate embeddings
-        chunk_texts = [chunk['text'] for chunk in all_chunks]
+        chunk_texts = [chunk['text_content'] for chunk in all_chunks]
         embeddings = self.ai_client.get_embeddings(chunk_texts)
 
         # 4. Transform Part 3: Format data for Vertex AI Index
@@ -87,10 +87,14 @@ class EtlProcessor:
                 chunks = text_splitter.split_text(full_text)
                 
                 for i, chunk_text in enumerate(chunks):
+                    # Create a readable, deterministic ID for better traceability
+                    clean_filename = blob.name.split('/')[-1].replace('.pdf', '')
+                    chunk_id = f"{clean_filename}_chunk_{i:04d}"
                     all_chunks_with_metadata.append({
-                        "id": str(uuid.uuid4()), # A unique ID for each chunk
+                        "id": chunk_id,
                         "source_document": blob.name,
-                        "text": chunk_text
+                        "chunk_index": i,
+                        "text_content": chunk_text
                     })
                 logging.info(f"Created {len(chunks)} chunks for {blob.name}")
 
@@ -101,13 +105,24 @@ class EtlProcessor:
         return all_chunks_with_metadata
 
     def _format_for_indexing(self, chunks: List[Dict], embeddings: List[List[float]]) -> str:
-        """Formats the chunks and embeddings into the required JSONL format."""
+        """
+        Formats chunks and embeddings into a rich JSONL format.
+        This file serves two purposes:
+        1. As input for the Vertex AI Vector Search indexer (which uses 'id', 'embedding', 'restricts').
+        2. As the data source for our application's RAG lookup map (which uses 'id' and 'text_content').
+        """
         jsonl_lines = []
         for chunk, embedding in zip(chunks, embeddings):
             json_obj = {
+                # --- Data for BOTH Indexing and RAG Lookup ---
                 "id": chunk['id'],
                 "embedding": embedding,
-                # Restricts allow for metadata filtering during search
+                
+                # --- Data exclusively for RAG Lookup (ignored by indexer) ---
+                "text_content": chunk['text_content'],
+                "source_document": chunk['source_document'],
+                
+                # --- Data exclusively for Vertex AI Indexing ---
                 "restricts": [{
                     "namespace": "source_document",
                     "allow": [chunk['source_document']]

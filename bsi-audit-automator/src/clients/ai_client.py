@@ -63,10 +63,10 @@ class AiClient:
 
         logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'...")
         try:
-            # The SDK handles batching automatically when auto_batch_size is True.
+            # The SDK handles batching automatically.
             response = self.embedding_model.get_embeddings(
                 texts,
-                auto_batch_size=True
+                task_type=EMBEDDING_TASK_TYPE
             )
             # The response is a list of TextEmbedding objects; we need to extract the .values
             embeddings = [embedding.values for embedding in response]
@@ -81,13 +81,10 @@ class AiClient:
         Generates a JSON response from the AI model, enforcing a specific schema.
         Implements an async retry loop with exponential backoff and connection limiting.
         """
-        # The generation_config is now a dictionary, which is simpler to manage.
+        # The generation_config is a dictionary for this SDK.
         gen_config = {
             "response_mime_type": "application/json",
-            # CRITICAL FIX: The API forbids the '$schema' key. We create a clean
-            # copy of the schema without it before passing it to the model.
             "response_schema": {k: v for k, v in json_schema.items() if k != "$schema"},
-            # Using the documented maximum to prevent API errors.
             "max_output_tokens": 8192,
             "temperature": 0.2,
         }
@@ -105,7 +102,6 @@ class AiClient:
                     if not response.candidates:
                         raise ValueError("The model response contained no candidates.")
 
-                    # Explicitly check the model's finish reason per the brief's requirements.
                     finish_reason = response.candidates[0].finish_reason.name
                     if finish_reason not in ["STOP", "MAX_TOKENS"]:
                         safety_ratings_str = "N/A"
@@ -118,10 +114,9 @@ class AiClient:
                             f"Attempt {attempt + 1} finished with non-OK reason: '{finish_reason}'. "
                             f"Safety Ratings: [{safety_ratings_str}]. Retrying..."
                         )
-                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                        await asyncio.sleep(2 ** attempt)
                         continue
 
-                    # The response.text is a JSON string because we set response_mime_type.
                     response_json = json.loads(response.text)
                     logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
