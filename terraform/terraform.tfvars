@@ -1,8 +1,5 @@
 # The Google Cloud project ID.
-project_id = "bsi-audit-2"
-
-# The unique identifier for the customer, used for naming resources.
-customer_id = "kunde-x"
+project_id = "bsi-auditor-3"
 
 # The region where all resources will be deployed.
 # Must be a region that supports Vertex AI Vector Search.
@@ -15,4 +12,4 @@ vpc_network_name = "bsi-audit-vpc"
 service_account_id = "bsi-automator-sa"
 
 # project NUMBER
-project_number ="332161338002"
+project_number ="60392965036"

@@ -14,12 +14,6 @@ variable "region" {
   default     = "europe-west4" # A region that supports the service
 }
 
-variable "customer_id" {
-  description = "A unique identifier for the customer, used for naming resources."
-  type        = string
-  default     = "hisolutions"
-}
-
 variable "vpc_network_name" {
   description = "The name of the VPC network to create for the Vertex AI endpoint."
   type        = string

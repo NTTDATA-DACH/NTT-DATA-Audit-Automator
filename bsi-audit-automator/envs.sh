@@ -30,7 +30,6 @@ echo "🔹 Fetching infrastructure details from Terraform..."
 
 # --- Dynamic Values from Terraform ---
 export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-export CUSTOMER_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw customer_id)"
 export VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
 export INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
@@ -48,7 +47,7 @@ export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
 set +e
-echo "✅ Environment variables configured successfully for customer '${CUSTOMER_ID}'."
+echo "✅ Environment variables configured successfully'."
 echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
 echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
 echo "   - TEST mode:      ${TEST}"

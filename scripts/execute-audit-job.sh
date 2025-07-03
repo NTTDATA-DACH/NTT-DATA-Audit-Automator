@@ -24,7 +24,6 @@ MAX_CONCURRENT_AI_REQUESTS=5
 echo "🔹 Fetching infrastructure details from Terraform..."
 TERRAFORM_DIR="../terraform"
 GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-CUSTOMER_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw customer_id)"
 VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
 INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
@@ -88,14 +87,14 @@ select task in "${tasks[@]}"; do
 done
 
 # --- Final gcloud Execution ---
-echo "🚀 Executing task for customer '${CUSTOMER_ID}' with args: [main.py ${TASK_ARGS}]"
+echo "🚀 Executing task with args: [main.py ${TASK_ARGS}]"
 
 # NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
 # command arguments of the deployed job, allowing us to run any task.
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},CUSTOMER_ID=${CUSTOMER_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
   --args="${TASK_ARGS}"
 
-echo "✅ Job execution for customer '${CUSTOMER_ID}' finished."
+echo "✅ Job execution' finished."

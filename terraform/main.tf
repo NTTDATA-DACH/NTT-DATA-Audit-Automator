@@ -49,7 +49,7 @@ resource "google_project_service" "project_apis" {
 # This resource now creates the GCS bucket for our project automatically.
 # It depends on the APIs being enabled first.
 resource "google_storage_bucket" "bsi_audit_bucket" {
-  name                        = "${var.project_id}-${var.customer_id}-audit-data"
+  name                        = "${var.project_id}-audit-data"
   location                    = var.region # Ensures bucket is in the same region as Vertex AI
   force_destroy               = true       # Allows 'terraform destroy' to delete the bucket even if it has files
   uniform_bucket_level_access = true
@@ -119,8 +119,8 @@ locals {
 }
 
 resource "google_vertex_ai_index" "bsi_audit_index" {
-  display_name = "bsi-audit-index-${var.customer_id}"
-  description  = "Vector search index for BSI audit documents for customer ${var.customer_id}."
+  display_name = "bsi-audit-index"
+  description  = "Vector search index for BSI audit documents for project ${var.project_id}."
   region       = var.region
 
   metadata {
@@ -139,8 +139,8 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
 }
 
 resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
-  display_name = "bsi-audit-endpoint-${var.customer_id}"
-  description  = "Endpoint for querying the BSI audit index."
+  display_name = "bsi-audit-endpoint"
+  description  = "Endpoint for querying the BSI audit index for project ${var.project_id}."
   region       = var.region
   # --- FIX FOR PROJECT NUMBER ERROR ---
   # Manually construct the network string using the project NUMBER, not the ID.
@@ -154,7 +154,7 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   # This runs the gcloud command on the local machine after the endpoint is created.
   provisioner "local-exec" {
     when    = create
-    command = "gcloud ai index-endpoints deploy-index ${self.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index_kunde_x --display-name='BSI Deployed Index for ${var.customer_id}' --project=${var.project_id} --region=${var.region}"
+    command = "gcloud ai index-endpoints deploy-index ${self.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index_kunde_x --display-name='BSI Deployed Index' --project=${var.project_id} --region=${var.region}"
   }
 }
 

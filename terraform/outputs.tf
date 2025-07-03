@@ -1,8 +1,3 @@
-output "customer_id" {
-  description = "The unique identifier for the customer, from variables."
-  value       = var.customer_id
-}
-
 output "vertex_ai_index_id" {
   description = "The full resource ID of the created Vertex AI Index."
   value       = google_vertex_ai_index.bsi_audit_index.id
@@ -20,7 +15,7 @@ output "vertex_ai_index_endpoint_public_domain" {
 
 output "next_step_gcloud_command" {
   description = "Example gcloud command to deploy the index to the endpoint after the index is populated."
-  value       = "gcloud ai index-endpoints deploy-index ${google_vertex_ai_index_endpoint.bsi_audit_endpoint.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index_${replace(var.customer_id, "-", "_")} --display-name=bsi_deployed_index_${replace(var.customer_id, "-", "_")} --project=${var.project_id} --region=${var.region}"
+  value       = "gcloud ai index-endpoints deploy-index ${google_vertex_ai_index_endpoint.bsi_audit_endpoint.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index --display-name=bsi_deployed_index --project=${var.project_id} --region=${var.region}"
 }
 
 output "vector_index_data_gcs_path" {
