@@ -2,7 +2,10 @@
 import logging
 import json
 from typing import List, Dict, Any
+
+# Corrected import for the IndexEndpoint class
 from google.cloud import aiplatform
+from google.cloud.aiplatform.matching_engine import IndexEndpoint
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
@@ -18,9 +21,10 @@ class RagClient:
             project=config.gcp_project_id,
             location=config.vertex_ai_region
         )
-        
-        self.index_endpoint = aiplatform.IndexEndpoint(
-            index_endpoint_name=self.config.index_endpoint_id
+
+        # Instantiate the class from the correct import
+        self.index_endpoint = IndexEndpoint(
+            index_endpoint_name=self.config.index_endpoint_id,
         )
         logging.info(f"RAG Client connected to Index Endpoint: {self.config.index_endpoint_id}")
 
