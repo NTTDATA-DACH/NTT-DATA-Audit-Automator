@@ -13,3 +13,6 @@ vpc_network_name = "bsi-audit-vpc"
 
 # The ID for the custom service account.
 service_account_id = "bsi-automator-sa"
+
+# project NUMBER
+project_number ="332161338002"
