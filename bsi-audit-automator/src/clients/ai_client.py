@@ -47,9 +47,8 @@ class AiClient:
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generates vector embeddings for a list of text chunks.
-
-        This implementation now uses the aiplatform.TextEmbeddingModel.
+        Generates vector embeddings for a list of text chunks, respecting the
+        model's batch size limit of 1.
 
         Args:
             texts: A list of text strings to embed.
@@ -62,13 +61,18 @@ class AiClient:
             return []
 
         logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'...")
+        all_embeddings = []
         try:
-            # The SDK handles batching automatically.
-            response = self.embedding_model.get_embeddings(texts)
-            # The response is a list of TextEmbedding objects; we need to extract the .values
-            embeddings = [embedding.values for embedding in response]
-            logging.info(f"Successfully generated {len(embeddings)} embeddings.")
-            return embeddings
+            # CRITICAL FIX: The gemini-embedding-001 model requires a batch size of 1.
+            # We must iterate and call the API for each text individually.
+            for text in texts:
+                # The model expects a list, even if it's a single item.
+                response = self.embedding_model.get_embeddings([text])
+                # The response is a list with one TextEmbedding object.
+                all_embeddings.append(response[0].values)
+
+            logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
+            return all_embeddings
         except Exception as e:
             logging.error(f"Failed to generate embeddings: {e}", exc_info=True)
             raise
