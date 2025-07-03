@@ -12,7 +12,7 @@ from .etl.processor import EtlProcessor
 from .audit.controller import AuditController
 from .audit.report_generator import ReportGenerator
 
-# bump
+EMBEDDINGS_FILE_PATH = "vector_index_data/embeddings.json"
 
 def main():
     """
@@ -52,21 +52,34 @@ def main():
 
     # Instantiate clients once
     gcs_client = GcsClient(config)
-    ai_client = AiClient(config)
-    rag_client = RagClient(config, gcs_client)
 
     try:
         if args.run_etl:
             logging.info("Starting ETL phase...")
+            ai_client = AiClient(config)
             etl_processor = EtlProcessor(config, gcs_client, ai_client)
             etl_processor.run()
 
-        elif args.generate-report:
+        elif args.generate_report:
             logging.info("Starting final report assembly...")
             generator = ReportGenerator(config, gcs_client)
             generator.assemble_report()
 
         else:  # These are the async audit tasks
+            # --- PRE-FLIGHT CHECK for RAG-dependent stages ---
+            rag_dependent_tasks = args.run_stage or args.run_all_stages
+            if rag_dependent_tasks:
+                logging.info(f"Checking for required ETL output file: {EMBEDDINGS_FILE_PATH}")
+                if not gcs_client.blob_exists(EMBEDDINGS_FILE_PATH):
+                    logging.critical(
+                        f"\n\n--- PREREQUISITE MISSING ---\n"
+                        f"The required file '{EMBEDDINGS_FILE_PATH}' was not found in bucket '{config.bucket_name}'.\n"
+                        f"You must run the ETL process first to generate embeddings.\n"
+                        f"Please run: python -m src.main --run-etl\n"
+                    )
+                    exit(1)
+            ai_client = AiClient(config)
+            rag_client = RagClient(config, gcs_client)
             controller = AuditController(config, gcs_client, ai_client, rag_client)
 
             async def run_audit_tasks():

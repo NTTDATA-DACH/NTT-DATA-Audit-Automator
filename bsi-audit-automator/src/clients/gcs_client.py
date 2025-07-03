@@ -70,3 +70,9 @@ class GcsClient:
         logging.info(f"Attempting to read text from: gs://{self.bucket.name}/{blob_name}")
         blob = self.bucket.blob(blob_name)
         return blob.download_as_text()
+
+    def blob_exists(self, blob_name: str) -> bool:
+        """Checks if a blob exists in the GCS bucket."""
+        logging.debug(f"Checking for existence of blob: gs://{self.bucket.name}/{blob_name}")
+        blob = self.bucket.blob(blob_name)
+        return blob.exists()
