@@ -12,7 +12,7 @@ from .etl.processor import EtlProcessor
 from .audit.controller import AuditController
 from .audit.report_generator import ReportGenerator
 
-EMBEDDINGS_FILE_PATH = "vector_index_data/embeddings.json"
+EMBEDDINGS_PATH_PREFIX = "vector_index_data/"
 
 def main():
     """
@@ -69,15 +69,19 @@ def main():
             # --- PRE-FLIGHT CHECK for RAG-dependent stages ---
             rag_dependent_tasks = args.run_stage or args.run_all_stages
             if rag_dependent_tasks:
-                logging.info(f"Checking for required ETL output file: {EMBEDDINGS_FILE_PATH}")
-                if not gcs_client.blob_exists(EMBEDDINGS_FILE_PATH):
+                logging.info(f"Checking for required ETL output files in: {EMBEDDINGS_PATH_PREFIX}")
+                # List files and filter out the placeholder needed by Terraform
+                embedding_files = [b for b in gcs_client.list_files(prefix=EMBEDDINGS_PATH_PREFIX) if "placeholder.json" not in b.name]
+                
+                if not embedding_files:
                     logging.critical(
                         f"\n\n--- PREREQUISITE MISSING ---\n"
-                        f"The required file '{EMBEDDINGS_FILE_PATH}' was not found in bucket '{config.bucket_name}'.\n"
-                        f"You must run the ETL process first to generate embeddings.\n"
+                        f"No embedding files found in '{EMBEDDINGS_PATH_PREFIX}' in bucket '{config.bucket_name}'.\n"
+                        f"You must run the ETL process first to generate embeddings for the source documents.\n"
                         f"Please run: python -m src.main --run-etl\n"
                     )
                     exit(1)
+
             ai_client = AiClient(config)
             rag_client = RagClient(config, gcs_client)
             controller = AuditController(config, gcs_client, ai_client, rag_client)

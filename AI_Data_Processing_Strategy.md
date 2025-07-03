@@ -6,14 +6,23 @@ This strategy abandons the "single large prompt" approach in favor of a more rob
 
 ---
 
-### **Phase 0: Document Ingestion and Indexing**
+### **Phase 0: Incremental Document Ingestion and Indexing**
 
-**Objective:** To process all customer source documents and create a searchable vector index. This is a one-time setup process for each audit.
+**Objective:** To process each customer source document individually and upload its embeddings to GCS, allowing for robust, scalable, and incremental indexing by Vertex AI Vector Search.
 
-1.  **Iterate Source Documents (Rule B):** The application will list all source documents from the GCS source prefix. It will process them *one by one*.
-2.  **Document Chunking:** Each document is loaded and broken down into smaller, semantically meaningful chunks (e.g., paragraphs or sections of 300-500 words). Each chunk will retain metadata linking it back to its original source document and page number. This is critical for auditability.
-3.  **Embedding Generation:** Each chunk is passed to a text-embedding model (like `text-embedding-004`) to be converted into a numerical vector representation.
-4.  **Vector Database Indexing (Rule A):** The chunks and their corresponding vectors are stored and indexed in a managed Vector Database (e.g., Vertex AI Vector Search). This index allows for rapid, semantic-based retrieval of the most relevant document chunks for any given query.
+1.  **List Source Documents:** The ETL processor lists all source document blobs from the customer's `source_documents/` GCS directory.
+
+2.  **Per-Document Processing Loop:** The application iterates through each source document one at a time. The following steps are performed for each document before moving to the next:
+    a.  **Extract & Chunk:** The text content of a single document (e.g., a PDF) is extracted. This text is then broken down into smaller, semantically meaningful chunks (e.g., paragraphs of ~500 words). Each chunk retains metadata linking it back to the source file.
+    b.  **Generate Embeddings:** The list of text chunks for *this document only* is sent to the embedding model (`gemini-embedding-001`) to be converted into numerical vectors.
+    c.  **Format & Upload Individual JSON:** The chunks, their corresponding embeddings, and their metadata are formatted into a single JSON file. This file is then immediately uploaded to the `vector_index_data/` GCS directory with a unique name derived from the source document (e.g., `policy_v2.pdf.json`).
+
+3.  **Automatic Index Ingestion:** The Vertex AI Vector Search Index is configured to monitor the `vector_index_data/` directory. It automatically detects each new JSON file as it's uploaded, ingests the data, and updates the search index without requiring a manual "re-index" step.
+
+**Rationale for this approach:**
+*   **Scalability:** Processing documents one-by-one prevents out-of-memory errors, even with thousands of large source files.
+*   **Resilience:** If the ETL process fails midway, the embeddings for all previously completed documents are already safely stored and indexed. The process can be resumed without losing work.
+*   **Speed:** Vertex AI can begin indexing the first documents while later ones are still being processed, leading to a faster overall time-to-availability for the search index.
 
 ---
 

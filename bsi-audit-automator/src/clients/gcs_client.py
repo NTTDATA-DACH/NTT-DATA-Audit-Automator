@@ -22,16 +22,17 @@ class GcsClient:
         self.bucket = self.storage_client.bucket(config.bucket_name)
         logging.info(f"GCS Client initialized for bucket: gs://{self.bucket.name}")
 
-    def list_source_files(self) -> list[storage.Blob]:
+    def list_files(self, prefix: str = None) -> list[storage.Blob]:
         """
-        Lists all processable files from the customer's source GCS prefix.
+        Lists all files from a given GCS prefix.
 
         Returns:
             A list of GCS blob objects.
         """
-        logging.info(f"Listing source files from prefix: {self.config.source_prefix}")
+        list_prefix = prefix if prefix is not None else self.config.source_prefix
+        logging.info(f"Listing files from prefix: {list_prefix}")
         blobs = self.storage_client.list_blobs(
-            self.bucket.name, prefix=self.config.source_prefix
+            self.bucket.name, prefix=list_prefix
         )
         # Filter for common document types, ignore empty "directory" blobs
         files = [blob for blob in blobs if "." in blob.name]
