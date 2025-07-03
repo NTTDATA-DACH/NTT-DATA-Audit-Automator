@@ -75,6 +75,17 @@ resource "google_service_account" "bsi_job_sa" {
   depends_on = [google_project_service.project_apis]
 }
 
+# --- NEW: PLACEHOLDER FILE FOR INDEX CREATION ---
+# Create an empty, validly named JSON file in the vector index directory.
+# This is required to satisfy the API's validation check during 'terraform apply'.
+resource "google_storage_bucket_object" "json_placeholder" {
+  name         = "vector_index_data/placeholder.json"
+  bucket       = google_storage_bucket.bsi_audit_bucket.name
+  content_type = "application/json"
+  # An empty JSON array is valid content.
+  content      = "[]"
+}
+
 # 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
 # ... (rest of the networking resources are unchanged) ...
 resource "google_compute_network" "bsi_vpc" {
@@ -124,7 +135,7 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
       }
     }
   }
-  depends_on = [google_service_networking_connection.vertex_vpc_connection]
+  depends_on = [google_service_networking_connection.vertex_vpc_connection, google_storage_bucket_object.json_placeholder]
 }
 
 resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
