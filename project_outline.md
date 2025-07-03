@@ -43,6 +43,7 @@ To ensure a smooth and efficient development process, please adhere to the follo
 *   **Explain Your Reasoning:** Briefly explain the "why" behind your code and architectural decisions.
 *   **Track Changes:** For minor code changes (under 20 lines), please present them in a `diff` format. For larger changes, provide a clear explanation of what was modified.
 *   **No Silent Changes:** Never alter code or logic without explicitly stating the change. Focus only on implementing what the current prompt requests.
+*    **Allwas all files:** with every change, check all files you know about if they need an adaption to the change as well!
 
 **4.2. Environment and Configuration**
 *   **Cloud-Native I/O:** All file operations must use the Google Cloud Storage (GCS) client library. The script is intended to run on GCP.
