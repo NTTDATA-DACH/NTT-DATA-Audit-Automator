@@ -33,14 +33,14 @@ class RagClient:
 
     def _load_chunk_lookup_map(self) -> Dict[str, str]:
         """
-        Downloads embeddings.jsonl from GCS and creates a mapping from
+        Downloads embeddings.json from GCS and creates a mapping from
         chunk ID to its text content for fast lookups.
         """
         lookup_map = {}
         try:
             logging.info("Building chunk ID to text lookup map...")
             jsonl_content = self.gcs_client.read_text_file(
-                "vector_index_data/embeddings.jsonl"
+                "vector_index_data/embeddings.json"
             )
             for line in jsonl_content.strip().split('\n'):
                 data = json.loads(line)

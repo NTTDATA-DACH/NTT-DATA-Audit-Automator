@@ -15,7 +15,7 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 100
 EMBEDDING_BATCH_SIZE = 25 # Process and save state every 25 chunks.
 STATE_FILE_PATH = "output/etl_state.json"
-FINAL_OUTPUT_PATH = "vector_index_data/embeddings.jsonl"
+FINAL_OUTPUT_PATH = "vector_index_data/embeddings.json"
 
 class EtlProcessor:
     """Orchestrates the ETL process for the RAG pipeline."""
