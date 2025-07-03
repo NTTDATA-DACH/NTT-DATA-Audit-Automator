@@ -1,16 +1,16 @@
-# main.py
+# src/main.py
 import argparse
 import logging
 import asyncio
 
-from src.config import config
-from src.logging_setup import setup_logging
-from src.clients.gcs_client import GcsClient
-from src.clients.rag_client import RagClient
-from src.clients.ai_client import AiClient
-from src.etl.processor import EtlProcessor
-from src.audit.controller import AuditController
-from src.audit.report_generator import ReportGenerator
+from .config import config
+from .logging_setup import setup_logging
+from .clients.gcs_client import GcsClient
+from .clients.rag_client import RagClient
+from .clients.ai_client import AiClient
+from .etl.processor import EtlProcessor
+from .audit.controller import AuditController
+from .audit.report_generator import ReportGenerator
 
 # bump
 
@@ -61,7 +61,7 @@ def main():
             etl_processor = EtlProcessor(config, gcs_client, ai_client)
             etl_processor.run()
 
-        elif args.generate_report:
+        elif args.generate-report:
             logging.info("Starting final report assembly...")
             generator = ReportGenerator(config, gcs_client)
             generator.assemble_report()

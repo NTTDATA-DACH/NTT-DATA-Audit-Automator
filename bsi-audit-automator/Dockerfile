@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Specify the command to run on container start.
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["python", "-m", "src.main"]
 
 # Set a default command to show the help message if no other command is provided.
 CMD ["--help"]
