@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 # Corrected import for the IndexEndpoint class
 from google.cloud import aiplatform
-from google.cloud.aiplatform.matching_engine import IndexEndpoint
+from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
@@ -22,8 +22,8 @@ class RagClient:
             location=config.vertex_ai_region
         )
 
-        # Instantiate the class from the correct import
-        self.index_endpoint = IndexEndpoint(
+        # Instantiate the class, providing the full context required to find the resource.
+        self.index_endpoint = MatchingEngineIndexEndpoint(
             index_endpoint_name=self.config.index_endpoint_id,
         )
         logging.info(f"RAG Client connected to Index Endpoint: {self.config.index_endpoint_id}")
