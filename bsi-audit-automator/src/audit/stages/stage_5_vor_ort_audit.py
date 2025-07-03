@@ -31,19 +31,14 @@ class Chapter5Runner:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     def _load_subchapter_definitions(self) -> Dict[str, Any]:
+        """Loads definitions for subchapters to be processed automatically."""
         return {
-            "wirksamkeitDesSicherheitsmanagementsystems": {
-                "key": "5.1",
-                "prompt_path": "assets/prompts/stage_5_1_wirksamkeit.txt",
-                "schema_path": "assets/schemas/stage_5_1_wirksamkeit_schema.json"
-            },
+            # Subchapter 5.1 is now a manual task and has been removed from automation.
             "verifikationDesITGrundschutzChecks": { # This is for 5.5.2
                 "key": "5.5.2",
                 "prompt_path": "assets/prompts/stage_5_5_2_einzelergebnisse.txt",
                 "schema_path": "assets/schemas/stage_5_5_2_einzelergebnisse_schema.json"
             },
-            # NOTE: Skipping 5.5.3 and 5.6.1 as per instructions
-            # NOTE: Skipping 5.6.2 (risk measures) for now as it needs a separate implementation
         }
 
     async def _process_control_verification(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -53,7 +48,10 @@ class Chapter5Runner:
         logging.info(f"Starting special control verification for subchapter: {definition['key']} ({name})")
 
         # 1. Get selected Bausteine from Chapter 4 results
-        selected_bausteine = chapter_4_data.get("auswahlBausteineErstRezertifizierung", {}).get("rows", [])
+        # Handles both certification and surveillance audit keys
+        ch4_plan_key = next(iter(chapter_4_data)) if chapter_4_data else None
+        selected_bausteine = chapter_4_data.get(ch4_plan_key, {}).get("rows", []) if ch4_plan_key else []
+        
         if not selected_bausteine:
             logging.warning("No Bausteine found in Chapter 4 results. Skipping 5.5.2.")
             return {name: {"bausteinPruefungen": []}}
@@ -61,8 +59,9 @@ class Chapter5Runner:
         # 2. Get all controls for these Bausteine from our catalog
         all_controls_to_verify = []
         for baustein in selected_bausteine:
-            # Assuming the 'Baustein' field contains the ID, e.g., "ISMS.1 Sicherheitsmanagement"
-            baustein_id = baustein.get("Baustein").split(" ")[0] # Extract "ISMS.1"
+            baustein_id_full = baustein.get("Baustein", "")
+            if not baustein_id_full: continue
+            baustein_id = baustein_id_full.split(" ")[0]
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
             for control in controls:
                 all_controls_to_verify.append({
@@ -76,7 +75,6 @@ class Chapter5Runner:
         prompt_template = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
         
-        # Format the list of controls for the prompt
         controls_text = "\n".join([f"- {c['id']} {c['title']} (Zielobjekt: {c['zielobjekt']})" for c in all_controls_to_verify])
         prompt = prompt_template.format(controls_to_verify=controls_text)
 
@@ -88,24 +86,10 @@ class Chapter5Runner:
             logging.error(f"Failed to generate verification data for subchapter {definition['key']}: {e}", exc_info=True)
             return {name: None}
 
-    async def _process_generic_subchapter(self, name: str, definition: dict) -> Dict[str, Any]:
-        """Generates content for a standard subchapter."""
-        logging.info(f"Starting generation for subchapter: {definition['key']} ({name})")
-        prompt = self._load_asset_text(definition["prompt_path"])
-        schema = self._load_asset_json(definition["schema_path"])
-        try:
-            generated_data = await self.ai_client.generate_json_response(prompt, schema)
-            logging.info(f"Successfully generated data for subchapter {definition['key']}")
-            return {name: generated_data}
-        except Exception as e:
-            logging.error(f"Failed to generate data for subchapter {definition['key']}: {e}", exc_info=True)
-            return {name: None}
-
     async def run(self) -> dict:
         """Executes the generation logic for all of Chapter 5."""
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         
-        # Load Chapter 4 results as they are a dependency
         try:
             ch4_results_path = f"{self.config.output_prefix}results/Chapter-4.json"
             chapter_4_data = self.gcs_client.read_json(ch4_results_path)
@@ -113,18 +97,13 @@ class Chapter5Runner:
         except Exception as e:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
-            
-        tasks = []
-        for name, definition in self.subchapter_definitions.items():
-            if name == "verifikationDesITGrundschutzChecks":
-                tasks.append(self._process_control_verification(chapter_4_data))
-            else:
-                tasks.append(self._process_generic_subchapter(name, definition))
         
-        results_list = await asyncio.gather(*tasks)
-        aggregated_results = {}
-        for res_dict in results_list:
-            aggregated_results.update(res_dict)
+        # Only one automated task (control verification) remains in this stage.
+        if not self.subchapter_definitions:
+            logging.warning("No automated subchapters defined for Chapter 5. Stage complete.")
+            return {}
+            
+        result = await self._process_control_verification(chapter_4_data)
             
         logging.info(f"Successfully aggregated results for all of stage {self.STAGE_NAME}")
-        return aggregated_results
+        return result
