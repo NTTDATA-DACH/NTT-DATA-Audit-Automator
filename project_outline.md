@@ -12,7 +12,7 @@ The audit process and resulting report must be based on two key documents, which
 
 **2. Core Functional Requirements**
 
-*   **Staged Audit Process:** The audit must be conducted in discrete stages that directly correspond to the chapters and subchapters of the `Muster_Auditbericht_Kompendium_V3.0`.
+*   **Staged Audit Process:** The audit must be conducted in discrete stages that directly correspond to the chapters and subchapters of the `Muster_Auditbericht_Kompendium_V3.0` json is in bsi-audit-automator/assets/json/master_report_template.json
 *   **State Management:** The application must save the results of each stage to Google Cloud Storage (GCS). Before starting a new stage, it must check for and load any previously saved state for that stage, ensuring the process is resumable.
 *   **Audit Type Configuration:** The application must be configurable to perform different types of audits, specifically distinguishing between an "Überwachungsaudit" (surveillance audit) and a "Zertifizierungsaudit" (certification audit). This will be managed via an environment variable.
 *   **Data Storage:**
@@ -24,24 +24,10 @@ The audit process and resulting report must be based on two key documents, which
 **3. Gemini Model and API Interaction**
 *   **Model Configuration (Imperative):**
     *   **Model:** `gemini-2.5-pro`
-    *   **Max Output Tokens:** `65536` (Default API limit)
-    *   **Read the documentation:** Read this two URLs: https://pypi.org/project/google-genai/ AND https://googleapis.github.io/python-genai/
-    *   **Research Examples:** Look on the internet for examples and what models are current
-    *   **understand the current code:** Use of "google genai" with clients and a model="gemini-2.5-pro" and for "gemini-embedding-001" is mandatory! in the current code you find examples, learn from them!
-*   **Python SDK (Imperative):** All model interactions **must** use the `google.genai` library.
-    *   **Client Initialization:** The client will be initialized for Vertex AI usage:
-        `from google import genai`
-        `from google.genai.types import (GenerateContentConfig,GoogleSearch,HttpOptions,Tool,)`
-        `global ai_client`
-        `ai_client = genai.Client(vertexai=True, project=..., location=...)`
-    *   **API Calls:** Asynchronous calls via `client.aio.models.generate_content` are required for performance.
-    *   **JSON Mode:** JSON output mode must be configured in the `GenerateContentConfig`:
-        `config=GenerateContentConfig(response_mime_type="application/json", ...)`
+    *   **Max Output Tokens:** `65536` (Default API limit)  
+    *   **API Calls:** Asynchronous calls via are required for performance.
 *   **Parallelism:** Execute concurrent calls to the model using `asyncio` and an `asyncio.Semaphore` to limit connections (e.g., max 10).
 *   **Robust Error Handling:** Implement a retry loop (e.g., 5 attempts with exponential backoff) for model requests. Explicitly check the model's `finish_reason` and log any non-`OK` statuses with verbose error details.
-*   **Grounding:** Grounding with Google Search is optional and must be enabled via the `Tool` configuration when needed for factual enhancement:
-    `config=GenerateContentConfig(..., tools=[Tool(google_search=GoogleSearch())])`
-
 
 **4. AI Collaboration & Development Protocol**
 
