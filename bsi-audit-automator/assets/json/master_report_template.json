@@ -441,16 +441,32 @@
         "subchapterNumber": "7.2",
         "title": "Abweichungen und Empfehlungen",
         "description": "Während der Sichtung der Referenzdokumente sowie des Vor-Ort-Audits wurden folgenden Abweichungen und Empfehlungen festgestellt. Der Auditteamleiter beschreibt die Abweichungen und Empfehlungen kurz und referenziert auf diese an den entsprechenden Stellen im Auditbericht.",
-        "table": {
-          "tableId": "Tabelle 71",
-          "title": "Liste Abweichungen und Empfehlungen",
-          "headers": [
-            "Typ und Nr.",
-            "Abweichung / Empfehlung",
-            "Behebungsfrist / Nachweis",
-            "Status der Behebung"
-          ],
-          "rows": []
+        "geringfuegigeAbweichungen": {
+          "title": "Geringfügige Abweichungen (AG)",
+          "subchapterNumber": "8.1",
+          "table": {
+            "tableId": "table-ag",
+            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)"],
+            "rows": []
+          }
+        },
+        "schwerwiegendeAbweichungen": {
+          "title": "Schwerwiegende Abweichungen (AS)",
+          "subchapterNumber": "8.2",
+          "table": {
+            "tableId": "table-as",
+            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)"],
+            "rows": []
+          }
+        },
+        "empfehlungen": {
+          "title": "Empfehlungen (E)",
+          "subchapterNumber": "8.3",
+          "table": {
+            "tableId": "table-e",
+            "headers": ["Nr.", "Beschreibung der Empfehlung", "Quelle (Kapitel)"],
+            "rows": []
+          }
         }
       }
     }

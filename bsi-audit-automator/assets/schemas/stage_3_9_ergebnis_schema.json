@@ -9,9 +9,22 @@
           { "type": "boolean" }
         ]
       },
-      "findingText": {
-        "type": "string"
+      "finding": {
+        "type": "object",
+        "description": "A structured finding based on the analysis.",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "The category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK' (No Deviation).",
+            "enum": ["AG", "AS", "E", "OK"]
+          },
+          "description": {
+            "type": "string",
+            "description": "A detailed description of the finding."
+          }
+        },
+        "required": ["category", "description"]
       }
     },
-    "required": ["answers", "findingText"]
+    "required": ["answers", "finding"]
   }
