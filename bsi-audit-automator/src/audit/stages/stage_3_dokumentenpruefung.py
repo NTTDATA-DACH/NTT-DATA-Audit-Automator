@@ -6,6 +6,7 @@ from typing import Dict, Any
 
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
+from src.clients.rag_client import RagClient
 
 class Chapter3Runner:
     """
@@ -14,10 +15,11 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     MASTER_TEMPLATE_PATH = "assets/schemas/master_report_template.json"
-
-    def __init__(self, config: AppConfig, ai_client: AiClient):
+    
+    def __init__(self, config: AppConfig, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.ai_client = ai_client
+        self.rag_client = rag_client # Store the RAG client for future use
         self.subchapter_definitions = self._load_subchapter_definitions()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
