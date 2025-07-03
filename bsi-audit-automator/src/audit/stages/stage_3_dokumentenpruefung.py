@@ -58,10 +58,7 @@ class Chapter3Runner:
         prompt_template = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
 
-        # 1. Use the RagClient to find relevant evidence
         context_evidence = self.rag_client.get_context_for_query(definition["rag_query"])
-        
-        # 2. Construct the final, context-rich prompt
         prompt = prompt_template.format(context=context_evidence)
 
         try:
@@ -84,6 +81,7 @@ class Chapter3Runner:
         prompt = prompt_template.format(previous_findings=previous_findings)
 
         try:
+            # This final step does not produce a collectible finding itself
             generated_data = await self.ai_client.generate_json_response(prompt, schema)
             logging.info(f"Successfully generated summary for subchapter {key}")
             return {name: generated_data}
@@ -99,26 +97,30 @@ class Chapter3Runner:
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
 
-        # 1. Run all RAG-based analysis tasks concurrently
         rag_tasks = []
         for name, definition in self.subchapter_definitions.items():
             rag_tasks.append(self._process_rag_subchapter(name, definition))
         
         rag_results_list = await asyncio.gather(*rag_tasks)
 
-        # 2. Aggregate results and extract findings for the summary step
         aggregated_results = {}
         findings_for_summary = []
-        for i, res_dict in enumerate(rag_results_list):
+        for res_dict in rag_results_list:
             aggregated_results.update(res_dict)
-            # Extract findingText for summary prompt
             subchapter_name = list(res_dict.keys())[0]
             result_data = res_dict.get(subchapter_name)
-            if result_data and "findingText" in result_data:
-                findings_for_summary.append(f"- Finding from {subchapter_name}: {result_data['findingText']}")
+            
+            # *** BUG FIX STARTS HERE ***
+            # Correctly parse the structured finding object instead of the old findingText
+            if isinstance(result_data, dict) and isinstance(result_data.get('finding'), dict):
+                finding = result_data['finding']
+                category = finding.get('category')
+                description = finding.get('description')
+                if category and category != "OK":
+                    findings_for_summary.append(f"- Finding from {subchapter_name} ({category}): {description}")
+            # *** BUG FIX ENDS HERE ***
 
-        # 3. Run the summary task using the aggregated findings
-        summary_text = "\n".join(findings_for_summary) if findings_for_summary else "No specific findings were generated in the previous steps."
+        summary_text = "\n".join(findings_for_summary) if findings_for_summary else "No specific findings or deviations were generated in the previous steps."
         summary_result = await self._process_summary_subchapter(summary_text)
         aggregated_results.update(summary_result)
             

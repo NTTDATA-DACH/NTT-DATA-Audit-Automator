@@ -27,7 +27,6 @@ class ReportGenerator:
             with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
                 report = json.load(f)
             
-            # Use a generic placeholder, as customer_id is no longer a direct config
             report['bsiAuditReport']['titlePage']['auditedInstitution'] = "Audited Institution"
             report['bsiAuditReport']['allgemeines']['audittyp']['content'] = self.config.audit_type
             
@@ -37,6 +36,22 @@ class ReportGenerator:
             )
             logging.info(f"Saved initial report template to GCS: {self.gcs_report_path}")
             return report
+
+    def _populate_chapter_1(self, report: dict, stage_data: dict):
+        """Populates the 'Allgemeines' chapter of the report."""
+        target_chapter = report['bsiAuditReport']['allgemeines']
+
+        if 'geltungsbereichDerZertifizierung' in stage_data:
+            text = stage_data['geltungsbereichDerZertifizierung'].get('text', '')
+            target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = text
+        
+        # Note: auditTeam is now a placeholder, to be filled manually in the editor
+        if 'auditTeam' in stage_data:
+             text = stage_data['auditTeam'].get('text', '')
+             target_chapter['auditTeam']['content'][0]['text'] = text
+
+        if 'audittyp' in stage_data:
+            target_chapter['audittyp']['content'] = stage_data['audittyp'].get('content', '')
 
     def _populate_chapter_7_findings(self, report: dict):
         """Populates the findings tables in Chapter 7.2 from the central findings file."""
@@ -48,13 +63,11 @@ class ReportGenerator:
             logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
             return
 
-        # Get references to the target tables in the report template
         findings_section = report['bsiAuditReport']['anhang']['abweichungenUndEmpfehlungen']
         ag_table = findings_section['geringfuegigeAbweichungen']['table']['rows']
         as_table = findings_section['schwerwiegendeAbweichungen']['table']['rows']
         e_table = findings_section['empfehlungen']['table']['rows']
 
-        # Clear existing dummy rows if any
         ag_table.clear()
         as_table.clear()
         e_table.clear()
@@ -93,7 +106,6 @@ class ReportGenerator:
                 logging.warning(f"Result for stage '{stage_name}' not found. Skipping population.")
                 continue
         
-        # Populate the findings after all other stages are done
         self._populate_chapter_7_findings(report)
 
         final_report_path = f"{self.config.output_prefix}final_audit_report.json"
@@ -149,19 +161,20 @@ class ReportGenerator:
             if result is None: continue
             if subchapter_key == "verifikationDesITGrundschutzChecks":
                 target_section = chapter_5_target.get(subchapter_key, {}).get("einzelergebnisse")
-                if target_section: target_section["bausteinPruefungen"] = result.get("bausteinPruefungen", [])
-                else: logging.warning(f"Could not find target section for '{subchapter_key}'")
-            # Other subchapters in Ch5 are now manual, so no population logic needed.
+                if target_section and "bausteinPruefungen" in result:
+                    target_section["bausteinPruefungen"] = result["bausteinPruefungen"]
+                else:
+                    logging.warning(f"Could not find target section for '{subchapter_key}'")
 
     def _populate_chapter_7(self, report: dict, stage_data: dict):
         anhang_target = report['bsiAuditReport']['anhang']
-        if 'referenzdokumente' in stage_data and 'table' in stage_data['referenzdokumente']:
+        if 'referenzdokumente' in stage_data and 'table' in stage_data.get('referenzdokumente', {}):
             anhang_target['referenzdokumente']['table']['rows'] = stage_data['referenzdokumente']['table']['rows']
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
         logging.info(f"Populating report with data from stage: {stage_name}")
         if stage_name == "Chapter-1":
-            logging.warning("Population logic for Chapter 1 is not fully implemented for the new template.")
+            self._populate_chapter_1(report, stage_data)
         elif stage_name == "Chapter-3":
             self._populate_chapter_3(report, stage_data)
         elif stage_name == "Chapter-4":
