@@ -89,11 +89,23 @@ resource "google_storage_bucket_object" "json_placeholder" {
 }
 
 # 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
-# ... (rest of the networking resources are unchanged) ...
 resource "google_compute_network" "bsi_vpc" {
   name                    = var.vpc_network_name
   auto_create_subnetworks = false
   depends_on = [google_project_service.project_apis]
+}
+
+# Add this new resource block to terraform/main.tf
+
+resource "google_compute_subnetwork" "bsi_audit_subnet" {
+  name                     = "bsi-audit-subnet"
+  ip_cidr_range            = "10.10.1.0/24" # A standard private IP range for the subnet
+  region                   = var.region     # Must be in the same region as the Cloud Run job
+  network                  = google_compute_network.bsi_vpc.id # Links it to our VPC
+  private_ip_google_access = true         # Allows the job to reach Google APIs privately
+  
+  # Ensure the VPC network exists before creating the subnet
+  depends_on = [google_compute_network.bsi_vpc]
 }
 
 resource "google_compute_global_address" "peering_range" {

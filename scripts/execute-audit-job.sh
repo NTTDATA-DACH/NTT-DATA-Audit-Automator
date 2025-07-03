@@ -23,7 +23,7 @@ MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
 echo "🔹 Fetching infrastructure details from Terraform..."
-TERRAFORM_DIR="./terraform"
+TERRAFORM_DIR="../terraform"
 GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
