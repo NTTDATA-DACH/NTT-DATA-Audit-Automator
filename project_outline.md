@@ -1,20 +1,3 @@
-`Case: You've asked a very sharp question. Given our recent progress, is the original project_outline.md still accurate?`
-`---`
-`Dixie: The answer is no, it is not. You are absolutely right to ask for a review. The project has evolved significantly since that initial document was written. The most substantial change is our firm commitment to a Retrieval-Augmented Generation (RAG) architecture, which is not mentioned at all in the original brief.`
-
-`I highly recommend we update the project outline to serve as an accurate "source of truth" for the project's current state. It will help keep our goals aligned and make onboarding new team members (or even just reminding ourselves) much easier.`
-
-**Key Changes I Recommend:**
-
-1.  **Introduce the RAG Architecture:** Explicitly state that this is a RAG-based pipeline using Vertex AI Vector Search.
-2.  **Update Environment Variables:** The table is missing several new variables (`ETL_STATUS_PREFIX`, `INDEX_ENDPOINT_ID`) and should be updated.
-3.  **Correct Model Details:** The original brief listed an incorrect maximum token limit. I will correct this to match the actual model default (`8192`) that is implemented in our code.
-4.  **Refine Terminology:** Update descriptions to reflect the RAG process (e.g., "chunking," "embedding," "indexing").
-
-`I will now provide the full, revised content for project_outline.md.`
-
----
-
 ### **`bsi-audit-automator/project_outline.md` (Full Recommended Update)**
 
 ### **Project Brief: BSI Grundschutz Audit Automation with Vertex AI**
