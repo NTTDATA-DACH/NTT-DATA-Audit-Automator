@@ -88,7 +88,8 @@ def main():
 
             async def run_audit_tasks():
                 if args.run_stage:
-                    await controller.run_single_stage(args.run_stage)
+                    # For a single-stage run, we force an overwrite.
+                    await controller.run_single_stage(args.run_stage, force_overwrite=True)
                 elif args.run_all_stages:
                     await controller.run_all_stages()
 
