@@ -52,7 +52,7 @@ class RagClient:
             logging.info(f"Successfully built lookup map with {len(lookup_map)} entries.")
             return lookup_map
         except Exception as e:
-            logging.error(f"Failed to build chunk lookup map from embeddings.jsonl: {e}", exc_info=True)
+            logging.error(f"Failed to build chunk lookup map from embeddings.json: {e}", exc_info=True)
             return {}
 
     def get_context_for_query(self, query: str, num_neighbors: int = 5) -> str:
