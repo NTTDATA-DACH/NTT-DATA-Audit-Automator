@@ -5,6 +5,8 @@
 # This script dynamically fetches configuration from your Terraform state,
 # ensuring your local environment matches the cloud deployment.
 #
+# It also defines a helper function `bsi-auditor` to simplify running the app.
+#
 # PREREQUISITES:
 #   - You must have run 'terraform apply' in the ./terraform directory.
 #   - You must have the 'terraform' CLI installed and in your PATH.
@@ -12,6 +14,10 @@
 # USAGE:
 #   Run this command from the project root (the 'bsi-audit-automator' directory):
 #      source ./envs.sh
+#
+#   Then, you can run the application like this:
+#      bsi-auditor --run-etl
+#      bsi-auditor --run-stage Chapter-1
 #
 set -e # Exit on error
 
@@ -46,9 +52,19 @@ export AUDIT_TYPE="Zertifizierungsaudit"
 export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
+# --- NEW: Helper function for correct execution ---
+# This alias ensures we always run the application as a module,
+# which correctly resolves the relative imports in src/main.py.
+bsi-auditor() {
+    python -m src.main "$@"
+}
+
+
 set +e
 echo "✅ Environment variables configured successfully'."
 echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
 echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
 echo "   - TEST mode:      ${TEST}"
-echo "You can now run the Python application locally (e.g., 'python main.py --generate-report')."
+echo ""
+echo "👉 A new command 'bsi-auditor' is now available in your shell."
+echo "   Run the app with: bsi-auditor --run-stage Chapter-1"
