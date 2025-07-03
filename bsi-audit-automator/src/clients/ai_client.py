@@ -2,10 +2,11 @@
 import logging
 import json
 import asyncio
-import time # Using time.sleep for the synchronous embedding function
-from typing import List, Dict, Any
+import time
+from typing import List, Dict, Any, Tuple
 
 from google.cloud import aiplatform
+from google.api_core import client_options
 from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig
@@ -27,10 +28,17 @@ class AiClient:
         """Initializes the Vertex AI client and required models."""
         self.config = config
 
-        # Initialize the AI Platform SDK client
+        # --- CRITICAL FIX for regional endpoints ---
+        # Construct the regional API endpoint URL to guarantee requests are sent
+        # to the specified region, not a global or us-central1 default.
+        api_endpoint = f"{config.vertex_ai_region}-aiplatform.googleapis.com"
+        client_opts = client_options.ClientOptions(api_endpoint=api_endpoint)
+
+        # Initialize the AI Platform SDK client with the explicit endpoint
         aiplatform.init(
             project=config.gcp_project_id,
-            location=config.vertex_ai_region
+            location=config.vertex_ai_region,
+            client_options=client_opts
         )
 
         # Instantiate specific model clients using the correct classes
@@ -40,24 +48,24 @@ class AiClient:
         # Semaphore to limit concurrent API calls per project brief
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         logging.info(
-            f"Vertex AI Client instantiated using 'aiplatform' SDK for project "
-            f"'{config.gcp_project_id}' in region '{config.vertex_ai_region}'."
+            f"Vertex AI Client instantiated for project '{config.gcp_project_id}' "
+            f"and forced to regional endpoint '{api_endpoint}'."
         )
 
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
         """
-        Generates vector embeddings for a list of text chunks, respecting the
-        model's batch size limit and implementing a robust retry mechanism.
+        Generates vector embeddings for a list of text chunks. Implements a
+        robust retry mechanism.
 
         Args:
             texts: A list of text strings to embed.
 
         Returns:
-            A list of vector embeddings, one for each input text.
+            A tuple containing (success: bool, embeddings: list).
         """
         if not texts:
             logging.warning("get_embeddings called with no texts. Returning empty list.")
-            return []
+            return True, []
 
         all_embeddings = []
         logging.info(f"Generating embeddings for {len(texts)} chunks...")
@@ -83,17 +91,16 @@ class AiClient:
                 
                 if attempt == MAX_RETRIES - 1:
                     logging.critical(f"Embedding for chunk {i+1} failed after all retries.")
-                    raise RuntimeError(f"Failed to get embedding for chunk {i+1} after {MAX_RETRIES} attempts.")
+                    return False, all_embeddings # Return failure status and partial results
         
         logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
-        return all_embeddings
+        return True, all_embeddings
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates a JSON response from the AI model, enforcing a specific schema.
         Implements an async retry loop with exponential backoff and connection limiting.
         """
-        # Using the dedicated GenerationConfig class from the correct import
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema={k: v for k, v in json_schema.items() if k != "$schema"},
@@ -134,29 +141,23 @@ class AiClient:
                     return response_json
 
                 except api_core_exceptions.GoogleAPICallError as e:
-                    # This is a more robust way to catch the error. We check the code
-                    # instead of relying on the exact exception class.
-                    if e.code == 429:  # HTTP status for "Too Many Requests"
+                    if e.code == 429:
                         logging.warning(
                             f"Attempt {attempt + 1} hit rate limit (429). "
                             f"Retrying in {2 ** attempt}s..."
                         )
                     else:
-                        # It's a different, unexpected Google API error. Log with full detail.
                         logging.error(
                             f"Attempt {attempt + 1} failed with Google API Error (Code: {e.code}). Retrying...",
                             exc_info=self.config.is_test_mode
                         )
                 except Exception as e:
-                    # Catch any other non-API exceptions (network, JSON parsing, etc.)
                     logging.error(f"Attempt {attempt + 1} failed with a non-API exception. Retrying...", exc_info=True)
 
-                # If this is the last attempt, re-raise the exception to fail the process
                 if attempt == MAX_RETRIES - 1:
                     logging.critical("AI generation failed after all retries.", exc_info=True)
                     raise
                 
-                # Wait before the next attempt with exponential backoff
                 await asyncio.sleep(2 ** attempt)
         
         raise RuntimeError("AI generation failed after all retries without raising a final exception.")
