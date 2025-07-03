@@ -41,15 +41,27 @@ class ReportGenerator:
         """Populates the 'Allgemeines' chapter of the report."""
         target_chapter = report['bsiAuditReport']['allgemeines']
 
+        # Populate Geltungsbereich (1.2) including its new finding logic
         if 'geltungsbereichDerZertifizierung' in stage_data:
-            text = stage_data['geltungsbereichDerZertifizierung'].get('text', '')
-            target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = text
+            geltungsbereich_data = stage_data['geltungsbereichDerZertifizierung']
+            # Start with the main descriptive text
+            final_text = geltungsbereich_data.get('text', '')
+            
+            # Append the finding text if a finding exists and is not 'OK'
+            if isinstance(geltungsbereich_data.get('finding'), dict):
+                finding = geltungsbereich_data['finding']
+                if finding.get('category') != 'OK':
+                    final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
+            
+            # Update the single text block in the report
+            target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = final_text
         
-        # Note: auditTeam is now a placeholder, to be filled manually in the editor
+        # Populate Audit-Team (1.4) - now a manual placeholder
         if 'auditTeam' in stage_data:
-             text = stage_data['auditTeam'].get('text', '')
+             text = stage_data['auditTeam'].get('text', '') # Will be empty from automation
              target_chapter['auditTeam']['content'][0]['text'] = text
 
+        # Populate Audittyp (1.3)
         if 'audittyp' in stage_data:
             target_chapter['audittyp']['content'] = stage_data['audittyp'].get('content', '')
 
