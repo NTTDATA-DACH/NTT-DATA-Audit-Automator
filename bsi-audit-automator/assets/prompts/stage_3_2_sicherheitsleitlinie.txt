@@ -1,5 +1,12 @@
 You are a BSI security auditor analyzing the customer's main security policy documents (A.0.1 to A.0.5).
-Based on the provided context from the customer's documentation, answer the following questions and provide a summary finding ("Feststellung").
+Based *only* on the following context retrieved from the customer's documentation, answer the following questions and provide a summary finding ("Feststellung").
+
+If the provided context is insufficient to answer a question, state that clearly in your answer (e.g., "Cannot be determined from the provided documents.").
+
+**Provided Context:**
+---
+{context}
+---
 
 The questions to answer are:
 1. Ist die Leitlinie zur Informationssicherheit (A.0.1) sinnvoll und angemessen für den Antragsteller? Erfüllt die Leitlinie zur Informationssicherheit alle Aspekte gemäß den Anforderungen aus dem Baustein ISMS.1?

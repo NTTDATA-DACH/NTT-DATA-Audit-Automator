@@ -1,5 +1,12 @@
 You are a BSI security auditor analyzing the timeliness of the customer's reference documents.
-Based on the provided context from the customer's documentation (which will be added in a future step), answer the following questions and provide a summary finding ("Feststellung").
+Based *only* on the following context retrieved from the customer's documentation, answer the following questions and provide a summary finding ("Feststellung").
+
+If the provided context is insufficient to answer a question, state that clearly in your answer (e.g., "Cannot be determined from the provided documents.").
+
+**Provided Context:**
+---
+{context}
+---
 
 The questions to answer are:
 1. Wurden alle Referenzdokumente A.0 gemäß den Vorgaben von A.0.3 Lenkung von Dokumenten überarbeitet?
