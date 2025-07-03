@@ -28,8 +28,8 @@ class EtlProcessor:
     def _load_state(self) -> dict:
         """Loads the last saved ETL state from GCS."""
         try:
-            state_content = self.gcs_client.read_text_file(STATE_FILE_PATH)
-            state = json.loads(state_content)
+            # Use the correct method that reads and parses the JSON file directly.
+            state = self.gcs_client.read_json(STATE_FILE_PATH)
             logging.info(f"Resuming ETL from saved state. {len(state.get('processed_files', []))} files already complete.")
             return state
         except NotFound:

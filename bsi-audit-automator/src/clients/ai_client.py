@@ -6,7 +6,6 @@ import time
 from typing import List, Dict, Any, Tuple
 
 from google.cloud import aiplatform
-from google.api_core import client_options
 from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig
@@ -28,28 +27,21 @@ class AiClient:
         """Initializes the Vertex AI client and required models."""
         self.config = config
 
-        # --- CRITICAL FIX for regional endpoints ---
-        # Construct the regional API endpoint URL to guarantee requests are sent
-        # to the specified region, not a global or us-central1 default.
-        api_endpoint = f"{config.vertex_ai_region}-aiplatform.googleapis.com"
-        client_opts = client_options.ClientOptions(api_endpoint=api_endpoint)
-
-        # Initialize the AI Platform SDK client with the explicit endpoint
+        # Initialize the AI Platform SDK client. The 'location' parameter is the
+        # correct way to specify the region for API calls.
         aiplatform.init(
             project=config.gcp_project_id,
-            location=config.vertex_ai_region,
-            client_options=client_opts
+            location=config.vertex_ai_region
         )
 
         # Instantiate specific model clients using the correct classes
         self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
         self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
 
-        # Semaphore to limit concurrent API calls per project brief
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
+        
         logging.info(
-            f"Vertex AI Client instantiated for project '{config.gcp_project_id}' "
-            f"and forced to regional endpoint '{api_endpoint}'."
+            f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'."
         )
 
     def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
@@ -76,9 +68,14 @@ class AiClient:
                 try:
                     # The model expects a list, even if it's a single item.
                     response = self.embedding_model.get_embeddings([text])
-                    # The response is a list with one TextEmbedding object.
                     all_embeddings.append(response[0].values)
-                    logging.debug(f"Generated embedding for chunk {i+1}/{len(texts)}")
+
+                    # Log progress every 25 chunks at INFO level
+                    if (i + 1) % 25 == 0:
+                        logging.info(f"Embedding progress: {i + 1}/{len(texts)} chunks complete.")
+
+                    # Keep the client-side rate limit workaround
+                    time.sleep(0.1)
                     break  # Success, break the retry loop for this chunk
                 except api_core_exceptions.GoogleAPICallError as e:
                     if e.code == 429:  # HTTP status for "Too Many Requests"
