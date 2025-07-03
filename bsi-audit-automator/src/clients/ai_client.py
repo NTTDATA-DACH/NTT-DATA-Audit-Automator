@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 # CORRECTED IMPORTS: Using the modern 'vertexai' namespace provided by the SDK.
 from google.cloud import aiplatform
 from vertexai.language_models import TextEmbeddingModel
-from google.api_core.exceptions import ResourceExhausted
+from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from src.config import AppConfig
@@ -122,17 +122,30 @@ class AiClient:
                     logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
-                except ResourceExhausted as e:
-                    logging.warning(
-                        f"Attempt {attempt + 1} failed with 429 ResourceExhausted (Rate Limit). "
-                        f"Retrying in {2 ** attempt}s... Details: {e.message}"
-                    )
-                    
+                except api_core_exceptions.GoogleAPICallError as e:
+                    # This is a more robust way to catch the error. We check the code
+                    # instead of relying on the exact exception class.
+                    if e.code == 429:  # HTTP status for "Too Many Requests"
+                        logging.warning(
+                            f"Attempt {attempt + 1} hit rate limit (429). "
+                            f"Retrying in {2 ** attempt}s..."
+                        )
+                    else:
+                        # It's a different, unexpected Google API error. Log with full detail.
+                        logging.error(
+                            f"Attempt {attempt + 1} failed with Google API Error (Code: {e.code}). Retrying...",
+                            exc_info=self.config.is_test_mode
+                        )
                 except Exception as e:
-                    logging.error(f"Attempt {attempt + 1} failed with exception: {e}", exc_info=self.config.is_test_mode)
-                    if attempt == MAX_RETRIES - 1:
-                        logging.critical("AI generation failed after all retries.", exc_info=True)
-                        raise
-                    await asyncio.sleep(2 ** attempt)
+                    # Catch any other non-API exceptions (network, JSON parsing, etc.)
+                    logging.error(f"Attempt {attempt + 1} failed with a non-API exception. Retrying...", exc_info=True)
 
+                # If this is the last attempt, re-raise the exception to fail the process
+                if attempt == MAX_RETRIES - 1:
+                    logging.critical("AI generation failed after all retries.", exc_info=True)
+                    raise
+                
+                # Wait before the next attempt with exponential backoff
+                await asyncio.sleep(2 ** attempt)
+        
         raise RuntimeError("AI generation failed after all retries without raising a final exception.")

@@ -16,8 +16,20 @@ echo "🚀 Building and pushing container image to Artifact Registry..."
 echo "Image URI: ${IMAGE_URI}"
 gcloud builds submit . --tag "${IMAGE_URI}" --project "${PROJECT_ID}"
 
-# --- 2. Deploy Cloud Run Job ---
-echo "📦 Deploying Cloud Run Job '${JOB_NAME}'..."
+# --- 2. Delete Existing Job (for a clean deployment) ---
+echo "🗑️  Checking for and deleting existing job to ensure a clean deployment..."
+if gcloud run jobs describe "${JOB_NAME}" --region "${REGION}" --project "${PROJECT_ID}" &> /dev/null; then
+  gcloud run jobs delete "${JOB_NAME}" \
+    --region "${REGION}" \
+    --project "${PROJECT_ID}" \
+    --quiet
+  echo "✅ Existing job '${JOB_NAME}' deleted."
+else
+  echo "ℹ️ No existing job found to delete. Proceeding."
+fi
+
+# --- 3. Deploy New Cloud Run Job ---
+echo "📦 Deploying new Cloud Run Job '${JOB_NAME}'..."
 gcloud run jobs deploy "${JOB_NAME}" \
   --image "${IMAGE_URI}" \
   --tasks 1 \
