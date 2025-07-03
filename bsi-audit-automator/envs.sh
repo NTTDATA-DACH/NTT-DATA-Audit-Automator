@@ -46,6 +46,7 @@ export INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
 # These prefixes now reflect the simpler GCS layout.
 export SOURCE_PREFIX="source_documents/"
 export OUTPUT_PREFIX="output/"
+export ETL_STATUS_PREFIX="output/etl_status/"
 
 # Manually set the audit type and test mode for your local run
 export AUDIT_TYPE="Zertifizierungsaudit"

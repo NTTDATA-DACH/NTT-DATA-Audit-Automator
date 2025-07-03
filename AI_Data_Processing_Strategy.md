@@ -35,14 +35,15 @@ This is the core execution loop, orchestrated by the `AuditController`.
 1.  **Iterate Report Template (Rule C):** The controller will parse our `master_report_template.json` and loop through each chapter and subchapter that needs to be filled (e.g., starting with 3.1, then 3.2, etc.).
 2.  **Formulate Targeted Query:** For each subchapter, the application will use its `title` and `description` to create a concise, semantically rich search query.
     *   *Example for Subchapter 3.1:* The `title` ("Aktualität der Referenzdokumente") and `description` ("Die Aktualität der verwendeten Referenzdokumente muss festgestellt werden.") are combined to form a query like: `"Prüfung der Aktualität und Überarbeitung von Referenzdokumenten A.0, A.1, A.4"`.
-3.  **Retrieve Relevant Context:** This search query is sent to the Vector Database. The VDB returns the top N most relevant document chunks (e.g., the top 5-10 chunks) based on semantic similarity.
-4.  **Construct AI Prompt (Rule D):** A highly specific, contextual prompt is assembled for the Gemini model. This prompt contains:
+3.  **Retrieve Relevant Context IDs:** This search query is sent to the Vector Database. The VDB returns the top N most relevant document chunks (e.g., the top 5-10 chunks) based on semantic similarity. **Crucially, the VDB only returns the unique `id` for each matching chunk, not the text itself.**
+4.  **Retrieve Full-Text Context:** The application uses the retrieved chunk IDs to look up the full text of each chunk from the embedding files stored in GCS. This lookup is performed using an in-memory map (`id -> text`) that is built once when the application starts, ensuring fast retrieval. This two-step process provides the final text evidence to the AI model.
+5.  **Construct AI Prompt (Rule D):** A highly specific, contextual prompt is assembled for the Gemini model. This prompt contains:
     *   **The Role:** "You are a BSI security auditor."
     *   **The Task:** The subchapter's `title` and `description` from our template, which tells the model exactly what part of the report it is working on.
     *   **The Context:** The full text of the relevant document chunks retrieved in the previous step. Each chunk will be clearly marked with its source document name.
     *   **The Schema Stub:** The specific JSON schema defining the required output for *only this subchapter*.
-5.  **Execute with "Two-Plus-One" Verification (New Rule):** Instead of a single call, we use a three-step process to ensure quality and consistency:
-    *   **a. Parallel Generation:** The same prompt (constructed in Step 4) is sent to the model **twice** in parallel. This yields two independent results, `resultA` and `resultB`.
+6.  **Execute with "Two-Plus-One" Verification (New Rule):** Instead of a single call, we use a three-step process to ensure quality and consistency:
+    *   **a. Parallel Generation:** The same prompt (constructed in Step 5) is sent to the model **twice** in parallel. This yields two independent results, `resultA` and `resultB`.
     *   **b. Consensus Generation:** A new, third prompt is constructed. This "synthesis prompt" instructs the model to act as a senior reviewer. It will contain:
         *   **The Role:** "You are a senior BSI auditor reviewing the work of two junior auditors."
         *   **The Task:** "Synthesize the two provided results (Result A and Result B) into a single, final, and more accurate response. Combine the strengths of both, resolve any inconsistencies, and ensure the final output strictly conforms to the provided JSON schema."
@@ -50,9 +51,9 @@ This is the core execution loop, orchestrated by the `AuditController`.
         *   **The Schema Stub:** The same schema stub from the initial requests.
     *   This third request produces the `finalResult`.
 
-6.  **Final Validation:** The `finalResult` from the consensus step is validated against the stub schema. This ensures the final, synthesized output is still structurally correct.
+7.  **Final Validation:** The `finalResult` from the consensus step is validated against the stub schema. This ensures the final, synthesized output is still structurally correct.
 
-7.  **Save Intermediate Result (Rule E):** The validated `finalResult` for the subchapter is saved as a discrete file in GCS (e.g., `output/results/chapter_3.1.json`). The process then repeats for the next subchapter.
+8.  **Save Intermediate Result (Rule E):** The validated `finalResult` for the subchapter is saved as a discrete file in GCS (e.g., `output/results/chapter_3.1.json`). The process then repeats for the next subchapter.
 
 ---
 
