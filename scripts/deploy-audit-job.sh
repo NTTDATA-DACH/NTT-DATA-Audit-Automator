@@ -10,7 +10,7 @@ REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 ARTIFACT_REGISTRY_REPO="$(terraform -chdir=${TERRAFORM_DIR} output -raw artifact_registry_repository_name)"
 SERVICE_ACCOUNT="$(terraform -chdir=${TERRAFORM_DIR} output -raw service_account_email)"
-VPC_NETWORK="$(terraform -chdir=${TERRAFORM_DIR} output -raw vpc_network_name)" # Fetch the VPC name
+SUBNET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw subnet_name)" # Fetch the Subnet name
 IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
 
 # --- 1. Build and Push Container Image ---
@@ -43,7 +43,7 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --project "${PROJECT_ID}" \
   --task-timeout "7200" \
   --service-account "${SERVICE_ACCOUNT}" \
-  --network "${VPC_NETWORK}" \
+  --network "${SUBNET_NAME}" \
   --vpc-egress "all-traffic"
 
 echo "✅ Deployment complete."
