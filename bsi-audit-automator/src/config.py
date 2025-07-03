@@ -17,6 +17,7 @@ class AppConfig:
     audit_type: str
     vertex_ai_region: str
     index_endpoint_id: str
+    max_concurrent_ai_requests: int
     is_test_mode: bool
     # This will be populated by the GCS Client after Terraform runs
     bucket_name: Optional[str] = None 
@@ -56,6 +57,10 @@ def load_config_from_env() -> AppConfig:
     config_values["is_test_mode"] = os.getenv("TEST", "false").lower() == "true"
     config_values["bucket_name"] = os.getenv("BUCKET_NAME")
     
+    # Load the new concurrency limit, defaulting to 5 if not set or invalid
+    max_reqs_str = os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")
+    config_values["max_concurrent_ai_requests"] = int(max_reqs_str) if max_reqs_str.isdigit() else 5
+
     return AppConfig(**config_values)
 
 # Create a singleton instance to be imported by other modules.

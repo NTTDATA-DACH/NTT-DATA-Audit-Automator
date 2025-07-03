@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 # CORRECTED IMPORTS: Using the modern 'vertexai' namespace provided by the SDK.
 from google.cloud import aiplatform
 from vertexai.language_models import TextEmbeddingModel
+from google.api_core.exceptions import ResourceExhausted
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from src.config import AppConfig
@@ -18,7 +19,6 @@ EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 
 # Constants for robust generation
 MAX_RETRIES = 5
-MAX_CONCURRENT_REQUESTS = 10
 
 
 class AiClient:
@@ -39,7 +39,7 @@ class AiClient:
         self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
 
         # Semaphore to limit concurrent API calls per project brief
-        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         logging.info(
             f"Vertex AI Client instantiated using 'aiplatform' SDK for project "
             f"'{config.gcp_project_id}' in region '{config.vertex_ai_region}'."
@@ -122,6 +122,12 @@ class AiClient:
                     logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
+                except ResourceExhausted as e:
+                    logging.warning(
+                        f"Attempt {attempt + 1} failed with 429 ResourceExhausted (Rate Limit). "
+                        f"Retrying in {2 ** attempt}s... Details: {e.message}"
+                    )
+                    
                 except Exception as e:
                     logging.error(f"Attempt {attempt + 1} failed with exception: {e}", exc_info=self.config.is_test_mode)
                     if attempt == MAX_RETRIES - 1:

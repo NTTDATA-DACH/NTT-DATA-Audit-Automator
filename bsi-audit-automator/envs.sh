@@ -45,6 +45,7 @@ export OUTPUT_PREFIX="output/"
 # Manually set the audit type and test mode for your local run
 export AUDIT_TYPE="Zertifizierungsaudit"
 export TEST="true"
+export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
 set +e
 echo "✅ Environment variables configured successfully for customer '${CUSTOMER_ID}'."

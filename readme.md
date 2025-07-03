@@ -200,6 +200,7 @@ The application is configured entirely via environment variables passed by the `
 | `OUTPUT_PREFIX` | Yes | GCS prefix within the customer's directory for generated files. |
 | `AUDIT_TYPE` | Yes | Specifies the audit type (e.g., "Zertifizierungsaudit"). |
 | `INDEX_ENDPOINT_ID`| Yes | The numeric ID of the deployed Vertex AI Index Endpoint. |
+| `MAX_CONCURRENT_AI_REQUESTS` | No | Max parallel requests to the Gemini API. Defaults to `5`. |
 | `VERTEX_AI_REGION`| Yes | The region where Vertex AI resources are deployed. |
 | `TEST` | No | Set to `"true"` to enable test mode. Defaults to `false`. |
 
