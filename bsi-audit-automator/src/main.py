@@ -83,7 +83,7 @@ def main():
                     exit(1)
 
             ai_client = AiClient(config)
-            rag_client = RagClient(config, gcs_client, ai_client))
+            rag_client = RagClient(config, gcs_client, ai_client)
             controller = AuditController(config, gcs_client, ai_client, rag_client)
 
             async def run_audit_tasks():
