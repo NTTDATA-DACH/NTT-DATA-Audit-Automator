@@ -22,7 +22,8 @@ class EtlProcessor:
     """
     Extracts text from source documents, chunks it, generates embeddings,
     and uploads the formatted output for each document as a separate JSON
-    file for Vertex AI Vector Search indexing.
+    file for Vertex AI Vector Search indexing. This process is idempotent,
+    tracking completion status in GCS.
     """
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
@@ -56,10 +57,16 @@ class EtlProcessor:
         # Replace invalid chars with underscores
         return re.sub(r'[^a-zA-Z0-9_.-]', '_', base_name)
 
+    def _get_status_blob_name(self, source_blob_name: str) -> str:
+        """Constructs the name for the status marker blob."""
+        sanitized_name = self._sanitize_filename(source_blob_name)
+        return f"{self.config.etl_status_prefix}{sanitized_name}.success"
+
     def _process_single_document(self, blob):
         """Runs the full ETL pipeline for a single GCS blob."""
         logging.info(f"Processing document: {blob.name}")
-        
+        status_blob_name = self._get_status_blob_name(blob.name)
+
         # 1. Extract
         file_bytes = self.gcs_client.download_blob_as_bytes(blob)
         if blob.name.lower().endswith(".pdf"):
@@ -105,6 +112,13 @@ class EtlProcessor:
             destination_blob_name=output_path,
             content_type='application/json'
         )
+        # Upon success, create the status marker file.
+        self.gcs_client.upload_from_string(
+            content="",
+            destination_blob_name=status_blob_name,
+            content_type='text/plain'
+        )
+
         logging.info(f"Successfully uploaded embedding data for {blob.name} to gs://{self.config.bucket_name}/{output_path}")
 
     def run(self):
@@ -124,6 +138,12 @@ class EtlProcessor:
             return
 
         for blob in source_files:
+            # Check if a .success status file already exists for this blob
+            status_blob_name = self._get_status_blob_name(blob.name)
+            if self.gcs_client.blob_exists(status_blob_name):
+                logging.info(f"Status file found for {blob.name}. Skipping.")
+                continue
+
             try:
                 self._process_single_document(blob)
             except Exception as e:
