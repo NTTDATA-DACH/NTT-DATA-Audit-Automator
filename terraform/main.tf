@@ -115,7 +115,7 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
   metadata {
     contents_delta_uri = local.index_contents_path
     config {
-      dimensions                  = 768
+      dimensions                  = 3072
       approximate_neighbors_count = 150
       algorithm_config {
         tree_ah_config {
