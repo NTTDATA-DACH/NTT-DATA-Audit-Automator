@@ -94,7 +94,6 @@ echo "🚀 Executing task for customer '${CUSTOMER_ID}' with args: [main.py ${TA
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --wait \
   --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},CUSTOMER_ID=${CUSTOMER_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE}" \
   --args="${TASK_ARGS}"
 
