@@ -13,6 +13,7 @@ from src.clients.ai_client import AiClient
 # Constants for ETL processing
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 100
+EMBEDDING_BATCH_SIZE = 25 # Process and save state every 25 chunks.
 STATE_FILE_PATH = "output/etl_state.json"
 FINAL_OUTPUT_PATH = "vector_index_data/embeddings.jsonl"
 
@@ -28,13 +29,15 @@ class EtlProcessor:
     def _load_state(self) -> dict:
         """Loads the last saved ETL state from GCS."""
         try:
-            # Use the correct method that reads and parses the JSON file directly.
             state = self.gcs_client.read_json(STATE_FILE_PATH)
-            logging.info(f"Resuming ETL from saved state. {len(state.get('processed_files', []))} files already complete.")
+            # Ensure keys exist for backwards compatibility
+            state.setdefault('files', {})
+            state.setdefault('completed_embeddings_jsonl', [])
+            logging.info(f"Resuming ETL from saved state. {len(state.get('files', {}))} files tracked.")
             return state
         except NotFound:
             logging.info("No saved ETL state found. Starting a new ETL process.")
-            return {"processed_files": [], "completed_embeddings_jsonl": []}
+            return {"files": {}, "completed_embeddings_jsonl": []}
 
     def _save_state(self, state: dict):
         """Saves the current ETL state to GCS."""
@@ -42,52 +45,69 @@ class EtlProcessor:
             content=json.dumps(state, indent=2),
             destination_blob_name=STATE_FILE_PATH
         )
-        logging.info(f"Successfully saved ETL state for {len(state['processed_files'])} processed files.")
+        logging.debug(f"Successfully saved ETL state.")
 
     def run(self) -> None:
         """Executes the full ETL pipeline."""
         state = self._load_state()
-        processed_files = set(state.get("processed_files", []))
+        file_states = state.get("files", {})
         aggregated_jsonl_lines = state.get("completed_embeddings_jsonl", [])
 
         source_files = self.gcs_client.list_source_files()
-        files_to_process = [f for f in source_files if f.name not in processed_files]
+        files_to_process = [f for f in source_files if file_states.get(f.name, {}).get('status') != 'completed']
 
         if self.config.is_test_mode:
             logging.warning("TEST MODE: Limiting processing to the first 2 new files only.")
             files_to_process = files_to_process[:2]
 
         if not files_to_process:
-            logging.info("All source files have already been processed. ETL is complete.")
+            logging.info("All source files have been successfully processed. ETL is complete.")
             self.gcs_client.upload_from_string("\n".join(aggregated_jsonl_lines), FINAL_OUTPUT_PATH)
             return
 
         for blob in files_to_process:
-            logging.info(f"--- Processing new document: {blob.name} ---")
-            
-            # 1. Chunk the new document
-            doc_chunks = self._chunk_single_document(blob)
-            if not doc_chunks:
-                logging.warning(f"No chunks created for {blob.name}, skipping.")
-                processed_files.add(blob.name)
-                self._save_state({"processed_files": list(processed_files), "completed_embeddings_jsonl": aggregated_jsonl_lines})
+            logging.info(f"--- Processing document: {blob.name} ---")
+
+            # 1. Chunk the entire document first to get a total count
+            all_doc_chunks = self._chunk_single_document(blob)
+            if not all_doc_chunks:
+                logging.warning(f"No chunks created for {blob.name}, marking as complete and skipping.")
+                file_states[blob.name] = {"status": "completed", "processed_chunks": 0}
+                self._save_state({"files": file_states, "completed_embeddings_jsonl": aggregated_jsonl_lines})
                 continue
 
-            # 2. Generate embeddings for the new chunks
-            chunk_texts = [chunk['text_content'] for chunk in doc_chunks]
-            success, embeddings = self.ai_client.get_embeddings(chunk_texts)
+            # 2. Determine where to resume from
+            start_index = file_states.get(blob.name, {}).get("processed_chunks", 0)
+            if start_index > 0:
+                logging.info(f"Resuming '{blob.name}' from chunk {start_index + 1}/{len(all_doc_chunks)}")
 
-            if not success:
-                logging.critical("ETL process failed during embedding generation. State has been saved for completed files. Please check quotas and re-run.")
-                exit(1)
+            chunks_to_process = all_doc_chunks[start_index:]
+            current_processed_count = start_index
 
-            # 3. Format and update state
-            jsonl_lines_for_doc = self._format_for_indexing(doc_chunks, embeddings)
-            aggregated_jsonl_lines.extend(jsonl_lines_for_doc)
-            processed_files.add(blob.name)
+            # 3. Process the remaining chunks in batches
+            for i in range(0, len(chunks_to_process), EMBEDDING_BATCH_SIZE):
+                batch = chunks_to_process[i:i + EMBEDDING_BATCH_SIZE]
+                logging.info(f"Processing batch of {len(batch)} chunks for '{blob.name}' (starting from chunk {current_processed_count + 1})")
+                
+                batch_texts = [chunk['text_content'] for chunk in batch]
+                success, embeddings = self.ai_client.get_embeddings(batch_texts)
 
-            # 4. Save state after each successful file
-            self._save_state({"processed_files": list(processed_files), "completed_embeddings_jsonl": aggregated_jsonl_lines})
+                if not success:
+                    logging.critical("ETL process failed during embedding generation. State has been saved for the last successful batch. Please check quotas and re-run.")
+                    exit(1)
+
+                # 4. Format, append results, and save state after each successful batch
+                jsonl_lines_for_batch = self._format_for_indexing(batch, embeddings)
+                aggregated_jsonl_lines.extend(jsonl_lines_for_batch)
+                current_processed_count += len(batch)
+
+                file_states[blob.name] = {"status": "in_progress", "processed_chunks": current_processed_count}
+                self._save_state({"files": file_states, "completed_embeddings_jsonl": aggregated_jsonl_lines})
+
+            # 5. Once all batches for a file are done, mark it as completed
+            logging.info(f"--- Document '{blob.name}' completed successfully. ---")
+            file_states[blob.name] = {"status": "completed", "processed_chunks": current_processed_count}
+            self._save_state({"files": file_states, "completed_embeddings_jsonl": aggregated_jsonl_lines})
 
         logging.info("ETL process complete. Uploading final aggregated embeddings file.")
         self.gcs_client.upload_from_string("\n".join(aggregated_jsonl_lines), FINAL_OUTPUT_PATH)
