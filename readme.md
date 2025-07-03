@@ -1,9 +1,3 @@
-Case: You've pointed out that the markdown formatting in my last response was incorrect and have asked for just the clean content of `readme.md`.
-
----
-Dixie: Understood. Apologies for the formatting issue. Here is the complete and correctly formatted content for the `readme.md` file as requested.
-
----
 # BSI Grundschutz Audit Automator
 
 This project automates BSI Grundschutz security audits by transforming customer documentation into a structured report using a cloud-native, multi-stage pipeline on Google Cloud. It leverages a Retrieval-Augmented Generation (RAG) pattern with the Vertex AI Gemini API to ensure audit findings are contextually relevant and accurate.
@@ -17,7 +11,7 @@ Follow these steps in order to get from a new customer to a generated audit repo
 The Terraform configuration in the `terraform/` directory creates all necessary cloud resources for a specific customer audit.
 
 1.  Navigate to the `terraform/` directory.
-2.  Edit the `terraform.tfvars` file to set your `project_id`, `project_number`, and a unique `customer_id`.
+2.  Edit the `terraform.tfvars` file to set your `project_id`, and `project_number`.
 3.  Deploy the infrastructure:
     ```bash
     terraform init
@@ -33,7 +27,7 @@ The application code is deployed as a generic, reusable Cloud Run Job. This job 
 # From the project root directory:
 bash ./scripts/deploy-audit-job.sh
 ```
-This script deploys the application container as a job named `bsi-audit-task-job`, which can then be executed on demand to perform specific tasks.
+This script deploys the application container as a job named `bsi-audit-automator-job`, which can then be executed on demand to perform specific tasks.
 
 ### Step 3: Upload Customer Source Documents
 
@@ -51,11 +45,11 @@ Upload the customer's documentation (PDFs, etc.) to the GCS bucket created by Te
 
 ### Step 4: Execute an Audit Task
 
-All pipeline tasks are run using the interactive `execute-audit-task.sh` script. This is the primary script you will use for day-to-day operations.
+All pipeline tasks are run using the interactive `execute-audit-job.sh` script. This is the primary script you will use for day-to-day operations.
 
 ```bash
 # From the project root directory:
-bash ./scripts/execute-audit-task.sh
+bash ./scripts/execute-audit-job.sh
 ```
 
 This script will prompt you to select the task to execute. The correct workflow is:
@@ -78,6 +72,7 @@ bsi-audit-automator/
 ├── src/
 │   ├── clients/
 │   │   ├── gcs_client.py       # Handles all GCS interactions
+│   │   ├── rag_client.py       # Handles Vector Search (RAG) queries
 │   │   └── ai_client.py        # Handles all Vertex AI Gemini interactions
 │   │
 │   ├── etl/
@@ -95,8 +90,7 @@ bsi-audit-automator/
 │
 ├── assets/                     # Non-code assets
 │   ├── json/                   # JSON assets (schemas, data)
-│   ├── prompts/                # .txt prompt templates
-│   └── schemas/                # .json schemas for AI output validation
+│   └── prompts/                # .txt prompt templates
 │
 └── scripts/                    # Helper shell scripts for deployment & execution
 ```
@@ -113,6 +107,8 @@ bsi-audit-automator/
 
 *   **`clients/ai_client.py`**: A critical module that abstracts all communication with the Vertex AI Gemini API. It handles client initialization, embedding generation, and schema-driven JSON generation. All the rules for retries, error handling, and model configuration are contained here.
 
+*   **`clients/rag_client.py`**: A dedicated client for the "Retrieval" part of RAG. It connects to the deployed Vertex AI Vector Search endpoint and provides a simple method (`get_context_for_query`) to find and retrieve the text of the most relevant document chunks for any given question.
+
 *   **`etl/processor.py`**: This module contains the logic for the **Extract, Transform, Load (ETL)** process, which is the first and most critical step of the RAG pipeline. It finds all customer source documents, breaks them down into searchable chunks, generates vector embeddings for each chunk, and uploads them in the correct format for Vertex AI Vector Search to ingest.
 
 *   **`audit/controller.py`**: The "brain" of the audit process. It maintains a dictionary of all available audit stages (e.g., "Chapter-1", "Chapter-3"). When called, it orchestrates the execution of these stages, handling state management by checking GCS for existing results before running a stage, making the entire process resumable.
@@ -126,34 +122,34 @@ bsi-audit-automator/
 Each "Chapter" is an independent stage orchestrated by the `AuditController`.
 
 ### **Phase 0: ETL (Embedding)** (`etl/processor.py`)
-*   **Purpose:** To process the customer's unstructured source documents (PDFs) and prepare them for efficient, semantic searching. This is the "indexing" step of the RAG pipeline and must be run before any RAG-based stages (like Chapter 5).
+*   **Purpose:** To process the customer's unstructured source documents (PDFs) and prepare them for efficient, semantic searching. This is the "indexing" step of the RAG pipeline and must be run before any RAG-based stages (like Chapter 1).
 *   **Logic:** This processor executes a five-step pipeline:
     1.  **Extract:** Lists all source document blobs from the customer's GCS directory.
-    2.  **Chunk:** Reads each PDF, extracts the text, and uses a text splitter (from LangChain) to break the content into small, semantically coherent chunks.
+    2.  **Chunk:** Reads each PDF, extracts the text, and uses a text splitter (from `PyMuPDF` and `langchain`) to break the content into small, semantically coherent chunks.
     3.  **Embed:** Sends the text of every chunk to the Vertex AI embedding model (`gemini-embedding-001`) to get a vector representation.
-    4.  **Format:** Structures the chunk metadata and its corresponding embedding vector into the specific JSONL format required by Vertex AI Vector Search.
-    5.  **Load:** Uploads the final `embeddings.jsonl` file to the GCS path that the Vector Index is configured to monitor.
+    4.  **Format:** Structures the chunk metadata and its corresponding embedding vector into the specific JSON format required by Vertex AI Vector Search.
+    5.  **Load:** Uploads the final `embeddings.json` file to the GCS path that the Vector Index is configured to monitor.
 
-### **Chapter 1: General Information** (`stage_1_general.py`)
+### **Chapter 1: General Information** (`audit/stages/stage_1_general.py`)
 *   **Purpose:** To generate the high-level, introductory content of the audit report.
-*   **Logic:** This is a simple stage that makes a single call to the AI. It uses a prompt that provides the `audit_type` and `customer_id` and asks the AI to generate plausible text for the scope, audit team, and audit plan summary.
+*   **Logic:** This stage now uses the RAG pipeline. It formulates specific queries (e.g., "scope of the information network," "members of the audit team"), retrieves relevant context from the customer documents using the `RagClient`, and passes that evidence to the AI to generate a grounded, factual response for each subchapter.
 
-### **Chapter 3: Document Review** (`stage_3_dokumentenpruefung.py`)
+### **Chapter 3: Document Review** (`audit/stages/stage_3_dokumentenpruefung.py`)
 *   **Purpose:** To perform the initial review of the customer's core security documents.
-*   **Logic:** This stage introduces parallel processing. It runs a separate, concurrent AI request for each subchapter (3.1, 3.2, 3.3.1, etc.). Each request uses a highly specific prompt and schema to answer the questions for that section. The results are then aggregated into a single JSON file for the stage.
+*   **Logic:** This stage runs a separate, concurrent AI request for each subchapter (3.1, 3.2, 3.3.1, etc.). Each request will be enhanced with RAG to provide specific document evidence to the AI, which then answers the questions for that section. The results are aggregated into a single JSON file for the stage.
 
-### **Chapter 4: Audit Plan Creation** (`stage_4_pruefplan.py`)
+### **Chapter 4: Audit Plan Creation** (`audit/stages/stage_4_pruefplan.py`)
 *   **Purpose:** To generate a compliant and plausible audit plan.
-*   **Logic:** This stage's prompts are uniquely focused on **planning** rather than analysis. They are enriched with the rules from the `Auditierungsschema.pdf` (e.g., "select at least 6 Bausteine," "ISMS.1 is mandatory"), guiding the AI to produce a valid plan.
+*   **Logic:** This stage's prompts are uniquely focused on **planning** rather than analysis. They are enriched with the rules from the BSI `Auditierungsschema` (e.g., "select at least 6 Bausteine," "ISMS.1 is mandatory"), guiding the AI to produce a valid plan.
 
-### **Chapter 5: On-Site Audit Verification** (`stage_5_vor_ort_audit.py`)
-*   **Purpose:** To simulate the on-site audit by verifying the implementation of controls selected in Chapter 4. This is the core RAG verification stage.
+### **Chapter 5: On-Site Audit Verification** (`audit/stages/stage_5_vor_ort_audit.py`)
+*   **Purpose:** To simulate the on-site audit by verifying the implementation of controls selected in Chapter 4.
 *   **Logic:**
-    1.  **Dependency:** It first loads the `Chapter-4.json` results from GCS to know which `Bausteine` were selected.
+    1.  **Dependency:** It first loads the `Chapter-4.json` results from GCS to know which `Bausteine` were selected for the audit.
     2.  **Control Lookup:** It uses the `ControlCatalog` helper to parse the `BSI_GS_OSCAL...json` file and retrieve the full list of controls for the selected Bausteine.
-    3.  **RAG Prompting:** For subchapter 5.5.2, it constructs a detailed prompt containing the list of controls to be verified. The AI is asked to return a structured list of findings, one for each control.
+    3.  **Prompting:** For subchapter 5.5.2, it constructs a detailed prompt containing the list of controls to be verified. The AI is asked to return a structured list of findings, one for each control.
 
-### **Chapter 7: Appendix** (`stage_7_anhang.py`)
+### **Chapter 7: Appendix** (`audit/stages/stage_7_anhang.py`)
 *   **Purpose:** To generate the report's appendix.
 *   **Logic:** This is a hybrid stage combining deterministic logic and AI summarization.
     1.  **Subchapter 7.1 (Reference Documents):** This part is **deterministic**. It calls the `gcs_client` to list all files in the customer's source GCS folder and formats them into a table.
@@ -165,14 +161,18 @@ Each "Chapter" is an independent stage orchestrated by the `AuditController`.
 
 ### `scripts/deploy-audit-job.sh`
 *   **When to use:** Run this once per project, or whenever you change the `Dockerfile` or core Python dependencies in `requirements.txt`.
-*   **What it does:** This script builds your Python application into a Docker container, pushes it to Google Artifact Registry, and deploys it as a generic Cloud Run Job named `bsi-audit-task-job`.
+*   **What it does:** This script builds your Python application into a Docker container, pushes it to Google Artifact Registry, and deploys it as a generic Cloud Run Job named `bsi-audit-automator-job`.
 
 ### `scripts/execute-audit-job.sh`
 *   **When to use:** This is your primary script for running any part of the audit pipeline.
 *   **What it does:** It's an interactive script that:
-    1.  Fetches the `CUSTOMER_ID` and other necessary cloud resource details from your Terraform state.
+    1.  Fetches the required cloud resource details from your Terraform state.
     2.  Prompts you to select the specific **task** you want to run (e.g., ETL, Chapter-5, Generate Report).
     3.  Constructs the appropriate `gcloud run jobs execute` command, passing the correct environment variables and command-line arguments to `main.py`.
+
+### `scripts/redeploy-index.sh`
+*   **When to use:** Use this script if you need to manually force the Vertex AI Index to be deployed to the Index Endpoint. This is typically only needed for troubleshooting, as the initial deployment is handled automatically by Terraform. It does **not** re-process your data.
+*   **What it does:** It runs the `gcloud ai index-endpoints deploy-index` command with the correct resource IDs fetched from your Terraform state.
 
 ### `scripts/envs.sh`
 *   **When to use:** For local development and debugging only.
@@ -197,7 +197,7 @@ This tool is intended to be used **after** the `--generate-report` task has been
 
 ## Configuration
 
-The application is configured entirely via environment variables passed by the `execute-audit-task.sh` script or loaded locally by `envs.sh`.
+The application is configured entirely via environment variables passed by the `execute-audit-job.sh` script or loaded locally by `envs.sh`.
 
 | Variable | Required? | Description |
 | :--- | :---: | :--- |
@@ -211,3 +211,4 @@ The application is configured entirely via environment variables passed by the `
 | `MAX_CONCURRENT_AI_REQUESTS` | No | Max parallel requests to the Gemini API. Defaults to `5`. |
 | `VERTEX_AI_REGION`| Yes | The region where Vertex AI resources are deployed. |
 | `TEST` | No | Set to `"true"` to enable test mode. Defaults to `false`. |
+```
