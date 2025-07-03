@@ -15,6 +15,8 @@
             --card-bg: #fff;
             --button-bg: #005cbf;
             --button-hover-bg: #004a99;
+            --danger-color: #d93025;
+            --danger-hover-color: #a52714;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -112,9 +114,27 @@
             border: 1px solid var(--border-color);
             padding: 10px;
             text-align: left;
+            vertical-align: top;
         }
         th { background-color: #f2f2f2; font-weight: bold; }
         td input { padding: 4px; }
+        .action-cell { width: 80px; text-align: center; }
+        .delete-row-btn, .add-row-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .delete-row-btn:hover { background-color: var(--danger-hover-color); }
+        .add-row-btn {
+            background-color: var(--button-bg);
+            margin-top: 10px;
+        }
+        .add-row-btn:hover { background-color: var(--button-hover-bg); }
+
         #report-container { padding-top: 20px; }
         #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
     </style>
@@ -148,6 +168,15 @@
 
             fileInput.addEventListener('change', handleFileSelect);
             exportButton.addEventListener('click', handleExport);
+            
+            reportContainer.addEventListener('click', (event) => {
+                if (event.target.classList.contains('add-row-btn')) {
+                    handleAddRow(event.target);
+                }
+                if (event.target.classList.contains('delete-row-btn')) {
+                    handleDeleteRow(event.target);
+                }
+            });
 
             function handleFileSelect(event) {
                 const file = event.target.files[0];
@@ -167,18 +196,29 @@
                 };
                 reader.readAsText(file);
             }
+            
+            function syncUiToData() {
+                if (!reportData) return;
+                const inputs = reportContainer.querySelectorAll('[data-path]');
+                inputs.forEach(input => {
+                    if (input.tagName === 'BUTTON') return;
+                    const path = input.dataset.path;
+                    let value = input.value;
+                    if (input.tagName === 'SELECT') {
+                        value = value === 'true' ? true : (value === 'false' ? false : null);
+                    }
+                    setValueByPath(reportData, path, value);
+                });
+            }
 
             function createFilterButtons(data) {
                 filterContainer.innerHTML = '';
                 const chapters = data?.bsiAuditReport || {};
-
-                // "Show All" button
                 const allButton = document.createElement('button');
                 allButton.textContent = 'Show All';
                 allButton.onclick = () => filterView('all');
                 filterContainer.appendChild(allButton);
 
-                // Buttons for each chapter
                 Object.keys(chapters).forEach(key => {
                     if (typeof chapters[key] === 'object' && chapters[key]?.title) {
                         const button = document.createElement('button');
@@ -201,7 +241,8 @@
             }
 
             function renderReport(data) {
-                reportContainer.innerHTML = '';
+                const currentScroll = window.scrollY;
+                reportContainer.innerHTML = ''; 
                 const report = data.bsiAuditReport;
                 if (!report) return;
 
@@ -211,6 +252,7 @@
                          reportContainer.appendChild(renderChapter(key, chapterData, `bsiAuditReport.${key}`));
                     }
                 }
+                window.scrollTo(0, currentScroll);
             }
             
             function renderChapter(key, chapterData, path) {
@@ -252,17 +294,15 @@
                     });
                 }
                 
-                if (sectionData.table || (sectionData.headers && sectionData.rows)) {
+                if (sectionData.table || (sectionData.headers && Array.isArray(sectionData.rows))) {
                     sectionDiv.appendChild(renderTable(sectionData.table || sectionData, path));
                 }
 
-                // Recursive call for nested sections
                 for (const subKey in sectionData) {
                     if (!['title', 'description', 'content', 'table', 'headers', 'rows', 'subchapterNumber', 'tableId'].includes(subKey) && typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
                         sectionDiv.appendChild(renderSection(sectionData[subKey], `${path}.${subKey}`));
                     }
                 }
-
                 return sectionDiv;
             }
             
@@ -272,7 +312,7 @@
                 let input;
                 if (type === 'boolean') {
                     input = document.createElement('select');
-                    input.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Yes</option><option value="false" ${value === false ? 'selected' : ''}>No</option><option value="" ${value === null ? 'selected' : ''}>N/A</option>`;
+                    input.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Yes</option><option value="false" ${value === false ? 'selected' : ''}>No</option><option value="" ${value === null || value === undefined ? 'selected' : ''}>N/A</option>`;
                 } else {
                     input = document.createElement('input');
                     input.type = type || 'text';
@@ -296,58 +336,113 @@
             }
 
             function renderTable(tableData, path) {
+                const tableContainer = document.createElement('div');
                 const table = document.createElement('table');
                 const thead = table.createTHead();
                 const tbody = table.createTBody();
+                const tfoot = table.createTFoot();
+
                 const headerRow = thead.insertRow();
                 tableData.headers.forEach(headerText => {
                     const th = document.createElement('th');
                     th.textContent = headerText;
                     headerRow.appendChild(th);
                 });
+                headerRow.insertCell().className = 'action-cell';
 
-                tableData.rows.forEach((rowData, rowIndex) => {
-                    const row = tbody.insertRow();
-                    tableData.headers.forEach(header => {
-                        const cell = row.insertCell();
-                        const input = document.createElement('input');
-                        input.type = 'text';
-                        input.value = rowData[header] || '';
-                        input.dataset.path = `${path}.rows[${rowIndex}].${header}`;
-                        cell.appendChild(input);
+                if (tableData.rows) {
+                    tableData.rows.forEach((rowData, rowIndex) => {
+                        const row = tbody.insertRow();
+                        const rowPath = `${path}.rows[${rowIndex}]`;
+                        tableData.headers.forEach(header => {
+                            const cell = row.insertCell();
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.value = rowData[header] || '';
+                            input.dataset.path = `${rowPath}.${header}`;
+                            cell.appendChild(input);
+                        });
+                        const actionCell = row.insertCell();
+                        actionCell.className = 'action-cell';
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.textContent = 'Delete';
+                        deleteBtn.className = 'delete-row-btn';
+                        deleteBtn.dataset.path = `${path}.rows`;
+                        deleteBtn.dataset.rowIndex = rowIndex;
+                        actionCell.appendChild(deleteBtn);
                     });
-                });
-                return table;
+                }
+
+                const footerRow = tfoot.insertRow();
+                const addCell = footerRow.insertCell();
+                addCell.colSpan = tableData.headers.length + 1;
+                const addBtn = document.createElement('button');
+                addBtn.textContent = '+ Add Row';
+                addBtn.className = 'add-row-btn';
+                addBtn.dataset.path = `${path}.rows`;
+                addBtn.dataset.headers = JSON.stringify(tableData.headers);
+                addCell.appendChild(addBtn);
+                
+                tableContainer.appendChild(table);
+                return tableContainer;
+            }
+
+            function handleAddRow(button) {
+                syncUiToData(); // Save current UI state to data model first
+                const path = button.dataset.path;
+                const headers = JSON.parse(button.dataset.headers);
+                const newRow = {};
+                headers.forEach(header => { newRow[header] = ''; });
+
+                const tableRows = getValueByPath(reportData, path);
+                if (Array.isArray(tableRows)) {
+                    tableRows.push(newRow);
+                    renderReport(reportData);
+                }
+            }
+
+            function handleDeleteRow(button) {
+                syncUiToData(); // Save current UI state to data model first
+                const path = button.dataset.path;
+                const rowIndex = parseInt(button.dataset.rowIndex, 10);
+
+                const tableRows = getValueByPath(reportData, path);
+                if (Array.isArray(tableRows) && !isNaN(rowIndex)) {
+                    tableRows.splice(rowIndex, 1);
+                    renderReport(reportData);
+                }
             }
 
             function handleExport() {
+                syncUiToData(); // Ensure all latest changes are in the data model
                 if (!reportData) {
                     alert("No data loaded to export.");
                     return;
                 }
-
-                const updatedData = JSON.parse(JSON.stringify(reportData)); // Deep copy
-
-                const inputs = reportContainer.querySelectorAll('[data-path]');
-                inputs.forEach(input => {
-                    const path = input.dataset.path;
-                    let value = input.value;
-                    if(input.tagName === 'SELECT'){
-                        value = value === 'true' ? true : (value === 'false' ? false : null);
-                    }
-                    setValueByPath(updatedData, path, value);
-                });
-                
+                const updatedData = JSON.parse(JSON.stringify(reportData)); 
                 downloadObjectAsJson(updatedData, 'edited_report.json');
+            }
+            
+            function getValueByPath(obj, path) {
+                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.');
+                let current = obj;
+                for (let i = 0; i < keys.length; i++) {
+                    if (current === undefined) return undefined;
+                    current = current[keys[i]];
+                }
+                return current;
             }
 
             function setValueByPath(obj, path, value) {
-                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.'); // a.b[0].c -> ['a','b','0','c']
+                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.');
                 let current = obj;
                 for (let i = 0; i < keys.length - 1; i++) {
+                    if(current === undefined || current[keys[i]] === undefined) return; 
                     current = current[keys[i]];
                 }
-                current[keys[keys.length - 1]] = value;
+                if(current) {
+                    current[keys[keys.length - 1]] = value;
+                }
             }
 
             function downloadObjectAsJson(exportObj, exportName) {
