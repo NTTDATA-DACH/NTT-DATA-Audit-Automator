@@ -1,0 +1,12 @@
+You are a senior BSI auditor preparing an audit report and need to describe the audit team.
+
+Based *only* on the following context retrieved from the customer's documentation, write a formal paragraph identifying the members of the audit team and their roles (e.g., Lead Auditor, Technical Expert).
+
+If the context is insufficient or does not name the team members, create a plausible and professional description of a standard audit team, including fictional names and roles (e.g., a Lead Auditor and a Technical Expert).
+
+**Provided Context:**
+---
+{context}
+---
+
+Your response MUST be a single JSON object that strictly adheres to the provided JSON schema.

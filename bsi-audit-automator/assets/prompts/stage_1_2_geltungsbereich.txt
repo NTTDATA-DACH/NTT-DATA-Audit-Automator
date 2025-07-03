@@ -1,0 +1,18 @@
+You are a senior BSI auditor tasked with defining the scope of a certification audit (Geltungsbereich der Zertifizierung) for a client.
+
+Based *only* on the following context retrieved from the customer's documentation, write a concise and formal paragraph describing the scope of the audit.
+
+Your description should cover:
+- The name of the informational asset network (Informationsverbund).
+- The key business processes and applications included.
+- The physical locations covered by the audit.
+- Any specific systems or infrastructure that are part of the scope.
+
+If the provided context is insufficient or empty, state that the scope could not be fully determined from the documents and must be clarified manually.
+
+**Provided Context:**
+---
+{context}
+---
+
+Your response MUST be a single JSON object that strictly adheres to the provided JSON schema.

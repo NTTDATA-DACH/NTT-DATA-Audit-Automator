@@ -64,3 +64,9 @@ class GcsClient:
         blob = self.bucket.blob(blob_name)
         content = blob.download_as_text() # This raises NotFound if not present.
         return json.loads(content)
+
+    def read_text_file(self, blob_name: str) -> str:
+        """Downloads and returns the content of a text-based file from GCS."""
+        logging.info(f"Attempting to read text from: gs://{self.bucket.name}/{blob_name}")
+        blob = self.bucket.blob(blob_name)
+        return blob.download_as_text()

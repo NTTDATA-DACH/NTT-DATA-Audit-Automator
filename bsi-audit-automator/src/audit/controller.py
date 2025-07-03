@@ -7,6 +7,7 @@ from google.cloud.exceptions import NotFound
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
+from src.clients.rag_client import RagClient
 from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 from src.audit.stages.stage_4_pruefplan import Chapter4Runner
@@ -16,14 +17,15 @@ from src.audit.stages.stage_7_anhang import Chapter7Runner
 class AuditController:
     """Orchestrates the entire staged audit process."""
 
-    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
+    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
+        self.rag_client = rag_client
         # Define the sequence of all audit stages and their runners
         self.audit_stages = {
-            "Chapter-1": Chapter1Runner(config, ai_client),
-            "Chapter-3": Chapter3Runner(config, ai_client),
+            "Chapter-1": Chapter1Runner(config, ai_client, rag_client),
+            "Chapter-3": Chapter3Runner(config, ai_client, rag_client),
             "Chapter-4": Chapter4Runner(config, ai_client),
             "Chapter-5": Chapter5Runner(config, gcs_client, ai_client),
             "Chapter-7": Chapter7Runner(config, gcs_client, ai_client),

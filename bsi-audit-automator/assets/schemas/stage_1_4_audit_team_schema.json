@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Chapter 1.4 Audit-Team",
+    "description": "Defines the structure for the audit team description.",
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "string",
+            "description": "A formal paragraph describing the audit team, listing members and their roles."
+        }
+    },
+    "required": ["content"],
+    "additionalProperties": false
+}

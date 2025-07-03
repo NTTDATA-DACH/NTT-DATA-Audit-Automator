@@ -6,6 +6,7 @@ import asyncio
 from src.config import config
 from src.logging_setup import setup_logging
 from src.clients.gcs_client import GcsClient
+from src.clients.rag_client import RagClient
 from src.clients.ai_client import AiClient
 from src.etl.processor import EtlProcessor
 from src.audit.controller import AuditController
@@ -52,6 +53,7 @@ def main():
     # Instantiate clients once
     gcs_client = GcsClient(config)
     ai_client = AiClient(config)
+    rag_client = RagClient(config, gcs_client)
 
     try:
         if args.run_etl:
@@ -65,7 +67,7 @@ def main():
             generator.assemble_report()
 
         else:  # These are the async audit tasks
-            controller = AuditController(config, gcs_client, ai_client)
+            controller = AuditController(config, gcs_client, ai_client, rag_client)
 
             async def run_audit_tasks():
                 if args.run_stage:
