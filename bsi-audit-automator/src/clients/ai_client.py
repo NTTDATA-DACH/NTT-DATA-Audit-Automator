@@ -2,9 +2,9 @@
 import logging
 import json
 import asyncio
+import time # Using time.sleep for the synchronous embedding function
 from typing import List, Dict, Any
 
-# CORRECTED IMPORTS: Using the modern 'vertexai' namespace provided by the SDK.
 from google.cloud import aiplatform
 from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
@@ -14,7 +14,6 @@ from src.config import AppConfig
 
 # Constants for the AI client, aligned with the project brief.
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
-# IMPERATIVE: Using the embedding model explicitly required by the project brief.
 EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 
 # Constants for robust generation
@@ -48,7 +47,7 @@ class AiClient:
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generates vector embeddings for a list of text chunks, respecting the
-        model's batch size limit of 1.
+        model's batch size limit and implementing a robust retry mechanism.
 
         Args:
             texts: A list of text strings to embed.
@@ -60,22 +59,34 @@ class AiClient:
             logging.warning("get_embeddings called with no texts. Returning empty list.")
             return []
 
-        logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'...")
         all_embeddings = []
-        try:
-            # CRITICAL FIX: The gemini-embedding-001 model requires a batch size of 1.
-            # We must iterate and call the API for each text individually.
-            for text in texts:
-                # The model expects a list, even if it's a single item.
-                response = self.embedding_model.get_embeddings([text])
-                # The response is a list with one TextEmbedding object.
-                all_embeddings.append(response[0].values)
-
-            logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
-            return all_embeddings
-        except Exception as e:
-            logging.error(f"Failed to generate embeddings: {e}", exc_info=True)
-            raise
+        logging.info(f"Generating embeddings for {len(texts)} chunks...")
+        
+        # We must iterate and call the API for each text individually with its own retry logic.
+        for i, text in enumerate(texts):
+            for attempt in range(MAX_RETRIES):
+                try:
+                    # The model expects a list, even if it's a single item.
+                    response = self.embedding_model.get_embeddings([text])
+                    # The response is a list with one TextEmbedding object.
+                    all_embeddings.append(response[0].values)
+                    logging.debug(f"Generated embedding for chunk {i+1}/{len(texts)}")
+                    break  # Success, break the retry loop for this chunk
+                except api_core_exceptions.GoogleAPICallError as e:
+                    if e.code == 429:  # HTTP status for "Too Many Requests"
+                        wait_time = 2 ** attempt
+                        logging.warning(f"Embedding for chunk {i+1} hit rate limit. Retrying in {wait_time}s...")
+                        time.sleep(wait_time) # Use synchronous sleep
+                    else:
+                        logging.error(f"Embedding for chunk {i+1} failed with API Error: {e}", exc_info=True)
+                        raise # Re-raise other API errors immediately
+                
+                if attempt == MAX_RETRIES - 1:
+                    logging.critical(f"Embedding for chunk {i+1} failed after all retries.")
+                    raise RuntimeError(f"Failed to get embedding for chunk {i+1} after {MAX_RETRIES} attempts.")
+        
+        logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
+        return all_embeddings
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
         """
