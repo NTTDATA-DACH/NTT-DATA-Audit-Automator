@@ -1,8 +1,7 @@
 # src/audit/stages/stage_5_vor_ort_audit.py
 import logging
 import json
-import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
@@ -12,7 +11,7 @@ from src.audit.stages.control_catalog import ControlCatalog
 class Chapter5Runner:
     """
     Handles generating content for Chapter 5 "Vor-Ort-Audit".
-    Processes each subchapter as a separate, parallel task.
+    It deterministically prepares the control checklist for the manual audit.
     """
     STAGE_NAME = "Chapter-5"
 
@@ -20,76 +19,61 @@ class Chapter5Runner:
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
-        self.control_catalog = ControlCatalog() # Initialize the BSI catalog helper
-        self.subchapter_definitions = self._load_subchapter_definitions()
+        self.control_catalog = ControlCatalog()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _load_asset_text(self, path: str) -> str:
-        with open(path, 'r', encoding='utf-8') as f: return f.read()
-
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
-
-    def _load_subchapter_definitions(self) -> Dict[str, Any]:
-        """Loads definitions for subchapters to be processed automatically."""
-        return {
-            # Subchapter 5.1 is now a manual task and has been removed from automation.
-            "verifikationDesITGrundschutzChecks": { # This is for 5.5.2
-                "key": "5.5.2",
-                "prompt_path": "assets/prompts/stage_5_5_2_einzelergebnisse.txt",
-                "schema_path": "assets/schemas/stage_5_5_2_einzelergebnisse_schema.json"
-            },
-        }
-
-    async def _process_control_verification(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handles the special RAG logic for 5.5.2."""
-        definition = self.subchapter_definitions["verifikationDesITGrundschutzChecks"]
+    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Deterministically generates the control checklist for subchapter 5.5.2.
+        This list is for the human auditor to use during the on-site audit.
+        """
         name = "verifikationDesITGrundschutzChecks"
-        logging.info(f"Starting special control verification for subchapter: {definition['key']} ({name})")
+        logging.info(f"Deterministically generating control checklist for {name} (5.5.2)...")
 
-        # 1. Get selected Bausteine from Chapter 4 results
-        # Handles both certification and surveillance audit keys
+        # 1. Get selected Bausteine from Chapter 4 results, handling different audit types.
         ch4_plan_key = next(iter(chapter_4_data)) if chapter_4_data else None
         selected_bausteine = chapter_4_data.get(ch4_plan_key, {}).get("rows", []) if ch4_plan_key else []
         
         if not selected_bausteine:
-            logging.warning("No Bausteine found in Chapter 4 results. Skipping 5.5.2.")
+            logging.warning("No Bausteine found in Chapter 4 results. Checklist for 5.5.2 will be empty.")
             return {name: {"bausteinPruefungen": []}}
 
-        # 2. Get all controls for these Bausteine from our catalog
-        all_controls_to_verify = []
+        # 2. For each Baustein, get its controls and build the structured checklist.
+        baustein_pruefungen_list = []
         for baustein in selected_bausteine:
             baustein_id_full = baustein.get("Baustein", "")
-            if not baustein_id_full: continue
+            if not baustein_id_full:
+                continue
+
             baustein_id = baustein_id_full.split(" ")[0]
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
-            for control in controls:
-                all_controls_to_verify.append({
-                    "id": control.get("id"),
-                    "title": control.get("title"),
-                    "baustein": baustein.get("Baustein"),
-                    "zielobjekt": baustein.get("Zielobjekt")
-                })
-        
-        # 3. Create the prompt
-        prompt_template = self._load_asset_text(definition["prompt_path"])
-        schema = self._load_asset_json(definition["schema_path"])
-        
-        controls_text = "\n".join([f"- {c['id']} {c['title']} (Zielobjekt: {c['zielobjekt']})" for c in all_controls_to_verify])
-        prompt = prompt_template.format(controls_to_verify=controls_text)
 
-        try:
-            generated_data = await self.ai_client.generate_json_response(prompt, schema)
-            logging.info(f"Successfully generated verification data for subchapter {definition['key']}")
-            return {name: generated_data}
-        except Exception as e:
-            logging.error(f"Failed to generate verification data for subchapter {definition['key']}: {e}", exc_info=True)
-            return {name: None}
+            anforderungen_list = []
+            for control in controls:
+                anforderungen_list.append({
+                    "nummer": control.get("id", "N/A"),
+                    "anforderung": control.get("title", "N/A"),
+                    "bewertung": "",  # Placeholder for the auditor's manual input
+                    "auditfeststellung": "",  # Placeholder for the auditor's manual input
+                    "abweichungen": ""  # Placeholder for the auditor's manual input
+                })
+            
+            baustein_pruefungen_list.append({
+                "baustein": baustein_id_full,
+                "zielobjekt": baustein.get("Zielobjekt", ""),
+                "anforderungen": anforderungen_list
+            })
+
+        logging.info(f"Successfully generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit.")
+        return {name: {"bausteinPruefungen": baustein_pruefungen_list}}
 
     async def run(self) -> dict:
-        """Executes the generation logic for all of Chapter 5."""
+        """
+        Executes the generation logic for Chapter 5.
+        """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         
+        # This stage depends on the audit plan from Chapter 4.
         try:
             ch4_results_path = f"{self.config.output_prefix}results/Chapter-4.json"
             chapter_4_data = self.gcs_client.read_json(ch4_results_path)
@@ -98,12 +82,9 @@ class Chapter5Runner:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
         
-        # Only one automated task (control verification) remains in this stage.
-        if not self.subchapter_definitions:
-            logging.warning("No automated subchapters defined for Chapter 5. Stage complete.")
-            return {}
+        # The only automated task is to generate the checklist.
+        # This is now a synchronous, deterministic function, so no 'await' is needed.
+        result = self._generate_control_checklist(chapter_4_data)
             
-        result = await self._process_control_verification(chapter_4_data)
-            
-        logging.info(f"Successfully aggregated results for all of stage {self.STAGE_NAME}")
+        logging.info(f"Successfully prepared data for stage {self.STAGE_NAME}")
         return result
