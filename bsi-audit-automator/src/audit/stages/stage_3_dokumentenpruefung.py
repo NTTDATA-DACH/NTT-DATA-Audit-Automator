@@ -71,7 +71,7 @@ class Chapter3Runner:
 
         # In a real RAG scenario, context would be fetched and added here.
         # For now, the prompt is static.
-        prompt = prompt_template.format(customer_id=self.config.customer_id)
+        prompt = prompt_template
 
         try:
             generated_data = await self.ai_client.generate_json_response(prompt, schema)

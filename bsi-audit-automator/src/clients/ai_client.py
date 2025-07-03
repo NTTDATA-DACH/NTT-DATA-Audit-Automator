@@ -14,7 +14,7 @@ from src.config import AppConfig
 
 # Constants for the AI client, aligned with the project brief.
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
-EMBEDDING_MODEL_NAME = "text-embedding-004"
+EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 
 # Constants for robust generation
 MAX_RETRIES = 5
