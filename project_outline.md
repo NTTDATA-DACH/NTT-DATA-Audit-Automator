@@ -26,6 +26,7 @@ The audit process and resulting report must be based on two key documents, which
     *   **Model:** `gemini-2.5-pro`
     *   **Max Output Tokens:** `65536` (Default API limit)  
     *   **API Calls:** Asynchronous calls via are required for performance.
+    *   **Embedding Model:** "gemini-embedding-001" with 3072 Dims
 *   **Parallelism:** Execute concurrent calls to the model using `asyncio` and an `asyncio.Semaphore` to limit connections (e.g., max 10).
 *   **Robust Error Handling:** Implement a retry loop (e.g., 5 attempts with exponential backoff) for model requests. Explicitly check the model's `finish_reason` and log any non-`OK` statuses with verbose error details.
 
@@ -38,6 +39,7 @@ To ensure a smooth and efficient development process, please adhere to the follo
     `Case: (A brief summary of my request)`
     `---`
     `Dixie: (A brief summary of your proposed solution and key details)`
+*   **How to test this change:** CLI or similar to test
 *   **Explain Your Reasoning:** Briefly explain the "why" behind your code and architectural decisions.
 *   **Track Changes:** For minor code changes (under 20 lines), please present them in a `diff` format. For larger changes, provide a clear explanation of what was modified.
 *   **No Silent Changes:** Never alter code or logic without explicitly stating the change. Focus only on implementing what the current prompt requests.
