@@ -83,7 +83,9 @@ resource "google_storage_bucket_object" "json_placeholder" {
   bucket       = google_storage_bucket.bsi_audit_bucket.name
   content_type = "application/json"
   # One Dummy 
-  content      = "{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}"
+  content      =<<EOT
+  "{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}"
+  EOT
 }
 
 # 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
