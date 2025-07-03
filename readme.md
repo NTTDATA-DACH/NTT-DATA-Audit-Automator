@@ -24,8 +24,8 @@ The Terraform configuration in the `terraform/` directory creates all necessary 
 The application code is deployed as a generic, reusable Cloud Run Job. This job contains all the logic for every stage of the audit.
 
 ```bash
-# From the project root directory:
-bash ./scripts/deploy-audit-job.sh
+# From the project src/ directory:
+bash ../scripts/deploy-audit-job.sh
 ```
 This script deploys the application container as a job named `bsi-audit-automator-job`, which can then be executed on demand to perform specific tasks.
 
@@ -48,8 +48,8 @@ Upload the customer's documentation (PDFs, etc.) to the GCS bucket created by Te
 All pipeline tasks are run using the interactive `execute-audit-job.sh` script. This is the primary script you will use for day-to-day operations.
 
 ```bash
-# From the project root directory:
-bash ./scripts/execute-audit-job.sh
+# From the projects src/ directory:
+bash ../scripts/execute-audit-job.sh
 ```
 
 This script will prompt you to select the task to execute. The correct workflow is:
