@@ -9,14 +9,16 @@ from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
+from src.clients.ai_client import AiClient
 
 class RagClient:
     """Client for Retrieval-Augmented Generation using Vertex AI Vector Search."""
 
-    def __init__(self, config: AppConfig, gcs_client: GcsClient):
+    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
         self.gcs_client = gcs_client
-        
+        self.ai_client = ai_client # Inject the AI client
+
         aiplatform.init(
             project=config.gcp_project_id,
             location=config.vertex_ai_region
@@ -37,9 +39,9 @@ class RagClient:
         chunk ID to its text content for fast lookups.
         """
         lookup_map = {}
-        try:
-            logging.info("Building chunk ID to text lookup map from all batch files...")
+        logging.info("Building chunk ID to text lookup map from all batch files...")
 
+        try:
             # Use the GCS client to find all embedding files
             embedding_blobs = self.gcs_client.list_files(prefix="vector_index_data/")
 
@@ -50,7 +52,7 @@ class RagClient:
 
                 logging.debug(f"Processing batch file for lookup map: {blob.name}")
                 jsonl_content = self.gcs_client.read_text_file(blob.name)
-
+                
                 for line in jsonl_content.strip().split('\n'):
                     try:
                         data = json.loads(line)
@@ -61,7 +63,7 @@ class RagClient:
                     except json.JSONDecodeError:
                         logging.warning(f"Skipping invalid JSON line in {blob.name}: '{line}'")
                         continue
-
+            
             logging.info(f"Successfully built lookup map with {len(lookup_map)} entries.")
             return lookup_map
         except Exception as e:
@@ -82,12 +84,21 @@ class RagClient:
         logging.info(f"Querying Vector DB for: '{query}'")
         context_str = ""
         try:
+            # 1. Embed the text query into a numerical vector first.
+            success, embeddings = self.ai_client.get_embeddings([query])
+            if not success or not embeddings:
+                logging.error("Failed to generate embedding for the RAG query.")
+                return "Error: Could not generate embedding for query."
+            
+            query_vector = embeddings[0]
+
+            # 2. Use the numerical vector to find neighbors.
             response = self.index_endpoint.find_neighbors(
                 deployed_index_id="bsi_deployed_index_kunde_x", # This must match the deployment
-                queries=[query],
+                queries=[query_vector],
                 num_neighbors=num_neighbors,
             )
-            
+
             if response and response[0]:
                 for neighbor in response[0]:
                     chunk_id = neighbor.id
