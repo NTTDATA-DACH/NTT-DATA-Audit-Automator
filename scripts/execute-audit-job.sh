@@ -89,16 +89,13 @@ done
 # --- Final gcloud Execution ---
 echo "🚀 Executing task for customer '${CUSTOMER_ID}' with args: [main.py ${TASK_ARGS}]"
 
-# Prepend the script name to the arguments, as the --args flag overrides the entire list.
-FULL_ARGS="main.py,${TASK_ARGS}"
-
 # NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
 # command arguments of the deployed job, allowing us to run any task.
-echo gcloud run jobs execute "bsi-audit-task-job" \
+gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
   --wait \
   --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},CUSTOMER_ID=${CUSTOMER_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE}" \
-  --args="${FULL_ARGS}"
+  --args="${TASK_ARGS}"
 
 echo "✅ Job execution for customer '${CUSTOMER_ID}' finished."

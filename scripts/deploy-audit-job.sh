@@ -27,8 +27,6 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --region "${REGION}" \
   --project "${PROJECT_ID}" \
   --task-timeout "7200" \
-  --command "python" \
-  --args="main.py,--help" \
   --service-account "${SERVICE_ACCOUNT}"
 
 echo "✅ Deployment complete."
