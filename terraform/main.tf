@@ -135,9 +135,19 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   # Manually construct the network string using the project NUMBER, not the ID.
   # This matches the specific format required by this API.
   network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
-
-  # Explicitly depend on the peering connection to avoid a race condition.
-  depends_on = [google_service_networking_connection.vertex_vpc_connection]
+ 
+  # --- NEW: DECLARATIVE INDEX DEPLOYMENT ---
+  # This block tells Terraform to automatically deploy our index to this endpoint.
+  # This removes the need for a manual gcloud command after the ETL runs.
+  deployed_indexes {
+    # This ID MUST match the one hardcoded in `src/clients/rag_client.py`
+    id           = "bsi_deployed_index_kunde_x"
+    index        = google_vertex_ai_index.bsi_audit_index.id
+    display_name = "BSI Deployed Index for ${var.customer_id}"
+  }
+ 
+  # The endpoint now depends on both the network and the index it needs to deploy.
+  depends_on = [google_service_networking_connection.vertex_vpc_connection, google_vertex_ai_index.bsi_audit_index]
 }
 
 # 3. IAM & PERMISSIONS: Applying the Principle of Least Privilege

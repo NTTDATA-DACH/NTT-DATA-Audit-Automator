@@ -1,3 +1,9 @@
+Case: You've pointed out that the markdown formatting in my last response was incorrect and have asked for just the clean content of `readme.md`.
+
+---
+Dixie: Understood. Apologies for the formatting issue. Here is the complete and correctly formatted content for the `readme.md` file as requested.
+
+---
 # BSI Grundschutz Audit Automator
 
 This project automates BSI Grundschutz security audits by transforming customer documentation into a structured report using a cloud-native, multi-stage pipeline on Google Cloud. It leverages a Retrieval-Augmented Generation (RAG) pattern with the Vertex AI Gemini API to ensure audit findings are contextually relevant and accurate.
@@ -51,9 +57,12 @@ All pipeline tasks are run using the interactive `execute-audit-task.sh` script.
 # From the project root directory:
 bash ./scripts/execute-audit-task.sh
 ```
-The script will prompt you to select:
-1.  **The Audit Type:** (e.g., `Zertifizierungsaudit`).
-2.  **The Task to Execute:** You can choose to run the ETL process, a single audit stage, all stages, or the final report generation. This script dynamically passes the correct arguments to the Cloud Run Job.
+
+This script will prompt you to select the task to execute. The correct workflow is:
+1.  First, run the **"Run ETL (Embedding)"** task. This processes the source documents and populates the Vector Search Index. You must wait for this to complete before proceeding (monitor in the GCP Console).
+2.  Once the ETL is done and the index is updated, you can run any audit stage (e.g., **"Run Single Audit Stage"** -> **"Chapter-1"**), run all stages, or generate the final report.
+
+The script dynamically passes the correct arguments and environment variables to the Cloud Run Job.
 
 ---
 
@@ -158,13 +167,12 @@ Each "Chapter" is an independent stage orchestrated by the `AuditController`.
 *   **When to use:** Run this once per project, or whenever you change the `Dockerfile` or core Python dependencies in `requirements.txt`.
 *   **What it does:** This script builds your Python application into a Docker container, pushes it to Google Artifact Registry, and deploys it as a generic Cloud Run Job named `bsi-audit-task-job`.
 
-### `scripts/execute-audit-task.sh`
+### `scripts/execute-audit-job.sh`
 *   **When to use:** This is your primary script for running any part of the audit pipeline.
 *   **What it does:** It's an interactive script that:
     1.  Fetches the `CUSTOMER_ID` and other necessary cloud resource details from your Terraform state.
-    2.  Prompts you to select the `AUDIT_TYPE`.
-    3.  Prompts you to select the specific **task** you want to run (e.g., ETL, Chapter-5, Generate Report).
-    4.  Constructs the appropriate `gcloud run jobs execute` command, passing the correct environment variables and command-line arguments to `main.py`.
+    2.  Prompts you to select the specific **task** you want to run (e.g., ETL, Chapter-5, Generate Report).
+    3.  Constructs the appropriate `gcloud run jobs execute` command, passing the correct environment variables and command-line arguments to `main.py`.
 
 ### `scripts/envs.sh`
 *   **When to use:** For local development and debugging only.
@@ -203,5 +211,3 @@ The application is configured entirely via environment variables passed by the `
 | `MAX_CONCURRENT_AI_REQUESTS` | No | Max parallel requests to the Gemini API. Defaults to `5`. |
 | `VERTEX_AI_REGION`| Yes | The region where Vertex AI resources are deployed. |
 | `TEST` | No | Set to `"true"` to enable test mode. Defaults to `false`. |
-
-```
