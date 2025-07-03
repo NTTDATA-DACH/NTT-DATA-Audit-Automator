@@ -11,7 +11,6 @@ class AppConfig:
     accidental modification after initialization.
     """
     gcp_project_id: str
-    customer_id: str
     source_prefix: str
     output_prefix: str
     audit_type: str
@@ -40,7 +39,7 @@ def load_config_from_env() -> AppConfig:
     load_dotenv()
 
     required_vars = [
-        "GCP_PROJECT_ID", "CUSTOMER_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX",
+        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX",
         "AUDIT_TYPE", "VERTEX_AI_REGION", "INDEX_ENDPOINT_ID"
     ]
     
