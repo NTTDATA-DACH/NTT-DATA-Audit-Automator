@@ -2,50 +2,54 @@
 import logging
 import json
 import asyncio
-from typing import List
+from typing import List, Dict, Any
 
-# Per imperative, use these specific imports for Vertex AI
-from google import genai
-from google.genai import types
-from google.genai.types import (
-    GenerateContentConfig,
-    # The following are not used in this file but were in the brief
-    # GoogleSearch,
-    # HttpOptions,
-    # Tool,
-)
+# EXCLUSIVE USE: As directed, all interactions now use the google.cloud.aiplatform SDK.
+from google.cloud import aiplatform
+from google.cloud.aiplatform.models import TextEmbeddingModel, GenerativeModel
+
 from src.config import AppConfig
 
-# Constants for the AI client
-# Per imperative from the brief:
-GENERATIVE_MODEL_NAME = "gemini-2.5-pro" 
-EMBEDDING_MODEL_NAME = "gemini-embedding-001"
+# Constants for the AI client, aligned with the project brief.
+GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
+# Using the latest, high-precision embedding model as requested.
+EMBEDDING_MODEL_NAME = "text-embedding-004"
 EMBEDDING_TASK_TYPE = "RETRIEVAL_DOCUMENT"
-EMBEDDING_BATCH_SIZE = 1
 
-# New constants for generation
+# Constants for robust generation
 MAX_RETRIES = 5
 MAX_CONCURRENT_REQUESTS = 10
 
 
 class AiClient:
-    """A client for all Vertex AI model interactions."""
+    """A client for all Vertex AI model interactions, using the aiplatform SDK."""
 
     def __init__(self, config: AppConfig):
-        """Initializes the Vertex AI client."""
+        """Initializes the Vertex AI client and required models."""
         self.config = config
-        self.client = genai.Client(
-            vertexai=True,
+
+        # Initialize the AI Platform SDK client
+        aiplatform.init(
             project=config.gcp_project_id,
             location=config.vertex_ai_region
         )
-        # Per imperative, add a semaphore for limiting concurrent connections
+
+        # Instantiate specific model clients
+        self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
+        self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
+
+        # Semaphore to limit concurrent API calls per project brief
         self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
+        logging.info(
+            f"Vertex AI Client instantiated using 'aiplatform' SDK for project "
+            f"'{config.gcp_project_id}' in region '{config.vertex_ai_region}'."
+        )
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generates vector embeddings for a list of text chunks.
+
+        This implementation now uses the aiplatform.TextEmbeddingModel.
 
         Args:
             texts: A list of text strings to embed.
@@ -56,74 +60,65 @@ class AiClient:
         if not texts:
             logging.warning("get_embeddings called with no texts. Returning empty list.")
             return []
-        
+
         logging.info(f"Requesting embeddings for {len(texts)} text chunks using model '{EMBEDDING_MODEL_NAME}'...")
-        all_embeddings = []
         try:
-            for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
-                batch = texts[i:i + EMBEDDING_BATCH_SIZE]
-                logging.debug(f"Processing batch {i//EMBEDDING_BATCH_SIZE + 1}...")
-                
-                # BUG FIX: Corrected API call. 'task_type' is a direct argument, and 'output_dimensionality'
-                # is not supported by gemini-embedding-001.
-                result = self.client.embed_content(
-                    model=EMBEDDING_MODEL_NAME,
-                    content=batch,
-                    task_type=EMBEDDING_TASK_TYPE,
-                )
-                # BUG FIX: The response is a dict with an 'embedding' key.
-                all_embeddings.extend(item['embedding'] for item in result)
-            
-            logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
-            return all_embeddings
+            # The SDK handles batching automatically when auto_batch_size is True.
+            response = self.embedding_model.get_embeddings(
+                texts,
+                auto_batch_size=True
+            )
+            # The response is a list of TextEmbedding objects; we need to extract the .values
+            embeddings = [embedding.values for embedding in response]
+            logging.info(f"Successfully generated {len(embeddings)} embeddings.")
+            return embeddings
         except Exception as e:
             logging.error(f"Failed to generate embeddings: {e}", exc_info=True)
             raise
 
-    async def generate_json_response(self, prompt: str, json_schema: dict) -> dict:
+    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates a JSON response from the AI model, enforcing a specific schema.
         Implements an async retry loop with exponential backoff and connection limiting.
         """
-        # Note on Max Output Tokens: The brief specifies 65536, but this model family's
-        # documented maximum is 8192. Using a higher value would cause an API error.
-        # We are using the documented maximum to fulfill the intent of the requirement.
-        gen_config = GenerateContentConfig(
-            response_mime_type="application/json",
-            # FIX: The google-genai library forbids the '$schema' key in the schema definition.
-            # We create a clean copy of the schema without this key before passing it.
-            # This leaves the original schema files untouched and valid for other tools.
-            response_schema={k: v for k, v in json_schema.items() if k != "$schema"},
-            max_output_tokens=65536,
-            temperature=0.2, # Lower temperature for more deterministic, factual output
-        )
-        
+        # The generation_config is now a dictionary, which is simpler to manage.
+        gen_config = {
+            "response_mime_type": "application/json",
+            # CRITICAL FIX: The API forbids the '$schema' key. We create a clean
+            # copy of the schema without it before passing it to the model.
+            "response_schema": {k: v for k, v in json_schema.items() if k != "$schema"},
+            # Using the documented maximum to prevent API errors.
+            "max_output_tokens": 8192,
+            "temperature": 0.2,
+        }
+
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
                     logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
-                    # CORRECT IMPLEMENTATION: Use the client's dedicated async interface
-                    # as explicitly required by the project brief.
-                    response = await self.client.aio.models.generate_content(
-                        model=GENERATIVE_MODEL_NAME,
-                        contents=[prompt],
-                        # Use the correct parameter name 'config'
-                        config=gen_config,
-                    )
-                    
-                    # Explicitly check the model's finish reason per the brief.
-                    if not response.candidates:
-                         raise ValueError("The model response contained no candidates.")
 
+                    response = await self.generative_model.generate_content_async(
+                        contents=[prompt],
+                        generation_config=gen_config,
+                    )
+
+                    if not response.candidates:
+                        raise ValueError("The model response contained no candidates.")
+
+                    # Explicitly check the model's finish reason per the brief's requirements.
                     finish_reason = response.candidates[0].finish_reason.name
-                    # MAX_TOKENS is a valid, successful finish reason. We check for others.
                     if finish_reason not in ["STOP", "MAX_TOKENS"]:
-                        safety_ratings = [str(rating) for rating in response.candidates[0].safety_ratings]
+                        safety_ratings_str = "N/A"
+                        if response.candidates[0].safety_ratings:
+                            safety_ratings_str = ", ".join([
+                                f"{rating.category.name}: {rating.probability.name}"
+                                for rating in response.candidates[0].safety_ratings
+                            ])
                         logging.warning(
                             f"Attempt {attempt + 1} finished with non-OK reason: '{finish_reason}'. "
-                            f"Safety Ratings: {safety_ratings}. Retrying..."
+                            f"Safety Ratings: [{safety_ratings_str}]. Retrying..."
                         )
-                        await asyncio.sleep(2 ** attempt) # Exponential backoff
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
                         continue
 
                     # The response.text is a JSON string because we set response_mime_type.
@@ -132,13 +127,10 @@ class AiClient:
                     return response_json
 
                 except Exception as e:
-                    # Log with full exception info only in test mode for cleaner prod logs
-                    log_with_exc = self.config.is_test_mode
-                    logging.error(f"Attempt {attempt + 1} failed with exception: {e}", exc_info=log_with_exc)
+                    logging.error(f"Attempt {attempt + 1} failed with exception: {e}", exc_info=self.config.is_test_mode)
                     if attempt == MAX_RETRIES - 1:
-                        logging.critical("AI generation failed after all retries.")
-                        raise # Re-raise the exception on the last attempt
+                        logging.critical("AI generation failed after all retries.", exc_info=True)
+                        raise
                     await asyncio.sleep(2 ** attempt)
-        
-        # This line should not be reached if MAX_RETRIES > 0
-        raise Exception("AI generation failed after all retries without raising a specific exception.")
+
+        raise RuntimeError("AI generation failed after all retries without raising a final exception.")
