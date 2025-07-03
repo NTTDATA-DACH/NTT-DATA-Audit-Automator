@@ -84,7 +84,7 @@ resource "google_storage_bucket_object" "json_placeholder" {
   content_type = "application/json"
   # One Dummy 
   content      =<<EOT
-  "{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}"
+{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}
   EOT
 }
 
