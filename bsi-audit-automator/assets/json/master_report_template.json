@@ -1,434 +1,305 @@
 {
-  "bsiAuditReport": {
-    "titlePage": {
-      "reportTitle": "Auditbericht im Rahmen der Zertifizierung nach ISO 27001 auf der Basis von IT-Grundschutz",
-      "auditedInstitution": null,
-      "certificationId": null
+  "catalog": {
+    "uuid": "d186e90d-ecbd-4d07-8311-4603deb60225",
+    "metadata": {
+      "title": "Gesamtkatalog BSI Grundschutz Kompendium 2023",
+      "last-modified": "2025-06-27T17:42:20.097143+00:00",
+      "version": "1.0.0",
+      "oscal-version": "1.1.2"
     },
-    "allgemeines": {
-      "chapterNumber": "1",
-      "title": "Allgemeines",
-      "description": "ISO 27001-Zertifizierungen auf der Basis von IT-Grundschutz geben Institutionen die Möglichkeit, ihre Bemühungen um Informationssicherheit und die erfolgreiche Umsetzung internationaler Normen unter Anwendung der IT-Grundschutz-Methodik nach innen und außen zu dokumentieren...",
-      "versionshistorie": {
-        "subchapterNumber": "1.1",
-        "title": "Versionshistorie",
-        "description": "Die Version des Auditberichts wird durch den Auditor fortgeschrieben. Jede Änderung muss in der Versionshistorie dokumentiert werden.",
-        "tableId": "Tabelle 1",
-        "headers": ["Datum", "Version", "Verfasser", "Bemerkungen"],
-        "rows": []
-      },
-      "auditierteInstitution": {
-        "subchapterNumber": "1.2",
-        "title": "Auditierte Institution",
-        "description": "Kontaktinformationen des Antragstellers (auditierte Institution):",
-        "institutionInfo": {
-          "tableId": "Tabelle 2",
-          "headers": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"],
-          "rows": []
-        },
-        "ansprechpartner": {
-          "tableId": "Tabelle 3",
-          "description": "Ansprechpartner für die Zertifizierung beim Antragsteller:",
-          "headers": ["Name", "Funktion", "Telefon", "E-Mail", "Optional: Abweichende Anschrift"],
-          "rows": []
-        }
-      },
-      "auditteam": {
-        "subchapterNumber": "1.3",
-        "title": "Auditteam",
-        "description": "Der Ansprechpartner für die Zertifizierung wird in allen Prozessschritten in Zusammenhang mit dem Verfahren eingebunden.",
-        "auditteamleiter": {
-          "tableId": "Tabelle 4",
-          "description": "Die Auditteamleitung erfolgte durch folgenden vom BSI zertifizierten Auditor:",
-          "headers": ["Name", "Institution", "Zertifizierungsnummer", "Gültigkeit Zertifikat", "Straße / Hausnummer", "PLZ / Ort", "Telefon", "E-Mail", "Datum der Freigabe der Unabhängigkeitserklärung"],
-          "rows": []
-        },
-        "auditoren": {
-          "tableId": "Tabelle 5",
-          "description": "Folgende Auditoren haben an der Auditierung mitgewirkt:",
-          "headers": ["Name", "Institution", "Zertifizierungsnummer", "Gültigkeit Zertifikat", "Straße / Hausnummer", "PLZ / Ort", "Telefon", "E-Mail", "Datum der Freigabe der Unabhängigkeitserklärung"],
-          "rows": []
-        },
-        "fachexperten": {
-            "tableId": "Tabelle 6",
-            "description": "Folgende Fachexperten haben an der Auditierung mitgewirkt:",
-            "headers": ["Name", "Institution", "Zertifizierungsnummer", "Gültigkeit Zertifikat", "Straße / Hausnummer", "PLZ / Ort", "Telefon", "E-Mail", "Datum der Freigabe der Unabhängigkeitserklärung"],
-            "rows": []
-        },
-        "berater": {
-            "tableId": "Tabelle 7",
-            "description": "Folgende Berater haben beim Aufbau des Informationsverbundes und der Vorbereitung auf die Zertifizierung mitgewirkt:",
-            "headers": ["Name", "Institution", "Zertifizierungsnummer (falls vorhanden)"],
-            "rows": []
-        }
-      },
-      "informationsverbund": {
-        "subchapterNumber": "1.4",
-        "title": "Informationsverbund",
-        "description": "Die nachfolgenden Informationen können dem Zertifizierungsantrag oder dem gültigen Zertifikat entnommen werden.",
-        "content": [
-          { "type": "prose", "label": "Kurzbezeichnung", "text": null },
-          { "type": "prose", "label": "Kurzbeschreibung", "text": null }
-        ]
-      },
-      "audittyp": {
-        "subchapterNumber": "1.5",
-        "title": "Audittyp",
-        "description": "Es handelt sich bei dem durchgeführten Audit um ein Wählen Sie ein Element aus..",
-        "content": []
-      },
-      "auditprojektierung": {
-        "subchapterNumber": "1.6",
-        "title": "Auditprojektierung",
-        "description": "In diesem Kapitel wird der zeitliche Ablauf der Auditierung in tabellarischer Form aufgeführt. Der Plan enthält die Anzahl der benötigten Audittage (alle Angaben ohne Reisezeiten).",
-        "auditPhases": {
-          "tableId": "Tabelle 8",
-          "headers": ["Audit-Phasen", "Datum / Zeitraum", "Aufwand (in PT)"],
-          "rows": []
-        },
-        "anmerkungen": {
-          "tableId": "Tabelle 9",
-          "description": "Sollten zu den Angaben für die einzelnen Audit-Phasen weitere Anmerkungen erforderlich sein, so können diese hier ergänzt werden.",
-          "content": null
-        }
-      }
-    },
-    
-"dokumentenpruefung": {
-  "chapterNumber": "3",
-  "title": "Dokumentenprüfung",
-  "description": "Bei der Sichtung der Referenzdokumente werden inhaltliche und formelle Prüfungen durchgeführt. Die nachfolgenden Prüfpunkte werden mit einer Feststellung zu den Einzelprüfungen geschlossen. Das Votum bezieht sich auf den Stand nach einer möglichen Nachbesserung durch den Antragsteller. Abweichungen und Empfehlungen werden in den Feldern zu der jeweiligen Feststellung aufgezählt und einheitlich über die Liste der Abweichungen und Empfehlungen in Kapitel 7.2 “Liste der Abweichungen und Empfehlungen“ dokumentiert und nachverfolgt.",
-  "aktualitaetDerReferenzdokumente": {
-    "subchapterNumber": "3.1",
-    "title": "Aktualität der Referenzdokumente",
-    "description": "Die Aktualität der verwendeten Referenzdokumente muss festgestellt werden.",
-    "tableId": "Tabelle 13",
-    "content": [
-      { "type": "question", "questionText": "Wurden alle Referenzdokumente A.0 gemäß den Vorgaben von A.0.3 Lenkung von Dokumenten überarbeitet?", "answer": null, "answerType": "boolean" },
-      { "type": "question", "questionText": "Wurden alle Dateien zu den Referenzdokumenten A.1, A.2, A.3, A.5 und A.6 für das Audit neu erstellt?", "answer": null, "answerType": "boolean" },
-      { "type": "question", "questionText": "Wurden alle Maßnahmen im A.4 IT-Grundschutz-Check innerhalb der letzten 12 Monate neu bewertet?", "answer": null, "answerType": "boolean" },
-      { "type": "question", "questionText": "Datum der letzten inhaltlichen Änderung im Referenzdokument A.4 IT-Grundschutz-Check", "answer": null, "answerType": "date" },
-      { "type": "finding", "label": "Feststellung:", "findingText": null }
-    ]
-  },
-  "sicherheitsleitlinieUndRichtlinienInA0": {
-    "subchapterNumber": "3.2",
-    "title": "Sicherheitsleitlinie und -richtlinien in A.0",
-    "description": "Für die Prüfung der Referenzdokumente in A.0 werden folgende Unterlagen geprüft:\n- A.0.1 Leitlinie zur Informationssicherheit\n- A.0.2 Richtlinie zur Risikoanalyse\n- A.0.3 Richtlinie zur Lenkung von Dokumenten und Aufzeichnungen\n- A.0.4 Richtlinie zur internen ISMS-Auditierung\n- A.0.5 Richtlinie zur Lenkung von Korrektur- und Vorbeugungsmaßnahmen",
-    "tableId": "Tabelle 14",
-    "content": [
-      { "type": "question", "questionText": "Ist die Leitlinie zur Informationssicherheit (A.0.1) sinnvoll und angemessen für den Antragsteller? Erfüllt die Leitlinie zur Informationssicherheit alle Aspekte gemäß den Anforderungen aus dem Baustein ISMS.1?", "answer": null, "answerType": "boolean" },
-      { "type": "question", "questionText": "Decken sich die Sicherheitsziele aus der Leitlinie mit den Sicherheitsanforderungen der restlichen Referenzdokumente (A.0.2 bis A.0.5)?", "answer": null, "answerType": "boolean" },
-      { "type": "question", "questionText": "Werden die Sicherheitsrichtlinien (A.0.1 bis A.0.5) durch das Management getragen und wurden sie veröffentlicht?", "answer": null, "answerType": "boolean" },
-      { "type": "finding", "label": "Feststellung:", "findingText": null }
-    ]
-  },
-  "strukturanalyseA1": {
-    "subchapterNumber": "3.3",
-    "title": "Strukturanalyse A.1",
-    "description": "In diesem Kapitel wird der zu untersuchende Informationsverbund dargestellt. Nähere Informationen zur Strukturanalyse finden sich im BSI-Standard 200-2.",
-    "definitionDesInformationsverbundes": {
-      "subchapterNumber": "3.3.1",
-      "title": "Definition des Informationsverbundes",
-      "description": "Die Nachvollziehbarkeit der Abgrenzung des Informationsverbundes wird durch den Auditteamleiter geprüft.",
-      "tableId": "Tabelle 15",
-      "content": [
-        { "type": "question", "questionText": "Ist der Informationsverbund eindeutig abgegrenzt?", "answer": null, "answerType": "boolean" },
-        { "type": "question", "questionText": "Sind alle infrastrukturellen, organisatorischen, personellen und technischen Komponenten im Informationsverbund enthalten, die zur Aufgabenerfüllung notwendig sind?", "answer": null, "answerType": "boolean" },
-        { "type": "question", "questionText": "Sind die Schnittstellen zu allen weiteren Prozessen definiert?", "answer": null, "answerType": "boolean" },
-        { "type": "finding", "label": "Feststellung:", "findingText": null }
-      ]
-    },
-    "bereinigterNetzplan": {
-      "subchapterNumber": "3.3.2",
-      "title": "Bereinigter Netzplan",
-      "description": "Die Institution kann einen bereinigten Netzplan vorlegen.",
-      "tableId": "Tabelle 16",
-      "content": [
-          { "type": "question", "questionText": "Optional: Liegt ein aktueller und vollständiger bereinigter Netzplan vor?", "answer": null, "answerType": "boolean" },
-          { "type": "question", "questionText": "Sind alle Komponenten im Netzplan mit den korrekten Bezeichnern versehen?", "answer": null, "answerType": "boolean" },
-          { "type": "finding", "label": "Feststellung:", "findingText": null }
-      ]
-    },
-    "listeDerGeschaeftsprozesse": {
-      "subchapterNumber": "3.3.3",
-      "title": "Liste der Geschäftsprozesse",
-      "description": "In der Liste der Geschäftsprozesse muss jeder Geschäftsprozess des Informationsverbundes vollständig erfasst sein.",
-      "tableId": "Tabelle 17",
-      "content": [
-          { "type": "question", "questionText": "Enthält die Liste der Geschäftsprozesse alle benötigten Informationen?", "answer": null, "answerType": "boolean" },
-          { "type": "finding", "label": "Feststellung:", "findingText": null }
-      ]
-    }
-  },
-  "schutzbedarfsfeststellungA2": {
-      "subchapterNumber": "3.4",
-      "title": "Schutzbedarfsfeststellung A.2",
-      "description": "In diesem Kapitel werden die Ergebnisse der Schutzbedarfsfeststellung dargestellt. Nähere Informationen zur Schutzbedarfsfeststellung finden sich im BSI-Standard 200-2.",
-      "definitionDerSchutzbedarfskategorien": {
-          "subchapterNumber": "3.4.1",
-          "title": "Definition der Schutzbedarfskategorien",
-          "description": "Die Schutzbedarfskategorien werden anhand von möglichen Schäden definiert.",
-          "tableId": "Tabelle 26",
-          "content": [
-              { "type": "question", "questionText": "Ist die Definition der Schutzbedarfskategorien plausibel und für den Informationsverbund angemessen?", "answer": null, "answerType": "boolean" },
-              { "type": "question", "questionText": "Wurden mehr als drei Schutzbedarfskategorien definiert?", "answer": null, "answerType": "boolean" },
-              { "type": "finding", "label": "Feststellung:", "findingText": null }
-          ]
-      }
-  },
-  "itGrundschutzCheckA4": {
-      "subchapterNumber": "3.6",
-      "title": "IT-Grundschutz-Check A.4",
-      "description": "In diesem Kapitel werden die Ergebnisse des IT-Grundschutz-Checks dargestellt. Nähere Informationen zum IT-Grundschutz-Check finden sich im BSI-Standard 200-2.",
-      "detailsZumITGrundschutzCheck": {
-          "subchapterNumber": "3.6.1",
-          "title": "Details zum IT-Grundschutz-Check",
-          "tableId": "Tabelle 37",
-          "content": [
-              { "type": "question", "questionText": "Wurde zu jeder Anforderung der Umsetzungsstatus erhoben?", "answer": null, "answerType": "boolean" },
-              { "type": "question", "questionText": "Wurden alle Anforderungen mit Umsetzungsstatus „entbehrlich“ plausibel begründet?", "answer": null, "answerType": "boolean" },
-              { "type": "question", "questionText": "Sind alle MUSS-Teilanforderungen erfüllt?", "answer": null, "answerType": "boolean" },
-              { "type": "question", "questionText": "Wurden die nicht oder nur teilweise umgesetzten Anforderungen im Referenzdokument A.6 dokumentiert?", "answer": null, "answerType": "boolean" },
-              { "type": "question", "questionText": "Sind alle Anforderungen innerhalb der letzten 12 Monate überprüft worden?", "answer": null, "answerType": "boolean" },
-              { "type": "finding", "label": "Feststellung:", "findingText": null }
-          ]
-      }
-  },
-  "ergebnisDerDokumentenpruefung": {
-    "subchapterNumber": "3.9",
-    "title": "Ergebnis der Dokumentenprüfung",
-    "description": "An dieser Stelle wird die Entscheidung zur Weiterführung des Audits mit der Vor-Ort-Prüfung dokumentiert.",
-    "tableId": "Tabelle 44",
-    "content": [
-      { "type": "question", "questionText": "Ist eine Fortführung des Audits mit der Vor-Ort-Prüfung möglich?", "answer": null, "answerType": "boolean" },
-      { "type": "finding", "label": "Votum Dokumentenprüfung:", "findingText": null }
-    ]
-  }
-},
-      "erstellungEinesPruefplans": {
-        "chapterNumber": "4",
-        "title": "Erstellung eines Prüfplans",
-        "auditplanung": {
-          "subchapterNumber": "4.1",
-          "title": "Auditplanung",
-          "description": "Im Informationsverbund werden [Anzahl] Bausteine modelliert. Während der Zertifikatslaufzeit müssen [Anzahl] Bausteine geprüft werden.",
-          "auswahlBausteineErstRezertifizierung": {
-            "subchapterNumber": "4.1.1",
-            "title": "Auswahl Bausteine Erst-/Rezertifizierungsverfahren",
-            "description": "Für das Erst- bzw. Rezertifizierungsverfahren sind folgende Bausteine geplant:",
-            "tableId": "Tabelle 45",
-            "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
-            "rows": []
-          },
-          "auswahlBausteineUeberwachungsaudit1": {
-            "subchapterNumber": "4.1.2",
-            "title": "Auswahl Bausteine 1. Überwachungsaudit",
-            "description": "Für das 1. Überwachungsaudit sind folgende Bausteine geplant:",
-            "tableId": "Tabelle 46",
-            "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
-            "rows": []
-          },
-          "auswahlBausteineUeberwachungsaudit2": {
-            "subchapterNumber": "4.1.3",
-            "title": "Auswahl Bausteine 2. Überwachungsaudit",
-            "description": "Für das 2. Überwachungsaudit sind folgende Bausteine geplant:",
-            "tableId": "Tabelle 47",
-            "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
-            "rows": []
-          },
-          "auswahlStandorte": {
-            "subchapterNumber": "4.1.4",
-            "title": "Auswahl Standorte",
-            "description": "Die Standorte des Informationsverbundes werden über die Zertifikatslaufzeit wie folgt auditiert:",
-            "tableId": "Tabelle 48",
-            "headers": ["Standort", "Erst- bzw. Rezertifizierung", "1. Überwachungsaudit", "2. Überwachungsaudit", "Begründung für die Auswahl"],
-            "rows": []
-          },
-          "auswahlMassnahmenAusRisikoanalyse": {
-            "subchapterNumber": "4.1.5",
-            "title": "Auswahl Maßnahmen aus der Risikoanalyse",
-            "description": "Auswahl der zu prüfenden Maßnahmen, die aus der Risikoanalyse abgeleitet wurden.",
-            "tableId": "Tabelle 49",
-            "headers": ["Maßnahme", "Risikoanalyse", "Zielobjekt", "Begründung zur Auswahl"],
-            "rows": []
-          }
-        }
-      },
-      "vorOrtAudit": {
-            "chapterNumber": "5",
-            "title": "Vor-Ort-Audit",
-            "description": "Während des Vor-Ort-Audits wird das Sicherheitskonzept / ISMS durch den Auditor geprüft. Die nachfolgenden Prüfpunkte werden mit einer Feststellung zu den Einzelprüfungen geschlossen. Das Votum bezieht sich auf den Stand nach einer möglichen Nachbesserung durch den Antragsteller. Abweichungen und Empfehlungen werden in den Feldern zu der jeweiligen Feststellung aufgezählt und einheitlich über die Liste der Abweichungen und Empfehlungen in Kapitel 7.2 “Abweichungen und Empfehlungen“ dokumentiert und nachverfolgt.",
-            "wirksamkeitDesSicherheitsmanagementsystems": {
-              "subchapterNumber": "5.1",
-              "title": "Wirksamkeit des Sicherheitsmanagementsystems",
-              "description": "Das Sicherheitsmanagementsystem bleibt aufrechterhalten, wenn alle wichtigen Prozesse des Informationsverbundes dokumentiert sind und diese Prozesse vollständig etabliert sind.",
-              "tableId": "Tabelle 50",
-              "content": [
-                { "type": "question", "questionText": "Ist das ISMS effektiv und effizient im Einsatz? (Interview, Gesamteindruck)", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 4 organisiert?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Werden die in den Sicherheitsleitlinien vorgegebenen Ziele erreicht?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Werden alle wichtigen Prozesse des Informationsverbundes dokumentiert?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Ist der Sicherheitsprozess konform zum BSI-Standard 200-2, Kapitel 5 dokumentiert?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Sind die Informationen konform zum BSI-Standard 200-2, Kapitel 5.1 klassifiziert?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Wird der Verbesserungsprozess gelebt und das ISMS kontinuierlich verbessert?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Erfolgt die Überprüfung des Informationssicherheitsprozesses anhand von Kennzahlen?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Erfolgt die Bewertung des ISMS mit Hilfe eines Reifegradmodells?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Wird die Umsetzung von Maßnahmen des Realisierungsplans überprüft?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Erfolgt die Übernahme der Gesamtverantwortung durch eine Managementbewertung?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Datum der letzten Managementbewertung:", "answer": null, "answerType": "date" },
-                { "type": "finding", "label": "Feststellung:", "findingText": null }
-              ]
-            },
-            "aenderungenAmInformationsverbund": {
-              "subchapterNumber": "5.2",
-              "title": "Änderungen am Informationsverbund",
-              "description": "Alle Änderungen am Informationsverbund müssen geprüft werden. Änderungen am Informationsverbund, die Auswirkungen auf die Aufrechterhaltung des Zertifikats haben, müssen insbesondere geprüft werden.",
-              "tableId": "Tabelle 51",
-              "content": [
-                { "type": "question", "questionText": "Liegen Änderungen am Informationsverbund vor?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Sind alle Änderungen am Informationsverbund der Zertifizierungsstelle des BSI mitgeteilt wurden?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Erfordern die Änderungen am Informationsverbund eine Rezertifizierung?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Sind die Änderungen in der Dokumentation des Sicherheitskonzeptes kontinuierlich eingeflossen?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Sind die dokumentierten Änderungen gemäß IT-Grundschutz-Methodik (BSI-Standard 200-2) und des IT-Grundschutz-Kompendiums umgesetzt?", "answer": null, "answerType": "boolean" },
-                { "type": "question", "questionText": "Wird durch den Wegfall / die Hinzunahme von Komponenten die Sicherheit des Informationsverbundes beeinträchtigt?", "answer": null, "answerType": "boolean" },
-                { "type": "finding", "label": "Feststellung:", "findingText": null }
-              ]
-            },
-            "verifikationDesITGrundschutzChecks": {
-              "subchapterNumber": "5.5",
-              "title": "Verifikation des IT-Grundschutz-Checks",
-              "zusammenfassung": {
-                "subchapterNumber": "5.5.1",
-                "title": "Zusammenfassung des IT-Grundschutz-Checks",
-                "description": "Der Auditor prüft im IT-Grundschutz-Check, inwiefern jede einzelne Anforderung umgesetzt wird. Die Ergebnisse des IT-Grundschutz-Checks A.4 liegen vor.",
-                "tableId": "Tabelle 56",
-                "content": [
-                  { "type": "question", "questionText": "Stimmt der im IT-Grundschutz-Check festgestellte Umsetzungsstatus zu den Anforderungen mit dem tatsächlich vorhandenen Informationssicherheitszustand des jeweiligen Zielobjekts überein?", "answer": null, "answerType": "boolean" },
-                  { "type": "question", "questionText": "Ist die Begründung der entbehrlichen Anforderungen zulässig und nachvollziehbar? Der Auditor begründet diesen Sachverhalt explizit in der Bausteinprüfung.", "answer": null, "answerType": "boolean" },
-                  { "type": "question", "questionText": "Sind alle Anforderungen mit dem Umsetzungsstatus “teilweise“ oder \"nein\" im Referenzdokument A.6 enthalten?", "answer": null, "answerType": "boolean" },
-                  { "type": "finding", "label": "Feststellung:", "findingText": null }
-                ]
-              },
-              "einzelergebnisse": {
-                "subchapterNumber": "5.5.2",
-                "title": "Einzelergebnisse des IT-Grundschutz-Checks",
-                "description": "Für jeden im Rahmen der Auditplanung ausgewählten Baustein überprüft der Auditor durch Inspektion des jeweiligen Zielobjekts, ob die Anforderungen angemessen umgesetzt werden. Das Ergebnis der einzelnen Überprüfungen ist im Folgenden dokumentiert.",
-                "bausteinPruefungen": [
+    "groups": [
+      {
+        "id": "ISMS",
+        "title": "ISMS: Sicherheitsmanagement",
+        "class": "main-group",
+        "groups": [
+          {
+            "id": "ISMS.1",
+            "title": "Sicherheitsmanagement",
+            "class": "baustein",
+            "controls": [
+              {
+                "id": "ISMS.1.A1",
+                "title": "Übernahme der Gesamtverantwortung für Informationssicherheit durch die Leitung (B)",
+                "class": "Management",
+                "props": [
                   {
-                    "baustein": null,
-                    "zielobjekt": null,
-                    "auditiertAm": null,
-                    "auditor": null,
-                    "befragtWurde": null,
-                    "anforderungen": [
+                    "name": "level",
+                    "value": "1",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "phase",
+                    "value": "Initiation",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "practice",
+                    "value": "GOV",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_c",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_i",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_a",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  }
+                ],
+                "parts": [
+                  {
+                    "id": "isms.1.a1-m1",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 1: Partial",
+                    "class": "maturity-level-partial",
+                    "parts": [
                       {
-                        "nummer": null,
-                        "anforderung": null,
-                        "bewertung": null,
-                        "dokuAntragsteller": null,
-                        "pruefmethode": [],
-                        "auditfeststellung": null,
-                        "abweichungen": null
+                        "name": "statement",
+                        "prose": "Die Institutionsleitung hat die Verantwortung für Informationssicherheit nur mündlich oder informell anerkannt. Die Übernahme der Verantwortung ist nicht dokumentiert und wird nicht aktiv kommuniziert, was zu Unklarheiten bei den Mitarbeitenden führt."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "In dieser Stufe wird die Verantwortung oft nur reaktiv im Falle eines Sicherheitsvorfalls oder einer externen Prüfung erwähnt. Es gibt keine formalen Dokumente wie eine Ernennungsurkunde für den ISB oder eine offizielle Leitlinie."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer befragt Führungskräfte und stellt fest, ob sie ihre Verantwortung für die Informationssicherheit verstehen und wahrnehmen. Es wird geprüft, ob eine formale Zuweisung der Gesamtverantwortung fehlt."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a1-m2",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 2: Foundational",
+                    "class": "maturity-level-foundational",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Gesamtverantwortung für die Informationssicherheit ist formal der Institutionsleitung zugewiesen, z. B. in einer Geschäftsordnung. Die Leitung nimmt diese Verantwortung jedoch nur passiv wahr und delegiert die Aufgaben vollständig ohne aktive Steuerung oder Kontrolle."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Zuweisung der Verantwortung ist in einem offiziellen Dokument festgehalten. Die Leitung genehmigt Budgets, greift aber nicht proaktiv in die Gestaltung des Sicherheitsprozesses ein und informiert sich nur unregelmäßig über den Status."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer sichtet Dokumente wie die Geschäftsordnung, um die formale Zuweisung der Verantwortung zu verifizieren. Es wird durch Interviews geprüft, inwieweit die Leitung den Sicherheitsprozess aktiv steuert und kontrolliert."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a1-m3",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 3: Defined",
+                    "class": "maturity-level-defined",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Institutionsleitung MUSS die Gesamtverantwortung für Informationssicherheit in der Institution übernehmen. Dies MUSS für alle Beteiligten deutlich erkennbar sein. Die Institutionsleitung MUSS den Sicherheitsprozess initiieren, steuern und kontrollieren. Die Institutionsleitung MUSS die Zuständigkeiten für Informationssicherheit festlegen und die zuständigen Mitarbeitenden mit den erforderlichen Kompetenzen und Ressourcen ausstatten. Die Institutionsleitung MUSS sich regelmäßig über den Status der Informationssicherheit sowie über mögliche Risiken und Konsequenzen aufgrund fehlender Sicherheitsmaßnahmen informieren lassen."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Übernahme der Verantwortung wird durch eine von der Leitung unterzeichnete Sicherheitsleitlinie dokumentiert. Regelmäßige Meetings (z. B. quartalsweise) zwischen der Leitung und dem ISB werden etabliert, um den Status und die Risiken zu besprechen. Die Ergebnisse dieser Meetings werden protokolliert."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer prüft die unterzeichnete Sicherheitsleitlinie. Es werden Protokolle der Management-Meetings zur Informationssicherheit eingesehen. Interviews mit Mitarbeitenden bestätigen, dass die Rolle der Leitung im Sicherheitsprozess klar und bekannt ist."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a1-m4",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 4: Enhanced",
+                    "class": "maturity-level-enhanced",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Institutionsleitung lebt die Informationssicherheit aktiv vor ('Tone at the Top'). Sie hinterfragt die erhaltenen Statusberichte kritisch, fordert tiefere Analysen bei Abweichungen und verfolgt die Umsetzung von Maßnahmen zur Risikobehandlung konsequent nach. Die Einhaltung der Sicherheitspolicies wird auch auf Leitungsebene demonstriert."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Leitung nimmt aktiv an wichtigen Sensibilisierungsmaßnahmen teil. Entscheidungen zur Risikobehandlung werden nicht nur dokumentiert, sondern auch mit einer klaren Begründung für die gewählte Option (z. B. Akzeptanz, Minderung) versehen. Ein dediziertes Risikokomitee unter Vorsitz eines Mitglieds der Institutionsleitung wird eingerichtet."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer analysiert die Protokolle des Risikokomitees und die dokumentierten Risikoentscheidungen auf ihre Nachvollziehbarkeit. Es wird geprüft, ob die Leitung bei der Zuweisung von Ressourcen für Sicherheitsmaßnahmen eine klare Priorisierung basierend auf dem Geschäftsrisiko vornimmt."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a1-m5",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 5: Comprehensive",
+                    "class": "maturity-level-comprehensive",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Informationssicherheitsziele sind vollständig in die übergeordneten Geschäftsziele und die strategische Planung der Institution integriert. Die Leistung im Bereich der Informationssicherheit ist Teil der Zielvereinbarungen und Leistungsbeurteilungen für das obere Management. Die Leitung fördert aktiv eine positive Sicherheitskultur und investiert proaktiv in zukünftige Sicherheitstechnologien."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "In den jährlichen Geschäftsberichten wird über die Informationssicherheitslage berichtet. Die Zielerreichung wird anhand von Key Performance Indicators (KPIs) gemessen, die in einem Management-Dashboard visualisiert werden. Die Leitung initiiert und finanziert Forschungsprojekte zur Abwehr zukünftiger Bedrohungen."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer überprüft die strategischen Planungsdokumente und die Zielvereinbarungen des Managements auf die Integration von Sicherheitszielen. Es wird die Existenz und Nutzung eines KPI-Dashboards verifiziert. Die Wirksamkeit der Sicherheitskultur wird durch Mitarbeiterbefragungen und die Analyse von Sicherheitsvorfällen bewertet."
                       }
                     ]
                   }
                 ]
               },
-              "ergebnisVerifikation": {
-                "subchapterNumber": "5.5.3",
-                "title": "Ergebnis Verifikation des IT-Grundschutz-Checks",
-                "description": "Ein kurzes Votum des Auditteamleiters zur Verifikation des IT-Grundschutz-Checks wird gegeben.",
-                "tableId": "Tabelle 62",
-                "content": [{ "type": "finding", "label": "Votum Verifikation des IT-Grundschutz-Checks:", "findingText": null }]
-              }
-            },
-            "risikoanalyseA5": {
-                "subchapterNumber": "5.6",
-                "title": "Risikoanalyse A.5",
-                "zusammenfassung": {
-                    "subchapterNumber": "5.6.1",
-                    "title": "Zusammenfassung der Risikoanalyse",
-                    "description": "Als Ergebnis der Risikoanalyse A.5 sind für Zielobjekte mit hohem oder sehr hohem Schutzbedarf zusätzliche Maßnahmen herangezogen worden. Der Auditor muss den Umsetzungsstatus der Maßnahmen prüfen.",
-                    "tableId": "Tabelle 63",
-                    "content": [
-                        { "type": "question", "questionText": "Gibt es im Informationsverbund Zielobjekte mit einem Schutzbedarf \"hoch\" oder \"sehr hoch\"?", "answer": null, "answerType": "boolean" },
-                        { "type": "question", "questionText": "Stimmt der im IT-Grundschutz-Check festgestellte Umsetzungsstatus zusätzlicher Maßnahmen für Zielobjekte mit hohem oder sehr hohem Schutzbedarf mit dem tatsächlich vorhandenen Informationssicherheitszustand des jeweiligen Zielobjekts überein?", "answer": null, "answerType": "boolean" },
-                        { "type": "question", "questionText": "Sind alle zusätzlichen Maßnahmen aus der Risikoanalyse als umgesetzt gekennzeichnet?", "answer": null, "answerType": "boolean" },
-                        { "type": "question", "questionText": "Sind alle zusätzlichen Maßnahmen mit dem Umsetzungsstatus “teilweise“ oder \"nein\" im Referenzdokument A.6 enthalten?", "answer": null, "answerType": "boolean" },
-                        { "type": "finding", "label": "Feststellung:", "findingText": null }
-                    ]
-                },
-                "einzelergebnisse": {
-                    "subchapterNumber": "5.6.2",
-                    "title": "Einzelergebnisse der Risikoanalyse",
-                    "description": "Für jede im Rahmen der Auditplanung ausgewählte zusätzliche Maßnahme aus der Risikoanalyse überprüft der Auditor durch Inspektion des jeweiligen Zielobjekts, ob diese zusätzlichen Maßnahmen angemessen umgesetzt sind.",
-                    "massnahmenPruefungen": [
-                        {
-                            "massnahme": null,
-                            "zielobjekt": null,
-                            "auditiertAm": null,
-                            "auditor": null,
-                            "befragtWurde": null,
-                            "details": {
-                                "nummer": null,
-                                "beschreibung": null,
-                                "bewertung": null,
-                                "dokuAntragsteller": null,
-                                "pruefmethode": [],
-                                "auditfeststellung": null,
-                                "abweichungen": null
-                            }
-                        }
-                    ]
-                },
-                "ergebnisRisikoanalyse": {
-                    "subchapterNumber": "5.6.3",
-                    "title": "Ergebnis Risikoanalyse",
-                    "description": "Ein kurzes Votum des Auditteamleiters zur Risikoanalyse wird gegeben.",
-                    "tableId": "Tabelle 69",
-                    "content": [{ "type": "finding", "label": "Votum Risikoanalyse:", "findingText": null }]
-                }
-            }
-          },
-              "anhang": {
-                "chapterNumber": "7",
-                "title": "Anhang",
-                "referenzdokumente": {
-                  "subchapterNumber": "7.1",
-                  "title": "Referenzdokumente",
-                  "description": "Der Dateiname der externen Liste der Referenzdokumente lautet: [Dateiname]. Der Antragsteller hat die nachfolgende Übersicht der Referenzdokumente an den Auditteamleiter übergeben.",
-                  "table": {
-                    "tableId": "Tabelle 70",
-                    "title": "Liste der Referenzdokumente",
-                    "headers": [
-                      "Nr.",
-                      "Kurzbezeichnung",
-                      "Dateiname / Verweis",
-                      "Version, Datum",
-                      "Relevante Änderungen"
-                    ],
-                    "rows": []
+              {
+                "id": "ISMS.1.A2",
+                "title": "Festlegung der Sicherheitsziele und -strategie (B)",
+                "class": "Management",
+                "props": [
+                  {
+                    "name": "level",
+                    "value": "1",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "phase",
+                    "value": "Initiation",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "practice",
+                    "value": "GOV",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_c",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_i",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
+                  },
+                  {
+                    "name": "effective_on_a",
+                    "value": "true",
+                    "ns": "https://www.bsi.bund.de/ns/grundschutz"
                   }
-                },
-                "abweichungenUndEmpfehlungen": {
-                  "subchapterNumber": "7.2",
-                  "title": "Abweichungen und Empfehlungen",
-                  "description": "Während der Sichtung der Referenzdokumente sowie des Vor-Ort-Audits wurden folgenden Abweichungen und Empfehlungen festgestellt. Der Auditteamleiter beschreibt die Abweichungen und Empfehlungen kurz und referenziert auf diese an den entsprechenden Stellen im Auditbericht.",
-                  "table": {
-                    "tableId": "Tabelle 71",
-                    "title": "Liste Abweichungen und Empfehlungen",
-                    "headers": [
-                      "Typ und Nr.",
-                      "Abweichung / Empfehlung",
-                      "Behebungsfrist / Nachweis",
-                      "Status der Behebung"
-                    ],
-                    "rows": []
+                ],
+                "parts": [
+                  {
+                    "id": "isms.1.a2-m1",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 1: Partial",
+                    "class": "maturity-level-partial",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Sicherheitsziele und eine Strategie sind nicht formal definiert oder dokumentiert. Sicherheitsmaßnahmen werden ad hoc und reaktiv implementiert, oft als direkte Reaktion auf Sicherheitsvorfälle oder erkannte Schwachstellen."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Es gibt keine übergeordnete Planung. Ein typisches Beispiel ist die Installation eines Virenscanners nach einem Malware-Befall, ohne dass eine umfassende Strategie zur Endpunktsicherheit existiert."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer bittet um die Vorlage von Dokumenten, die die Sicherheitsstrategie beschreiben. Werden keine Dokumente vorgelegt, wird durch Interviews mit IT-Mitarbeitern und Management geklärt, ob eine implizite, aber undokumentierte Strategie existiert."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a2-m2",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 2: Foundational",
+                    "class": "maturity-level-foundational",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Allgemeine Sicherheitsziele (z. B. 'Schutz der Kundendaten') sind in der Sicherheitsleitlinie benannt. Es fehlt jedoch eine detaillierte Strategie, wie diese Ziele erreicht werden sollen, und die Ziele sind nicht messbar formuliert."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Leitlinie enthält Aussagen wie 'Wir verpflichten uns zur Vertraulichkeit'. Es gibt jedoch keine abgeleiteten Richtlinien oder Konzepte, die definieren, wie Verschlüsselung oder Zugriffskontrolle konkret umzusetzen sind, um dieses Ziel zu erreichen."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer analysiert die Sicherheitsleitlinie auf die Formulierung der Ziele. Es wird geprüft, ob aus den allgemeinen Zielen konkrete, messbare und terminierte Unterziele abgeleitet wurden (z. B. 'Verschlüsselung aller Laptops bis Ende Q3')."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a2-m3",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 3: Defined",
+                    "class": "maturity-level-defined",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Institutionsleitung MUSS auf Basis der Geschäftsanforderungen und Schutzbedarfe realistische Sicherheitsziele festlegen. Die Sicherheitsziele MÜSSEN in einer Informationssicherheitsstrategie konkretisiert werden. Die Sicherheitsstrategie MUSS darlegen, wie die Sicherheitsziele langfristig erreicht werden sollen. Die Sicherheitsziele und die Sicherheitsstrategie MÜSSEN allen relevanten Mitarbeitenden bekannt gemacht werden."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Sicherheitsstrategie wird als separates, von der Leitung genehmigtes Dokument erstellt. Sie enthält einen Zeitplan für die Umsetzung wesentlicher Sicherheitsmaßnahmen und weist Verantwortlichkeiten zu. Die Strategie wird im Intranet veröffentlicht und ist Teil der Einarbeitung neuer Mitarbeiter."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer sichtet das Dokument der Sicherheitsstrategie und gleicht es mit den in der Leitlinie definierten Zielen ab. Es wird geprüft, ob die Strategie konkrete Meilensteine enthält. Mitarbeiterinterviews bestätigen die Kenntnis der wesentlichen strategischen Ausrichtung."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a2-m4",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 4: Enhanced",
+                    "class": "maturity-level-enhanced",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Sicherheitsstrategie wird regelmäßig (mindestens jährlich) überprüft und an veränderte Rahmenbedingungen (z. B. neue Geschäftsprozesse, neue Bedrohungen) angepasst. Die Sicherheitsziele sind spezifisch, messbar, erreichbar, relevant und terminiert (SMART)."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Ein Ziel wie 'Verbesserung der Awareness' wird konkretisiert zu 'Senkung der Klickrate bei Phishing-Simulationen um 50% innerhalb von 12 Monaten'. Der Prozess zur Überprüfung der Strategie ist dokumentiert und die Ergebnisse der Überprüfung werden protokolliert."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer sichtet die Protokolle der Strategieüberprüfungen. Es wird die Formulierung der Sicherheitsziele anhand der SMART-Kriterien bewertet. Die Messbarkeit wird durch die Prüfung der zugrundeliegenden Metriken und KPIs verifiziert."
+                      }
+                    ]
+                  },
+                  {
+                    "id": "isms.1.a2-m5",
+                    "name": "maturity-level-description",
+                    "title": "Maturity Level 5: Comprehensive",
+                    "class": "maturity-level-comprehensive",
+                    "parts": [
+                      {
+                        "name": "statement",
+                        "prose": "Die Informationssicherheitsstrategie ist vollständig mit der IT-Strategie und der übergeordneten Unternehmensstrategie abgestimmt und integriert. Sie berücksichtigt proaktiv zukünftige technologische Entwicklungen und prognostizierte Bedrohungsszenarien. Es gibt einen formalen Prozess zur Antizipation zukünftiger Sicherheitsanforderungen."
+                      },
+                      {
+                        "name": "guidance",
+                        "prose": "Die Sicherheitsstrategie enthält einen Abschnitt zur 'Sicherheit von zukünftigen Technologien' wie KI oder Quantencomputing. Das Budget für Informationssicherheit wird auf Basis der strategischen Ziele und nicht nur auf Basis der aktuellen Risiken geplant (strategische Budgetierung)."
+                      },
+                      {
+                        "name": "assessment-method",
+                        "prose": "Der Prüfer analysiert die Protokolle von Strategiesitzungen des Managements, um die Abstimmung zwischen den verschiedenen Strategien zu verifizieren. Es wird geprüft, ob Investitionsentscheidungen für Sicherheitstechnologien mit den langfristigen strategischen Zielen begründet werden."
+                      }
+                    ]
                   }
-                }
+                ]
               }
-            
-        }
-    
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }
