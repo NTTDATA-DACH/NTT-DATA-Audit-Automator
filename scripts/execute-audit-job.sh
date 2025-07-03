@@ -4,12 +4,13 @@ set -euo pipefail
 # ===================================================================
 # INTERACTIVE SCRIPT TO EXECUTE ANY BSI AUDIT TASK
 # ===================================================================
+# NOTE: This script ASSUMES it is being run from the project root directory.
 
 # --- Script Usage ---
 usage() {
   echo "Usage: $0"
   echo "Interactively selects and executes a BSI audit task for the customer"
-  echo "defined in the Terraform configuration."
+  echo "defined in the Terraform configuration. Must be run from the project root."
   exit 1
 }
 
@@ -22,11 +23,13 @@ MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
 echo "🔹 Fetching infrastructure details from Terraform..."
-TERRAFORM_DIR="../terraform"
+TERRAFORM_DIR="./terraform"
 GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
 INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+# This is the line that was causing the error, it has been removed.
+# INDEX_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_public_domain)"
 INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
 
 # --- INTERACTIVE SELECTION: Audit Type ---
@@ -91,6 +94,7 @@ echo "🚀 Executing task with args: [main.py ${TASK_ARGS}]"
 
 # NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
 # command arguments of the deployed job, allowing us to run any task.
+# The reference to INDEX_PUBLIC_DOMAIN has been removed from the env vars list.
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
