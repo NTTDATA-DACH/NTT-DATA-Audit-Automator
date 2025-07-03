@@ -57,15 +57,15 @@ class EtlProcessor:
         # Replace invalid chars with underscores
         return re.sub(r'[^a-zA-Z0-9_.-]', '_', base_name)
 
-    def _get_status_blob_name(self, source_blob_name: str) -> str:
-        """Constructs the name for the status marker blob."""
+    def _get_status_blob_path_base(self, source_blob_name: str) -> str:
+        """Constructs the base name for the status marker blob, without an extension."""
         sanitized_name = self._sanitize_filename(source_blob_name)
-        return f"{self.config.etl_status_prefix}{sanitized_name}.success"
+        return f"{self.config.etl_status_prefix}{sanitized_name}"
 
     def _process_single_document(self, blob):
         """Runs the full ETL pipeline for a single GCS blob."""
         logging.info(f"Processing document: {blob.name}")
-        status_blob_name = self._get_status_blob_name(blob.name)
+        status_blob_base = self._get_status_blob_path_base(blob.name)
 
         # 1. Extract
         file_bytes = self.gcs_client.download_blob_as_bytes(blob)
@@ -77,20 +77,20 @@ class EtlProcessor:
         
         if not document_text:
             logging.warning(f"No text extracted from {blob.name}. Skipping.")
-            return
+            raise ValueError("No text could be extracted from document.")
 
         # 2. Chunk
         chunks = self.text_splitter.split_text(document_text)
         if not chunks:
             logging.warning(f"No chunks created for {blob.name}. Skipping.")
-            return
+            raise ValueError("Document text could not be split into chunks.")
         logging.info(f"Created {len(chunks)} chunks for {blob.name}.")
 
         # 3. Embed
         success, embeddings = self.ai_client.get_embeddings(chunks)
         if not success or len(embeddings) != len(chunks):
             logging.error(f"Embedding generation failed for {blob.name}. Skipping document.")
-            return
+            raise RuntimeError("Embedding generation failed.")
 
         # 4. Format and Upload
         logging.info(f"Formatting data for {blob.name}...")
@@ -115,7 +115,7 @@ class EtlProcessor:
         # Upon success, create the status marker file.
         self.gcs_client.upload_from_string(
             content="",
-            destination_blob_name=status_blob_name,
+            destination_blob_name=f"{status_blob_base}.success",
             content_type='text/plain'
         )
 
@@ -138,15 +138,27 @@ class EtlProcessor:
             return
 
         for blob in source_files:
-            # Check if a .success status file already exists for this blob
-            status_blob_name = self._get_status_blob_name(blob.name)
-            if self.gcs_client.blob_exists(status_blob_name):
-                logging.info(f"Status file found for {blob.name}. Skipping.")
+            status_blob_base = self._get_status_blob_path_base(blob.name)
+            success_marker = f"{status_blob_base}.success"
+            failed_marker = f"{status_blob_base}.failed"
+            
+            if self.gcs_client.blob_exists(success_marker):
+                logging.info(f"'.success' marker found for {blob.name}. Skipping.")
+                continue
+            
+            if self.gcs_client.blob_exists(failed_marker):
+                logging.warning(f"'.failed' marker found for {blob.name}. Skipping to prevent repeated errors.")
                 continue
 
             try:
                 self._process_single_document(blob)
             except Exception as e:
-                logging.error(f"An unexpected error occurred while processing {blob.name}. Skipping. Error: {e}", exc_info=True)
+                logging.error(f"An unexpected error occurred while processing {blob.name}. Creating '.failed' marker. Error: {e}", exc_info=True)
+                # Create a .failed marker to prevent retries
+                self.gcs_client.upload_from_string(
+                    content=str(e),
+                    destination_blob_name=failed_marker,
+                    content_type='text/plain'
+                )
         
         logging.info("ETL run finished.")

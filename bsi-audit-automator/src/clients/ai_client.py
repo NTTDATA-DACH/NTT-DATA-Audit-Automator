@@ -14,7 +14,7 @@ from src.config import AppConfig
 
 # Constants for the AI client, aligned with the project brief.
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
-EMBEDDING_MODEL_NAME = "gemini-embedding-001"
+EMBEDDING_MODEL_NAME = "text-embedding-004"
 
 # Constants for robust generation
 MAX_RETRIES = 5
@@ -101,7 +101,7 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema={k: v for k, v in json_schema.items() if k != "$schema"},
-            max_output_tokens=8192,
+            max_output_tokens=65536,
             temperature=0.2,
         )
 

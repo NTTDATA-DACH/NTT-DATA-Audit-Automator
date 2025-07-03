@@ -1,0 +1,31 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for BSI Surveillance Audit Baustein Selection",
+    "description": "Defines the structure for the list of selected Bausteine for a surveillance audit.",
+    "type": "object",
+    "properties": {
+        "rows": {
+            "type": "array",
+            "description": "A list of selected Bausteine and their audit details.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "Baustein": {
+                        "type": "string",
+                        "description": "The full ID and title of the selected Baustein (e.g., 'ISMS.1 Sicherheitsmanagement')."
+                    },
+                    "Zielobjekt": {
+                        "type": "string",
+                        "description": "The target object or system to which this Baustein applies (e.g., 'Gesamter Informationsverbund')."
+                    },
+                    "Begründung": {
+                        "type": "string",
+                        "description": "A brief justification for selecting this Baustein for the audit."
+                    }
+                },
+                "required": ["Baustein", "Zielobjekt", "Begründung"]
+            }
+        }
+    },
+    "required": ["rows"]
+}

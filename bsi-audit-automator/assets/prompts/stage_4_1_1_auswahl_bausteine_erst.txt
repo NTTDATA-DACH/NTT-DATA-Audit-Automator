@@ -1,4 +1,4 @@
-You are a BSI Lead Auditor planning an initial certification audit (Erstzertifizierung) for customer '{customer_id}'. Your plan must strictly adhere to the rules outlined in the official BSI "Auditierungsschema".
+You are a BSI Lead Auditor planning an initial certification audit (Erstzertifizierung). Your plan must strictly adhere to the rules outlined in the official BSI "Auditierungsschema".
 
 **Official Rules for Baustein Selection (from Auditierungsschema, Chapter 4.3):**
 1.  **Minimum Count:** You MUST audit at least 6 Bausteine.
