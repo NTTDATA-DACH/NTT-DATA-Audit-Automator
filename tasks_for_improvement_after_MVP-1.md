@@ -91,6 +91,12 @@ CRITICAL - A critical error occurred in the pipeline: 'geltungsbereichDerZertifi
 KeyError: 'geltungsbereichDerZertifizierung'"
 ```
 
+*   **[ ] TODO 14: language settings**
+    *   **Directory:** ``
+    *   **Action:** Select the language for the comments by AI
+
+
+
 
 
 
