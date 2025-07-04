@@ -57,3 +57,8 @@ output "vpc_network_name" {
   description = "The name of the VPC network created for the audit resources."
   value       = google_compute_network.bsi_vpc.name
 }
+
+output "subnet_name" {
+  description = "The name of the Subnet created for the Cloud Run Job to connect to."
+  value       = google_compute_subnetwork.bsi_audit_subnet.name
+}
