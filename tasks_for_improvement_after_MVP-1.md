@@ -22,7 +22,7 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 1 (CRITICAL-BUG): Fix `KeyError` in ReportGenerator.**
     *   **Files:** `src/audit/report_generator.py`, `src/main.py`
     *   **Action:** The pipeline is crashing during the report generation step with a `KeyError: 'geltungsbereichDerZertifizierung'`. This indicates a structural mismatch between the data being written and the master report template. The `_populate_chapter_1` function is attempting to access a key that does not exist in the report structure it's populating.
-    *   **Solution:** Make the population logic in `report_generator.py` more defensive. Before attempting to write data (e.g., `target_chapter[key] = ...`), the code must first verify that `key` exists in `target_chapter`. If not, it should log a detailed warning and skip that specific population step, preventing a crash.
+    *   **Solution:** Make the population logic in `report_generator.py` more defensive. Before attempting to write data (e.g., `target_chapter[key] = ...`), the code must first verify that `key` exists in `target_chapter`. If not, it should log a detailed warning and retry that specific population step, preventing a crash.
 
 *   **[ ] TODO 2: Optimize RagClient Memory Usage.**
     *   **File:** `src/clients/rag_client.py`
