@@ -76,3 +76,46 @@ This document tracks completed enhancements and the prioritized backlog of featu
   File "/app/src/audit/report_generator.py", line 57, in _populate_chapter_1
     target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = final_text
 ```
+
+*   **[ ] TODO 14 (Code Quality): Implement Comprehensive Docstrings.**
+    *   **Files:** `src/etl/processor.py`, `src/audit/controller.py`, `src/audit/report_generator.py`, all files in `src/audit/stages/`.
+    *   **Action:** Systematically review and add structured docstrings to all public classes and functions that are currently missing them. Ensure every docstring includes the purpose, an `Args:` section, and a `Returns:` section.
+    *   **Example:**
+        *   **Before:**
+            ```python
+            def _sanitize_filename(self, filename: str) -> str:
+                # ...
+            ```
+        *   **After:**
+            ```python
+            def _sanitize_filename(self, filename: str) -> str:
+                """Removes special characters to create a valid GCS object name.
+
+                Args:
+                    filename: The original filename, which may contain paths and special characters.
+
+                Returns:
+                    A sanitized string suitable for use as a GCS object name.
+                """
+                # ...
+            ```
+
+*   **[ ] TODO 15 (Code Quality): Enforce Strict Type Hinting.**
+    *   **Files:** `src/etl/processor.py`, `src/audit/controller.py`, `src/audit/report_generator.py`, all files in `src/audit/stages/`.
+    *   **Action:** Add missing type hints to function arguments and return values across the identified modules. Pay special attention to function return types, such as `-> None`, `-> dict`, or `-> str`.
+    *   **Example:**
+        *   **Before:**
+            ```python
+            async def run(self):
+                # ...
+            ```
+        *   **After:**
+            ```python
+            async def run(self) -> Dict[str, Any]:
+                # ...
+            ```
+        *   **Or for methods with no return:**
+            ```python
+            def _save_all_findings(self) -> None:
+                # ...
+            ```
