@@ -81,14 +81,17 @@ class AuditController:
         )
         logging.info(f"Successfully saved {len(self.all_findings)} findings to {findings_path}")
 
-    async def run_all_stages(self) -> None:
+    async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
         Runs all defined audit stages in sequence, collecting findings after each
         stage. It respects resumability by skipping already completed stages.
+
+        Args:
+            force_overwrite: If True, all stages will be re-run even if results exist.
         """
         logging.info("Starting to run all audit stages.")
         for stage_name in self.stage_runner_classes.keys():
-            await self.run_single_stage(stage_name, force_overwrite=False)
+            await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
         
         self._save_all_findings()
         logging.info("All audit stages completed.")
