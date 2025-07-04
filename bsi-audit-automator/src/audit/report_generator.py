@@ -54,20 +54,17 @@ class ReportGenerator:
                 if finding.get('category') != 'OK':
                     final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
             
-            target_section = target_chapter.get('geltungsbereichDerZertifizierung')
-            # --- START OF FIX ---
-            if target_section:
-                # Ensure 'content' key exists and is a list
-                if 'content' not in target_section or not isinstance(target_section.get('content'), list):
-                    target_section['content'] = []
-                # Ensure the list is not empty and has a placeholder dict
-                if not target_section['content']:
-                    target_section['content'].append({"type": "prose", "text": ""})
-                # Now we can safely write to it
-                target_section['content'][0]['text'] = final_text
-            # --- END OF FIX ---
-            else:
-                logging.warning("Could not populate 'geltungsbereichDerZertifizierung' because the key is missing in the report template.")
+            # --- START OF ROBUST FIX (using setdefault) ---
+            # Ensure the entire path exists, creating empty structures as needed.
+            target_section = target_chapter.setdefault('geltungsbereichDerZertifizierung', {})
+            content_list = target_section.setdefault('content', [])
+            
+            if not content_list:
+                content_list.append({"type": "prose", "text": ""})
+            
+            # Now we can safely write to the path we've guaranteed exists.
+            content_list[0]['text'] = final_text
+            # --- END OF ROBUST FIX ---
 
         # Populate Audit-Team (1.4) - now a manual placeholder
         if 'auditTeam' in stage_data:

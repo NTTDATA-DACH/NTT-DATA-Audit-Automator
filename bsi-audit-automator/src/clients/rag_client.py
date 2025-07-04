@@ -81,7 +81,9 @@ class RagClient:
         Returns:
             A single string containing the concatenated text of all found chunks.
         """
-        logging.info(f"Querying Vector DB for: '{query}'")
+        if self.config.is_test_mode:
+            logging.info(f"RAG_CLIENT_TEST_MODE: Sending query to vector DB: '{query}'")
+
         context_str = ""
         try:
             # 1. Embed the text query into a numerical vector first.
@@ -100,13 +102,22 @@ class RagClient:
             )
 
             if response and response[0]:
-                for neighbor in response[0]:
+                neighbors = response[0]
+                if self.config.is_test_mode:
+                    neighbor_details = [f"(id={n.id}, dist={n.distance:.4f})" for n in neighbors]
+                    logging.info(f"RAG_CLIENT_TEST_MODE: Found {len(neighbors)} neighbors: {', '.join(neighbor_details)}")
+
+                for neighbor in neighbors:
                     chunk_id = neighbor.id
                     chunk_text = self._chunk_lookup_map.get(chunk_id)
                     if chunk_text:
                         context_str += chunk_text
                     else:
                         logging.warning(f"Could not find text for chunk ID: {chunk_id}")
+                
+                if self.config.is_test_mode:
+                    logging.info(f"RAG_CLIENT_TEST_MODE: Final retrieved context string length: {len(context_str)} chars.")
+
                 return context_str
             else:
                 logging.warning("Vector DB query returned no neighbors.")

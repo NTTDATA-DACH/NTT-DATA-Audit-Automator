@@ -18,7 +18,7 @@ usage() {
 if [[ $# -ne 0 ]]; then
   usage
 fi
-TEST_MODE="false"
+TEST_MODE="true"
 MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
