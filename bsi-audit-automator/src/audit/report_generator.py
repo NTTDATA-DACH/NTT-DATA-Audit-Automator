@@ -38,32 +38,52 @@ class ReportGenerator:
             return report
 
     def _populate_chapter_1(self, report: dict, stage_data: dict):
-        """Populates the 'Allgemeines' chapter of the report."""
-        target_chapter = report['bsiAuditReport']['allgemeines']
+        """Populates the 'Allgemeines' chapter of the report defensively."""
+        target_chapter = report.get('bsiAuditReport', {}).get('allgemeines')
+        if not target_chapter:
+            logging.error("Report template is missing 'bsiAuditReport.allgemeines' structure. Cannot populate Chapter 1.")
+            return
 
         # Populate Geltungsbereich (1.2) including its new finding logic
         if 'geltungsbereichDerZertifizierung' in stage_data:
-            geltungsbereich_data = stage_data['geltungsbereichDerZertifizierung']
-            # Start with the main descriptive text
+            geltungsbereich_data = stage_data.get('geltungsbereichDerZertifizierung', {})
             final_text = geltungsbereich_data.get('text', '')
             
-            # Append the finding text if a finding exists and is not 'OK'
             if isinstance(geltungsbereich_data.get('finding'), dict):
                 finding = geltungsbereich_data['finding']
                 if finding.get('category') != 'OK':
                     final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
             
-            # Update the single text block in the report
-            target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = final_text
-        
+            target_section = target_chapter.get('geltungsbereichDerZertifizierung')
+            # --- START OF FIX ---
+            if target_section:
+                # Ensure 'content' key exists and is a list
+                if 'content' not in target_section or not isinstance(target_section.get('content'), list):
+                    target_section['content'] = []
+                # Ensure the list is not empty and has a placeholder dict
+                if not target_section['content']:
+                    target_section['content'].append({"type": "prose", "text": ""})
+                # Now we can safely write to it
+                target_section['content'][0]['text'] = final_text
+            # --- END OF FIX ---
+            else:
+                logging.warning("Could not populate 'geltungsbereichDerZertifizierung' because the key is missing in the report template.")
+
         # Populate Audit-Team (1.4) - now a manual placeholder
         if 'auditTeam' in stage_data:
-             text = stage_data['auditTeam'].get('text', '') # Will be empty from automation
-             target_chapter['auditTeam']['content'][0]['text'] = text
+             text = stage_data.get('auditTeam', {}).get('text', '')
+             target_section = target_chapter.get('auditTeam')
+             if target_section and isinstance(target_section.get('content'), list) and target_section['content']:
+                 target_section['content'][0]['text'] = text
+             else:
+                logging.warning("Could not populate 'auditTeam' due to missing or invalid structure in report template.")
 
         # Populate Audittyp (1.3)
         if 'audittyp' in stage_data:
-            target_chapter['audittyp']['content'] = stage_data['audittyp'].get('content', '')
+            if 'audittyp' in target_chapter:
+                target_chapter['audittyp']['content'] = stage_data.get('audittyp', {}).get('content', '')
+            else:
+                logging.warning("Key 'audittyp' not found in report template under 'allgemeines'.")
 
     def _populate_chapter_7_findings(self, report: dict):
         """Populates the findings tables in Chapter 7.2 from the central findings file."""
@@ -75,33 +95,43 @@ class ReportGenerator:
             logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
             return
 
-        findings_section = report['bsiAuditReport']['anhang']['abweichungenUndEmpfehlungen']
-        ag_table = findings_section['geringfuegigeAbweichungen']['table']['rows']
-        as_table = findings_section['schwerwiegendeAbweichungen']['table']['rows']
-        e_table = findings_section['empfehlungen']['table']['rows']
+        # Use .get() for safe navigation and provide clear warnings
+        findings_section = report.get('bsiAuditReport', {}).get('anhang', {}).get('abweichungenUndEmpfehlungen')
+        if not findings_section:
+            logging.warning("Report template is missing '...anhang.abweichungenUndEmpfehlungen'. Skipping findings population.")
+            return
+
+        ag_table = findings_section.get('geringfuegigeAbweichungen', {}).get('table', {}).get('rows')
+        as_table = findings_section.get('schwerwiegendeAbweichungen', {}).get('table', {}).get('rows')
+        e_table = findings_section.get('empfehlungen', {}).get('table', {}).get('rows')
+
+        # Check if all targets are valid lists before proceeding
+        if not all(isinstance(table, list) for table in [ag_table, as_table, e_table]):
+            logging.warning("One or more findings tables are missing the 'rows' list in the report template. Skipping population.")
+            return
 
         ag_table.clear()
         as_table.clear()
         e_table.clear()
 
         for finding in all_findings:
-            if finding['category'] == 'AG':
+            if finding.get('category') == 'AG':
                 ag_table.append({
-                    "Nr.": finding['id'],
-                    "Beschreibung der Abweichung": finding['description'],
-                    "Quelle (Kapitel)": finding['source_chapter']
+                    "Nr.": finding.get('id', 'AG-?'),
+                    "Beschreibung der Abweichung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
                 })
-            elif finding['category'] == 'AS':
+            elif finding.get('category') == 'AS':
                 as_table.append({
-                    "Nr.": finding['id'],
-                    "Beschreibung der Abweichung": finding['description'],
-                    "Quelle (Kapitel)": finding['source_chapter']
+                    "Nr.": finding.get('id', 'AS-?'),
+                    "Beschreibung der Abweichung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
                 })
-            elif finding['category'] == 'E':
+            elif finding.get('category') == 'E':
                 e_table.append({
-                    "Nr.": finding['id'],
-                    "Beschreibung der Empfehlung": finding['description'],
-                    "Quelle (Kapitel)": finding['source_chapter']
+                    "Nr.": finding.get('id', 'E-?'),
+                    "Beschreibung der Empfehlung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
                 })
         
         logging.info(f"Populated Chapter 7.2 with {len(all_findings)} total findings.")
@@ -133,7 +163,11 @@ class ReportGenerator:
         logging.info(f"Updated master report state on GCS: gs://{self.config.bucket_name}/{self.gcs_report_path}")
 
     def _populate_chapter_3(self, report: dict, stage_data: dict):
-        chapter_3_target = report['bsiAuditReport']['dokumentenpruefung']
+        chapter_3_target = report.get('bsiAuditReport', {}).get('dokumentenpruefung')
+        if not chapter_3_target:
+            logging.error("Report template is missing 'bsiAuditReport.dokumentenpruefung' structure. Cannot populate Chapter 3.")
+            return
+            
         for subchapter_key, result in stage_data.items():
             if result is None: continue
             target_section = chapter_3_target.get("strukturanalyseA1", {}).get(subchapter_key) if subchapter_key == "definitionDesInformationsverbundes" else chapter_3_target.get(subchapter_key)
@@ -154,7 +188,11 @@ class ReportGenerator:
                     else: logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'"); break
 
     def _populate_chapter_4(self, report: dict, stage_data: dict):
-        chapter_4_target = report['bsiAuditReport']['erstellungEinesPruefplans']['auditplanung']
+        chapter_4_target = report.get('bsiAuditReport', {}).get('erstellungEinesPruefplans', {}).get('auditplanung')
+        if not chapter_4_target:
+            logging.error("Report template is missing '...erstellungEinesPruefplans.auditplanung' structure. Cannot populate Chapter 4.")
+            return
+            
         ch4_plan_key = next(iter(stage_data)) if stage_data else None
         result = stage_data.get(ch4_plan_key, {})
         if not result or 'rows' not in result: return
@@ -162,13 +200,17 @@ class ReportGenerator:
         target_key_map = {"auswahlBausteineUeberwachung": "auswahlBausteineErstRezertifizierung"}
         target_key = target_key_map.get(ch4_plan_key, ch4_plan_key)
 
-        if target_key in chapter_4_target:
+        if target_key in chapter_4_target and isinstance(chapter_4_target[target_key], dict):
             chapter_4_target[target_key]['rows'] = result['rows']
         else:
             logging.warning(f"Could not find target section for '{ch4_plan_key}' (mapped to '{target_key}') in Chapter 4.")
 
     def _populate_chapter_5(self, report: dict, stage_data: dict):
-        chapter_5_target = report['bsiAuditReport']['vorOrtAudit']
+        chapter_5_target = report.get('bsiAuditReport', {}).get('vorOrtAudit')
+        if not chapter_5_target:
+            logging.error("Report template is missing 'bsiAuditReport.vorOrtAudit' structure. Cannot populate Chapter 5.")
+            return
+
         for subchapter_key, result in stage_data.items():
             if result is None: continue
             if subchapter_key == "verifikationDesITGrundschutzChecks":
@@ -176,12 +218,21 @@ class ReportGenerator:
                 if target_section and "bausteinPruefungen" in result:
                     target_section["bausteinPruefungen"] = result["bausteinPruefungen"]
                 else:
-                    logging.warning(f"Could not find target section for '{subchapter_key}'")
+                    logging.warning(f"Could not find target structure for '{subchapter_key}'")
 
     def _populate_chapter_7(self, report: dict, stage_data: dict):
-        anhang_target = report['bsiAuditReport']['anhang']
+        anhang_target = report.get('bsiAuditReport', {}).get('anhang')
+        if not anhang_target:
+            logging.error("Report template is missing 'bsiAuditReport.anhang' structure. Cannot populate Chapter 7.")
+            return
+
         if 'referenzdokumente' in stage_data and 'table' in stage_data.get('referenzdokumente', {}):
-            anhang_target['referenzdokumente']['table']['rows'] = stage_data['referenzdokumente']['table']['rows']
+            target_section = anhang_target.get('referenzdokumente')
+            if target_section and isinstance(target_section.get('table'), dict):
+                target_section['table']['rows'] = stage_data['referenzdokumente']['table']['rows']
+            else:
+                logging.warning("Could not populate 'referenzdokumente' due to missing or invalid structure in report template.")
+
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict):
         logging.info(f"Populating report with data from stage: {stage_name}")

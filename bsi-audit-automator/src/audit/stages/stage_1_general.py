@@ -30,6 +30,17 @@ class Chapter1Runner:
         query = "Umfang und Abgrenzung des Informationsverbunds, betroffene Geschäftsprozesse, Standorte und Anwendungen"
         context = self.rag_client.get_context_for_query(query)
         
+        # If RAG returns the specific fallback string, bypass the AI call.
+        if "No relevant context found" in context:
+            logging.warning("No RAG context found for Geltungsbereich. Generating deterministic response.")
+            return {
+                "text": "Der Geltungsbereich des Informationsverbunds konnte aus den bereitgestellten Dokumenten nicht eindeutig ermittelt werden. Dies muss manuell geklärt und dokumentiert werden.",
+                "finding": {
+                    "category": "AS",
+                    "description": "Die Abgrenzung des Geltungsbereichs ist unklar, da keine Dokumente gefunden wurden, die diesen beschreiben. Dies ist eine schwerwiegende Abweichung, die vor dem Audit geklärt werden muss."
+                }
+            }
+            
         prompt_template = self._load_asset_text("assets/prompts/stage_1_2_geltungsbereich.txt")
         schema = self._load_asset_json("assets/schemas/stage_1_2_geltungsbereich_schema.json")
         
