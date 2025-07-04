@@ -8,6 +8,11 @@ output "vertex_ai_index_endpoint_id" {
   value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.id
 }
 
+output "public_endpoint_domain_name" {
+  description = "The public domain name of the index endpoint, used for local development."
+  value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.public_endpoint_domain_name
+}
+
 output "next_step_gcloud_command" {
   description = "Example gcloud command to deploy the index to the endpoint after the index is populated."
   value       = "gcloud ai index-endpoints deploy-index ${google_vertex_ai_index_endpoint.bsi_audit_endpoint.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index --display-name=bsi_deployed_index --project=${var.project_id} --region=${var.region}"

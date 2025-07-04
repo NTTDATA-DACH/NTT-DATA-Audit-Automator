@@ -24,11 +24,21 @@ class RagClient:
             location=config.vertex_ai_region
         )
 
-        # Instantiate the class, providing the full context required to find the resource.
-        self.index_endpoint = MatchingEngineIndexEndpoint(
-            index_endpoint_name=self.config.index_endpoint_id,
-        )
-        logging.info(f"RAG Client connected to Index Endpoint: {self.config.index_endpoint_id}")
+        # --- NEW: FLEXIBLE ENDPOINT INITIALIZATION ---
+        # Use the public endpoint for local development if available,
+        # otherwise use the private endpoint ID for cloud runs.
+        if config.index_endpoint_public_domain:
+            logging.info(f"Connecting to PUBLIC Vector Search Endpoint: {config.index_endpoint_public_domain}")
+            self.index_endpoint = MatchingEngineIndexEndpoint.from_public_endpoint(
+                project_id=config.gcp_project_id,
+                region=config.vertex_ai_region,
+                public_endpoint_domain_name=config.index_endpoint_public_domain
+            )
+        else:
+            logging.info(f"Connecting to PRIVATE Vector Search Endpoint: {config.index_endpoint_id}")
+            self.index_endpoint = MatchingEngineIndexEndpoint(
+                index_endpoint_name=self.config.index_endpoint_id,
+            )
 
         # This lookup map is the key to retrieving text from a chunk ID.
         self._chunk_lookup_map = self._load_chunk_lookup_map()

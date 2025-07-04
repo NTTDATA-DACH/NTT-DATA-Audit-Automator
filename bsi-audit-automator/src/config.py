@@ -23,6 +23,8 @@ class AppConfig:
     bucket_name: Optional[str] = None 
     # Optional because it's not needed for the ETL step
     project_number: Optional[str] = None
+    # Optional: for local dev against a public endpoint
+    index_endpoint_public_domain: Optional[str] = None
 
 def load_config_from_env() -> AppConfig:
     """
@@ -56,6 +58,7 @@ def load_config_from_env() -> AppConfig:
     config_values["project_number"] = os.getenv("GCP_PROJECT_NUMBER")
     config_values["is_test_mode"] = os.getenv("TEST", "false").lower() == "true"
     config_values["bucket_name"] = os.getenv("BUCKET_NAME")
+    config_values["index_endpoint_public_domain"] = os.getenv("INDEX_ENDPOINT_PUBLIC_DOMAIN")
     
     # Load the new concurrency limit, defaulting to 5 if not set or invalid
     max_reqs_str = os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")

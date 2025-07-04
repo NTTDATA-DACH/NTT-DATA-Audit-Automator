@@ -3,7 +3,6 @@ import logging
 import json
 import asyncio
 import time
-import copy
 from typing import List, Dict, Any, Tuple
 
 from google.cloud import aiplatform
@@ -100,17 +99,21 @@ class AiClient:
         Implements an async retry loop with exponential backoff and connection limiting.
         """
         # --- BUG FIX ---
-        # Create a deep copy of the schema to pass to the API. This prevents a
-        # known issue in the SDK where its internal schema parsing can fail on
-        # complex, referenced-based dictionary structures. A deep copy ensures
-        # we pass a clean, independent object.
-        schema_for_api = copy.deepcopy(json_schema)
-        schema_for_api.pop("$schema", None) # Remove the top-level '$schema' key as good practice.
+        # "Launder" the schema by serializing and deserializing it. This ensures that
+        # we pass a pure, clean data structure to the Google SDK, avoiding a
+        # recurring internal TypeError when it parses complex nested schemas.
+        try:
+            schema_for_api = json.loads(json.dumps(json_schema))
+            schema_for_api.pop("$schema", None)
+        except Exception as e:
+            logging.error(f"Failed to process JSON schema before API call: {e}")
+            raise ValueError("Invalid JSON schema provided.") from e
+
 
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=65536,
+            max_output_tokens=8192,
             temperature=0.2,
         )
 

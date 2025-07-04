@@ -48,6 +48,12 @@ def main():
         help='Assemble the final report from completed stage stubs.'
     )
 
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force re-running of stages that have already completed. Only applies to --run-all-stages.'
+    )
+
     args = parser.parse_args()
 
     # Instantiate clients once
@@ -88,10 +94,13 @@ def main():
 
             async def run_audit_tasks():
                 if args.run_stage:
-                    # For a single-stage run, we force an overwrite.
+                    # When running a single stage, the intent is to always execute and
+                    # overwrite that specific stage.
                     await controller.run_single_stage(args.run_stage, force_overwrite=True)
                 elif args.run_all_stages:
-                    await controller.run_all_stages()
+                    # For a full run, we respect resumability by default. The --force
+                    # flag is used to override this and re-run everything.
+                    await controller.run_all_stages(force_overwrite=args.force)
 
             asyncio.run(run_audit_tasks())
 

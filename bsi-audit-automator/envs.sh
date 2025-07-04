@@ -41,6 +41,9 @@ export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index
 export INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
 export GCP_PROJECT_NUMBER="$(echo "${INDEX_ENDPOINT_ID_FULL}" | cut -d'/' -f2)"
 export INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
+# NEW: Fetch the public domain if it exists, otherwise set to empty string.
+export INDEX_ENDPOINT_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw public_endpoint_domain_name 2>/dev/null || echo '')"
+
 
 # --- Static Values for Local Development ---
 # These prefixes now reflect the simpler GCS layout.
@@ -65,6 +68,9 @@ set +e
 echo "✅ Environment variables configured successfully'."
 echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
 echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
+if [ -n "$INDEX_ENDPOINT_PUBLIC_DOMAIN" ]; then
+    echo "   - PUBLIC_ENDPOINT: ${INDEX_ENDPOINT_PUBLIC_DOMAIN}"
+fi
 echo "   - TEST mode:      ${TEST}"
 echo ""
 echo "👉 A new command 'bsi-auditor' is now available in your shell."

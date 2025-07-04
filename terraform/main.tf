@@ -84,7 +84,7 @@ resource "google_storage_bucket_object" "json_placeholder" {
   content_type = "application/json"
   # One Dummy 
   content      =<<EOT
-{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}
+{"id": "DUMMY", "embedding": [0.1, 0.2]}
   EOT
 }
 
@@ -149,20 +149,26 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
       }
     }
   }
-  depends_on = [google_service_networking_connection.vertex_vpc_connection, google_storage_bucket_object.json_placeholder]
+  # This dependency is crucial. The index cannot be created until the GCS path
+  # it's configured to watch actually exists and has at least one valid file.
+  depends_on = [google_storage_bucket_object.json_placeholder]
 }
 
 resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   display_name = "bsi-audit-endpoint"
   description  = "Endpoint for querying the BSI audit index for project ${var.project_id}."
   region       = var.region
-  # --- FIX FOR PROJECT NUMBER ERROR ---
-  # Manually construct the network string using the project NUMBER, not the ID.
-  # This matches the specific format required by this API.
-  network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
+  
+  # --- NEW: PUBLIC ENDPOINT FOR LOCAL DEVELOPMENT ---
+  # This makes the endpoint accessible from outside the VPC, which is
+  # essential for running the Python application on a local developer machine.
+  public_endpoint_enabled = true
 
-  # The endpoint must depend on the peering connection.
-  depends_on = [google_service_networking_connection.vertex_vpc_connection]
+  # The 'network' attribute is mutually exclusive with 'public_endpoint_enabled',
+  # so it is removed. The 'depends_on' for VPC peering is no longer needed.
+  
+  # The endpoint must depend on the index existing first.
+  depends_on = [google_vertex_ai_index.bsi_audit_index]
 
   # --- FIX: USE A PROVISIONER TO DEPLOY THE INDEX ---
   # This runs the gcloud command on the local machine after the endpoint is created.

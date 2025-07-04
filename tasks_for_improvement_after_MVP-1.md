@@ -16,7 +16,9 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[✅] Implemented Idempotent & Robust ETL:** The ETL processor in `src/etl/processor.py` now creates `.success` and `.failed` status markers, ensuring resilience and preventing reprocessing of files.
 *   **[✅] Critical Bugfix - ReportGenerator Stability:** Systematically refactored `src/audit/report_generator.py` with defensive data population logic, preventing crashes from `KeyError` or `IndexError` when merging stage results into the master template.
 *   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
-*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a `TypeError` in the Vertex AI SDK by using `copy.deepcopy()` on schemas before passing them to the `GenerationConfig`. This prevents a library-internal issue with parsing nested array definitions.
+*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a recurring `TypeError` in the Vertex AI SDK by "laundering" schemas (`json.loads(json.dumps(schema))`) before passing them to the `GenerationConfig`, ensuring a pure data structure.
+*   **[✅] Bugfix - Intuitive Stage Execution:** Corrected the main control flow to align with user intent. `--run-stage` now *always* overwrites its specific target. `--run-all-stages` now correctly skips completed stages by default for resumability, and can be overridden with `--force`.
+*   **[✅] Dev Experience - Enabled Local Development:** Reconfigured Terraform to deploy a public Vector Search endpoint and updated the `rag_client` and `envs.sh` script to use it, enabling local execution of the application for faster development cycles.
 
 ---
 
@@ -54,7 +56,7 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 9: Automate Check of Risk Treatment for Unimplemented Controls (A.6).**
     *   **Action:** For all controls listed in A.6 (Realisierungsplan) that are not yet fully implemented, verify that they are listed and that the risk treatment plan is well-explained and plausible.
 
-*   **[ ] TODO 10: Implement a Comprehensive Test Suite.**
+*   [ ] TODO 10: Implement a Comprehensive Test Suite.
     *   **Directory:** `tests/`
     *   **Action:** The project currently lacks automated tests. Create a testing suite using a framework like `pytest`. Add unit tests for individual functions (e.g., in `etl/processor.py`). Add integration tests for client interactions, using mock objects (`unittest.mock`) to simulate GCS and AI API calls. This is also a way to "deterministically check results" by providing fixed inputs and asserting expected outputs from business logic.
 
