@@ -41,8 +41,15 @@ class AuditController:
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")
 
-    def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]):
-        """Parses stage results and collects any structured findings."""
+    def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> None:
+        """
+        Parses stage results, finds structured `finding` objects, and appends
+        any deviations or recommendations to the central findings list.
+
+        Args:
+            stage_name: The name of the stage that produced the result (e.g., 'Chapter-3').
+            result_data: The JSON-like dictionary returned by the stage runner.
+        """
         if not result_data:
             return
 
@@ -58,8 +65,11 @@ class AuditController:
                     })
                     logging.info(f"Collected finding from {stage_name}/{subchapter_key}: {finding['category']}")
 
-    def _save_all_findings(self):
-        """Saves the collected list of all findings to a GCS file."""
+    def _save_all_findings(self) -> None:
+        """
+        Saves the centrally collected list of all non-'OK' findings to a 
+        dedicated JSON file in GCS for final report assembly.
+        """
         if not self.all_findings:
             logging.info("No findings were collected during the audit. Skipping save.")
             return
@@ -71,8 +81,11 @@ class AuditController:
         )
         logging.info(f"Successfully saved {len(self.all_findings)} findings to {findings_path}")
 
-    async def run_all_stages(self):
-        """Runs all defined audit stages in sequence, collecting findings."""
+    async def run_all_stages(self) -> None:
+        """
+        Runs all defined audit stages in sequence, collecting findings after each
+        stage. It respects resumability by skipping already completed stages.
+        """
         logging.info("Starting to run all audit stages.")
         for stage_name in self.stage_runner_classes.keys():
             await self.run_single_stage(stage_name, force_overwrite=False)
@@ -80,9 +93,17 @@ class AuditController:
         self._save_all_findings()
         logging.info("All audit stages completed.")
 
-    async def run_single_stage(self, stage_name: str, force_overwrite: bool = False):
+    async def run_single_stage(self, stage_name: str, force_overwrite: bool = False) -> Dict[str, Any]:
         """
         Runs a single, specified audit stage and collects findings from its result.
+
+        Args:
+            stage_name: The name of the stage to run (e.g., 'Chapter-1').
+            force_overwrite: If True, the stage will run even if a result file
+                             already exists. If False, it will skip.
+
+        Returns:
+            The result data dictionary from the completed stage.
         """
         if stage_name not in self.stage_runner_classes:
             logging.error(f"Unknown stage '{stage_name}'. Available: {list(self.stage_runner_classes.keys())}")

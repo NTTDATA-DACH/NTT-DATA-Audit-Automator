@@ -38,7 +38,16 @@ class EtlProcessor:
         logging.info("ETL Processor initialized.")
 
     def _extract_text_from_pdf(self, pdf_bytes: bytes, source_filename: str) -> str:
-        """Extracts text content from a PDF file in memory."""
+        """
+        Extracts text content from a PDF file provided as bytes.
+
+        Args:
+            pdf_bytes: The byte content of the PDF file.
+            source_filename: The original name of the file for logging purposes.
+
+        Returns:
+            The extracted text content as a single string.
+        """
         text_content = ""
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -50,20 +59,41 @@ class EtlProcessor:
             logging.error(f"Failed to extract text from {source_filename}: {e}", exc_info=True)
             return ""
 
-    def _sanitize_filename(self, filename: str) -> str:
-        """Removes special characters to create a valid GCS object name."""
+    def _sanitize_filename(self, filename: str) -> str: 
+        """
+        Removes special characters from a filename to create a valid GCS object name.
+
+        Args:
+            filename: The original filename, which may contain paths or special chars.
+
+        Returns:
+            A sanitized string suitable for use as a GCS object name.
+        """
         # Get base name after the last '/'
         base_name = filename.split('/')[-1]
         # Replace invalid chars with underscores
         return re.sub(r'[^a-zA-Z0-9_.-]', '_', base_name)
 
     def _get_status_blob_path_base(self, source_blob_name: str) -> str:
-        """Constructs the base name for the status marker blob, without an extension."""
+        """
+        Constructs the base path for the status marker blob, without an extension.
+
+        Args:
+            source_blob_name: The full name of the source document blob.
+
+        Returns:
+            The GCS path prefix for the corresponding status marker file.
+        """
         sanitized_name = self._sanitize_filename(source_blob_name)
         return f"{self.config.etl_status_prefix}{sanitized_name}"
 
-    def _process_single_document(self, blob):
-        """Runs the full ETL pipeline for a single GCS blob."""
+    def _process_single_document(self, blob: Any) -> None:
+        """
+        Runs the full ETL pipeline for a single source document from GCS.
+
+        Args:
+            blob: The GCS blob object representing the source document.
+        """
         logging.info(f"Processing document: {blob.name}")
         status_blob_base = self._get_status_blob_path_base(blob.name)
 
@@ -121,10 +151,11 @@ class EtlProcessor:
 
         logging.info(f"Successfully uploaded embedding data for {blob.name} to gs://{self.config.bucket_name}/{output_path}")
 
-    def run(self):
+    def run(self) -> None:
         """
-        Executes the ETL pipeline, processing each source document
-        and saving its embeddings to a separate file.
+        Executes the main ETL pipeline. It lists all source documents, checks their
+        processing status to ensure idempotency, and then processes each new
+        document.
         """
         logging.info("Starting ETL run...")
         source_files = self.gcs_client.list_files()
