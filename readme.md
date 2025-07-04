@@ -16,17 +16,25 @@ This project automates BSI Grundschutz security audits by transforming customer 
     # Select "Run ETL (Embedding)" from the menu
     bash ./scripts/execute-audit-job.sh
     ```
-5.  **Execute Audit Stages:** Once the ETL is complete, run the audit stages. The controller collects all findings (deviations/recommendations) as it proceeds. The process is resumable; it will skip already completed stages.
+5.  **Run the Refresh Script:** From the project root (`bsi-audit-automator/`), execute the following command:
+    ```bash
+    bash ./scripts/refresh-index.sh
+    ```
+    **Confirm the Action:** The script will show you the configuration it found and ask for confirmation. Type `y` and press Enter to proceed.
+
+    **Monitor the Update:** The command will initiate the update process. Go back to the **Matching Engine** page in the GCP Console. You should see the **`Dense vector count`** start to increase. This process can take 5-20 minutes, depending on the amount of data.
+
+6.  **Execute Audit Stages:** Once the ETL is complete, run the audit stages. The controller collects all findings (deviations/recommendations) as it proceeds. The process is resumable; it will skip already completed stages.
     ```bash
     # To run all stages sequentially, select "Run All Audit Stages"
     bash ./scripts/execute-audit-job.sh
     ```
-6.  **Generate the Final Report:** After the stages are complete, this task assembles the final report. It populates the content from each stage's output and fills the findings tables in Chapter 7.2 from the centrally collected `all_findings.json` file.
+7.  **Generate the Final Report:** After the stages are complete, this task assembles the final report. It populates the content from each stage's output and fills the findings tables in Chapter 7.2 from the centrally collected `all_findings.json` file.
     ```bash
     # Select "Generate Final Report" from the menu
     bash ./scripts/execute-audit-job.sh
     ```
-7.  **Manual Review and Finalization:** Open the generated `final_audit_report.json` located in the `output/` GCS prefix. Load it into the `report_editor.html` tool to perform the final manual review, fill in placeholder sections (like 1.4 Audit-Team), and make any necessary adjustments before exporting the final version.
+8.  **Manual Review and Finalization:** Open the generated `final_audit_report.json` located in the `output/` GCS prefix. Load it into the `report_editor.html` tool to perform the final manual review, fill in placeholder sections (like 1.4 Audit-Team), and make any necessary adjustments before exporting the final version.
 
 ## The Audit Stages Explained
 
@@ -47,3 +55,4 @@ This project automates BSI Grundschutz security audits by transforming customer 
 *   **Chapter 7: Appendix** (`audit/stages/stage_7_anhang.py`): Generates content for the report's appendix.
     *   **7.1 (Reference Documents):** A **deterministic** task that lists all files found in the source GCS folder.
     *   **7.2 (Deviations & Recommendations):** This section is **not** populated by the Chapter 7 runner. It is populated by the **`ReportGenerator`** at the very end, using the `all_findings.json` file (collected by the `AuditController` across all stages) to build the final, categorized tables of findings.
+
