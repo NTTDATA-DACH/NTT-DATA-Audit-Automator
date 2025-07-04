@@ -8,8 +8,8 @@ output "vertex_ai_index_endpoint_id" {
   value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.id
 }
 
-output "public_endpoint_domain_name" {
-  description = "The public domain name of the index endpoint, used for local development."
+output "vertex_ai_index_endpoint_public_domain" {
+  description = "The public domain name for querying the index endpoint. Our Python app will use this."
   value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.public_endpoint_domain_name
 }
 
@@ -52,8 +52,8 @@ output "project_number" {
   description = "The Google Cloud project number where resources are deployed."
   value       = data.google_project.project.number
 }
- 
-output "subnet_name" {
-  description = "The name of the Subnet created for the Cloud Run Job to connect to."
-  value       = google_compute_subnetwork.bsi_audit_subnet.name
+
+output "vpc_network_name" {
+  description = "The name of the VPC network created for the audit resources."
+  value       = google_compute_network.bsi_vpc.name
 }
