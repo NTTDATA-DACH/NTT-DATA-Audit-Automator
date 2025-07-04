@@ -14,15 +14,13 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[✅] Bugfix - Chapter 3 Aggregation:** Fixed the aggregation logic in the `Chapter3Runner` to correctly parse the new structured `finding` object.
 *   **[✅] Bugfix - Report Editor Table Functionality:** Fixed the JavaScript logic to allow adding/deleting rows in all tables, including the nested findings tables in Chapter 7.
 *   **[✅] Implemented Idempotent & Robust ETL:** The ETL processor in `src/etl/processor.py` now creates `.success` and `.failed` status markers, ensuring resilience and preventing reprocessing of files.
+*   **[✅] Critical Bugfix - ReportGenerator Stability:** Systematically refactored `src/audit/report_generator.py` with defensive data population logic, preventing crashes from `KeyError` or `IndexError` when merging stage results into the master template.
+*   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
+*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a `TypeError` in the Vertex AI SDK by using `copy.deepcopy()` on schemas before passing them to the `GenerationConfig`. This prevents a library-internal issue with parsing nested array definitions.
 
 ---
 
 ### **New Prioritized TODO List**
-
-*   **[ ] TODO 1 (CRITICAL-BUG): Fix `KeyError` in ReportGenerator.**
-    *   **Files:** `src/audit/report_generator.py`, `src/main.py`
-    *   **Action:** The pipeline is crashing during the report generation step with a `KeyError: 'geltungsbereichDerZertifizierung'`. This indicates a structural mismatch between the data being written and the master report template. The `_populate_chapter_1` function is attempting to access a key that does not exist in the report structure it's populating.
-    *   **Solution:** Make the population logic in `report_generator.py` more defensive. Before attempting to write data (e.g., `target_chapter[key] = ...`), the code must first verify that `key` exists in `target_chapter`. If not, it should log a detailed warning and retry that specific population step, preventing a crash.
 
 *   **[ ] TODO 2: Optimize RagClient Memory Usage.**
     *   **File:** `src/clients/rag_client.py`
@@ -31,6 +29,11 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 3: Implement "Two-Plus-One" Verification.**
     *   **File:** `src/clients/ai_client.py`
     *   **Action:** Refactor the `generate_json_response` function. Instead of making a single AI call, it should make two parallel calls for the initial prompt, then construct a new "synthesis prompt" to have the AI review and merge the two initial results into a final, higher-quality response. This enhances accuracy and reliability.
+
+*   **[ ] TODO (Feature): Enhance Chapter 5 Checklist Generation.**
+    *   **Files:** `src/audit/stages/stage_5_vor_ort_audit.py`, `src/audit/stages/control_catalog.py`
+    *   **Action:** The current on-site checklist in 5.5.2 is basic. Enhance it by leveraging the detailed maturity level descriptions (M1-M5) in the BSI OSCAL catalog. For each required control, use the AI to generate specific, maturity-level-targeted interview questions and evidence requests for the human auditor.
+    *   **Example:** Instead of just "Check ISMS.1.A1", the output would be a list like: `["[M3] Show me the signed security policy.", "[M4] Provide minutes from the last risk committee meeting.", "[M5] How are security KPIs tracked and reported in management dashboards?"]`. This would make the on-site audit significantly more effective.
 
 *   **[ ] TODO 4: Implement Location Audit Planning (Standortauswahl).**
     *   **File:** `src/audit/stages/stage_4_pruefplan.py`
@@ -58,64 +61,3 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 11: Improve Prompts and Schemas.**
     *   **Directory:** `assets/`
     *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
-
-*   **[ ] TODO 12: Implement Language Selection for AI Output.**
-    *   **Action:** Add an environment variable (e.g., `OUTPUT_LANGUAGE`) to allow the user to select the language for the AI's narrative output (e.g., 'German', 'English'). Update all prompts to include a placeholder for the language, which will be formatted by the stage runners.
-
-*   **[ ] TODO 13: Fix bug A**
-    *   **Directory:** ``
-    *   **Action:** Running report generation gives this error:
-```
-    Traceback (most recent call last):
-  File "/app/src/main.py", line 66, in main
-    generator.assemble_report()
-  File "/app/src/audit/report_generator.py", line 116, in assemble_report
-    self._populate_report(report, stage_name, stage_data)
-  File "/app/src/audit/report_generator.py", line 189, in _populate_report
-    self._populate_chapter_1(report, stage_data)
-  File "/app/src/audit/report_generator.py", line 57, in _populate_chapter_1
-    target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = final_text
-```
-
-*   **[ ] TODO 14 (Code Quality): Implement Comprehensive Docstrings.**
-    *   **Files:** `src/etl/processor.py`, `src/audit/controller.py`, `src/audit/report_generator.py`, all files in `src/audit/stages/`.
-    *   **Action:** Systematically review and add structured docstrings to all public classes and functions that are currently missing them. Ensure every docstring includes the purpose, an `Args:` section, and a `Returns:` section.
-    *   **Example:**
-        *   **Before:**
-            ```python
-            def _sanitize_filename(self, filename: str) -> str:
-                # ...
-            ```
-        *   **After:**
-            ```python
-            def _sanitize_filename(self, filename: str) -> str:
-                """Removes special characters to create a valid GCS object name.
-
-                Args:
-                    filename: The original filename, which may contain paths and special characters.
-
-                Returns:
-                    A sanitized string suitable for use as a GCS object name.
-                """
-                # ...
-            ```
-
-*   **[ ] TODO 15 (Code Quality): Enforce Strict Type Hinting.**
-    *   **Files:** `src/etl/processor.py`, `src/audit/controller.py`, `src/audit/report_generator.py`, all files in `src/audit/stages/`.
-    *   **Action:** Add missing type hints to function arguments and return values across the identified modules. Pay special attention to function return types, such as `-> None`, `-> dict`, or `-> str`.
-    *   **Example:**
-        *   **Before:**
-            ```python
-            async def run(self):
-                # ...
-            ```
-        *   **After:**
-            ```python
-            async def run(self) -> Dict[str, Any]:
-                # ...
-            ```
-        *   **Or for methods with no return:**
-            ```python
-            def _save_all_findings(self) -> None:
-                # ...
-            ```
