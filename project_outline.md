@@ -39,6 +39,7 @@ The audit process and resulting report must be based on two key documents:
 *   **Explain Your Reasoning:** Briefly explain the "why" behind your code and architectural decisions.
 *   **Track Changes:** For minor code changes (under 20 lines), present them in a `diff` format. For larger changes, provide the full file content.
 *   **No Silent Changes:** Never alter code or logic without explicitly stating the change. **Only return files that have been changed.**
+*   **Statefulness and Conciseness:** You are expected to be stateful. Review the existing project context, especially `tasks_for_improvement_after_MVP-1.md`, before formulating a response. If your analysis reveals no new bugs, required refactorings, or actionable improvements beyond what is already listed, you MUST respond concisely with the message: `Dixie: I have analyzed the current project state and have no new code changes or tasks to recommend at this time.` Do not re-list or re-phrase existing TODOs.
 
 **4.2. Code Quality and Development Standards**
 *   **Modularity and Single Responsibility:** The existing architecture (clients, processors, controllers, stages) must be maintained. Each module and class should have a single, well-defined purpose. For example, `GcsClient` should only ever contain GCS-related logic.
