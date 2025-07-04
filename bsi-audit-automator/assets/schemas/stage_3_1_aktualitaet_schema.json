@@ -1,33 +1,36 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Schema for Subchapter 3.1 Aktualitaet der Referenzdokumente",
-    "type": "object",
-    "properties": {
-      "answers": {
-        "type": "array",
-        "items": [
-          { "type": "boolean" },
-          { "type": "boolean" },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Subchapter 3.1 Aktualitaet der Referenzdokumente",
+  "type": "object",
+  "properties": {
+    "answers": {
+      "type": "array",
+      "description": "The answers to the four questions regarding the actuality of the documents.",
+      "items": {
+        "anyOf": [
           { "type": "boolean" },
           { "type": "string", "format": "date" }
         ]
       },
-      "finding": {
-        "type": "object",
-        "description": "A structured finding based on the analysis.",
-        "properties": {
-          "category": {
-            "type": "string",
-            "description": "The category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK' (No Deviation).",
-            "enum": ["AG", "AS", "E", "OK"]
-          },
-          "description": {
-            "type": "string",
-            "description": "A detailed description of the finding."
-          }
-        },
-        "required": ["category", "description"]
-      }
+      "minItems": 4,
+      "maxItems": 4
     },
-    "required": ["answers", "finding"]
-  }
+    "finding": {
+      "type": "object",
+      "description": "A structured finding based on the analysis.",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "The category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK' (No Deviation).",
+          "enum": ["AG", "AS", "E", "OK"]
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the finding."
+        }
+      },
+      "required": ["category", "description"]
+    }
+  },
+  "required": ["answers", "finding"]
+}

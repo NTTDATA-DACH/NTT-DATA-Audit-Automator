@@ -16,9 +16,8 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[✅] Implemented Idempotent & Robust ETL:** The ETL processor in `src/etl/processor.py` now creates `.success` and `.failed` status markers, ensuring resilience and preventing reprocessing of files.
 *   **[✅] Critical Bugfix - ReportGenerator Stability:** Systematically refactored `src/audit/report_generator.py` with defensive data population logic, preventing crashes from `KeyError` or `IndexError` when merging stage results into the master template.
 *   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
-*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a recurring `TypeError` in the Vertex AI SDK by "laundering" schemas (`json.loads(json.dumps(schema))`) before passing them to the `GenerationConfig`, ensuring a pure data structure.
 *   **[✅] Bugfix - Intuitive Stage Execution:** Corrected the main control flow to align with user intent. `--run-stage` now *always* overwrites its specific target. `--run-all-stages` now correctly skips completed stages by default for resumability, and can be overridden with `--force`.
-*   **[✅] Dev Experience - Enabled Local Development:** Reconfigured Terraform to deploy a public Vector Search endpoint and updated the `rag_client` and `envs.sh` script to use it, enabling local execution of the application for faster development cycles.
+*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a recurring `TypeError` by refactoring the Chapter 3 schemas to use `{"items": {"anyOf": [...]}}` instead of the unsupported "tuple validation" format (`{"items": [...]}`). This ensures compatibility with the Vertex AI SDK's schema parser.
 
 ---
 
