@@ -1,30 +1,21 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Schema for Subchapter 3.9 Ergebnis der Dokumentenprüfung",
-    "type": "object",
-    "properties": {
-      "answers": {
-        "type": "array",
-        "items": [
-          { "type": "boolean" }
-        ]
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Subchapter 3.9 Ergebnis der Dokumentenpruefung",
+  "type": "object",
+  "properties": {
+    "answers": {
+      "type": "array",
+      "description": "The single boolean answer to the question of whether the audit can proceed.",
+      "items": {
+        "type": "boolean"
       },
-      "finding": {
-        "type": "object",
-        "description": "A structured finding based on the analysis.",
-        "properties": {
-          "category": {
-            "type": "string",
-            "description": "The category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK' (No Deviation).",
-            "enum": ["AG", "AS", "E", "OK"]
-          },
-          "description": {
-            "type": "string",
-            "description": "A detailed description of the finding."
-          }
-        },
-        "required": ["category", "description"]
-      }
+      "minItems": 1,
+      "maxItems": 1
     },
-    "required": ["answers", "finding"]
-  }
+    "votum": {
+      "type": "string",
+      "description": "The summary verdict or 'Votum' for the document review phase."
+    }
+  },
+  "required": ["answers", "votum"]
+}

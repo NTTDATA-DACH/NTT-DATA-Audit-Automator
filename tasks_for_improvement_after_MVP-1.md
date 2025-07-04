@@ -17,7 +17,7 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[✅] Critical Bugfix - ReportGenerator Stability:** Systematically refactored `src/audit/report_generator.py` with defensive data population logic, preventing crashes from `KeyError` or `IndexError` when merging stage results into the master template.
 *   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
 *   **[✅] Bugfix - Intuitive Stage Execution:** Corrected the main control flow to align with user intent. `--run-stage` now *always* overwrites its specific target. `--run-all-stages` now correctly skips completed stages by default for resumability, and can be overridden with `--force`.
-*   **[✅] Bugfix - SDK Schema Parsing:** Resolved a recurring `TypeError` by refactoring the Chapter 3 schemas to use `{"items": {"anyOf": [...]}}` instead of the unsupported "tuple validation" format (`{"items": [...]}`). This ensures compatibility with the Vertex AI SDK's schema parser.
+*   **[✅] Bugfix - SDK Schema Parsing (COMPLETE):** Resolved a recurring `TypeError` by refactoring all affected schemas (Chapters 1 and 3). The fix ensures the `"items"` keyword for arrays always uses a single schema object (e.g., `{"items": {"type": "..."}}`) instead of the unsupported "tuple validation" format (`{"items": [...]}`), ensuring full compatibility with the Vertex AI SDK's schema parser.
 
 ---
 
