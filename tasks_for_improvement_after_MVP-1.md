@@ -62,3 +62,8 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 11: Improve Prompts and Schemas.**
     *   **Directory:** `assets/`
     *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
+
+*   **[ ] TODO 11: replace references to tupels**
+    *   **Directory:** `src/`
+    *   **Action:** In texts generated the reference is to a tupel, but I want the name of the document
+    
