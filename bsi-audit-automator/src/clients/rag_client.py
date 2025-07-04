@@ -81,7 +81,9 @@ class RagClient:
         Returns:
             A single string containing the concatenated text of all found chunks.
         """
-        
+        if self.config.is_test_mode:
+            logging.info(f"RAG_CLIENT_TEST_MODE: Sending query to vector DB: '{query}'")
+
         context_str = ""
         try:
             # 1. Embed the text query into a numerical vector first.
@@ -90,10 +92,18 @@ class RagClient:
                 logging.error("Failed to generate embedding for the RAG query.")
                 return "Error: Could not generate embedding for query."
             
-            if self.config.is_test_mode:
-                logging.info(f"RAG_CLIENT_TEST_MODE: Sending query to vector DB: '{query}'")
-
             query_vector = embeddings[0]
+
+            # --- NEW: DETAILED LOGGING FOR THE QUERY VECTOR ---
+            if self.config.is_test_mode:
+                dims = len(query_vector)
+                snippet_start = query_vector[:3]
+                snippet_end = query_vector[-3:]
+                logging.info(
+                    f"RAG_CLIENT_TEST_MODE: Sending query_vector to find_neighbors. "
+                    f"Shape: {dims} dims. Start: {snippet_start}, End: {snippet_end}"
+                )
+            # --- END OF NEW LOGGING ---
 
             # 2. Use the numerical vector to find neighbors.
             response = self.index_endpoint.find_neighbors(
