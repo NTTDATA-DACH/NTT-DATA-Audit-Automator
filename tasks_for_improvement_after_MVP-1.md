@@ -61,4 +61,18 @@ This document tracks completed enhancements and the prioritized backlog of featu
 
 *   **[ ] TODO 12: Implement Language Selection for AI Output.**
     *   **Action:** Add an environment variable (e.g., `OUTPUT_LANGUAGE`) to allow the user to select the language for the AI's narrative output (e.g., 'German', 'English'). Update all prompts to include a placeholder for the language, which will be formatted by the stage runners.
+
+*   **[ ] TODO 13: Fix bug A**
+    *   **Directory:** ``
+    *   **Action:** Running report generation gives this error:
+```
+    Traceback (most recent call last):
+  File "/app/src/main.py", line 66, in main
+    generator.assemble_report()
+  File "/app/src/audit/report_generator.py", line 116, in assemble_report
+    self._populate_report(report, stage_name, stage_data)
+  File "/app/src/audit/report_generator.py", line 189, in _populate_report
+    self._populate_chapter_1(report, stage_data)
+  File "/app/src/audit/report_generator.py", line 57, in _populate_chapter_1
+    target_chapter['geltungsbereichDerZertifizierung']['content'][0]['text'] = final_text
 ```
