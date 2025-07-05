@@ -29,53 +29,61 @@ class Chapter3Runner:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     def _load_subchapter_definitions(self) -> Dict[str, Any]:
-        """Loads definitions for subchapters, including their specific RAG queries."""
+        """Loads definitions for subchapters, including their specific RAG queries and source categories."""
+        # **NEW**: The queries are more like natural questions, and we specify 'source_categories'.
         return {
             "aktualitaetDerReferenzdokumente": {
                 "key": "3.1",
                 "prompt_path": "assets/prompts/stage_3_1_aktualitaet.txt",
                 "schema_path": "assets/schemas/stage_3_1_aktualitaet_schema.json",
-                "rag_query": "Richtlinien zur Lenkung von Dokumenten, Überarbeitung und Aktualität der Referenzdokumente A.0. Status und Datum der letzten Bewertung des IT-Grundschutz-Checks A.4."
+                "rag_query": "Überprüfe die Aktualität und Lenkung der Referenzdokumente. Wurden A.1 bis A.6 neu erstellt und A.4 innerhalb der letzten 12 Monate bewertet?",
+                "source_categories": ["Grundschutz-Check", "Organisations-Richtlinie"]
             },
             "sicherheitsleitlinieUndRichtlinienInA0": {
                 "key": "3.2",
                 "prompt_path": "assets/prompts/stage_3_2_sicherheitsleitlinie.txt",
                 "schema_path": "assets/schemas/stage_3_2_sicherheitsleitlinie_schema.json",
-                "rag_query": "Inhalt und Angemessenheit der Leitlinie zur Informationssicherheit A.0.1, Abdeckung der Anforderungen aus ISMS.1, Konsistenz der Sicherheitsziele in den Dokumenten A.0.2 bis A.0.5, und Nachweis der Genehmigung und Veröffentlichung durch das Management."
+                "rag_query": "Analyse der Sicherheitsleitlinie: Ist sie angemessen, erfüllt sie ISMS.1-Anforderungen, und wird sie vom Management getragen und veröffentlicht?",
+                "source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie"]
             },
             "definitionDesInformationsverbundes": {
                 "key": "3.3.1",
                 "prompt_path": "assets/prompts/stage_3_3_1_informationsverbund.txt",
                 "schema_path": "assets/schemas/stage_3_3_1_informationsverbund_schema.json",
-                "rag_query": "Definition und Abgrenzung des Informationsverbunds; enthaltene infrastrukturelle, organisatorische, personelle und technische Komponenten; Definition der Schnittstellen zu externen Prozessen und Systemen."
+                "rag_query": "Ist der Informationsverbund klar abgegrenzt und sind alle notwendigen Komponenten und Schnittstellen definiert?",
+                "source_categories": ["Informationsverbund", "Strukturanalyse"]
             },
             "bereinigterNetzplan": {
                 "key": "3.3.2",
                 "prompt_path": "assets/prompts/stage_3_3_2_netzplan.txt",
                 "schema_path": "assets/schemas/stage_3_3_2_netzplan_schema.json",
-                "rag_query": "Dokumentation zum Netzwerkplan, Netzpläne, Topologie, Netzwerkkomponenten und deren Bezeichner."
+                "rag_query": "Liegt ein aktueller und vollständiger Netzplan vor und sind alle Komponenten korrekt bezeichnet?",
+                "source_categories": ["Netzplan"]
             },
             "listeDerGeschaeftsprozesse": {
                 "key": "3.3.3",
                 "prompt_path": "assets/prompts/stage_3_3_3_geschaeftsprozesse.txt",
                 "schema_path": "assets/schemas/stage_3_3_3_geschaeftsprozesse_schema.json",
-                "rag_query": "Liste der Geschäftsprozesse, Prozessbeschreibungen, Prozessverantwortliche und beteiligte Anwendungen."
+                "rag_query": "Enthält die Liste der Geschäftsprozesse alle erforderlichen Informationen wie Bezeichnung, Verantwortlicher und benötigte Anwendungen?",
+                "source_categories": ["Strukturanalyse"]
             },
             "definitionDerSchutzbedarfskategorien": {
                 "key": "3.4.1",
                 "prompt_path": "assets/prompts/stage_3_4_1_schutzbedarfskategorien.txt",
                 "schema_path": "assets/schemas/stage_3_4_1_schutzbedarfskategorien_schema.json",
-                "rag_query": "Dokumentation zur Definition der Schutzbedarfskategorien (normal, hoch, sehr hoch) und deren Kriterien."
+                "rag_query": "Ist die Definition der Schutzbedarfskategorien plausibel, angemessen und wurden mehr als drei Kategorien definiert?",
+                "source_categories": ["Schutzbedarfsfeststellung"]
             },
             "modellierungsdetails": {
                 "key": "3.5.1",
                 "prompt_path": "assets/prompts/stage_3_5_1_modellierungsdetails.txt",
                 "schema_path": "assets/schemas/stage_3_5_1_modellierungsdetails_schema.json",
-                "rag_query": "Dokumentation A.3 Modellierung, Zuordnung von Bausteinen zu Zielobjekten, Begründungen für nicht angewandte Bausteine, Umgang mit benutzerdefinierten Bausteinen."
+                "rag_query": "Analyse der Modellierung: Wurden alle relevanten Bausteine auf alle Zielobjekte angewandt und Abweichungen plausibel begründet?",
+                "source_categories": ["Modellierung", "Grundschutz-Check"]
             },
             "ergebnisDerModellierung": {
                 "key": "3.5.2",
-                "is_summary": True, # Flag for summary chapters
+                "is_summary": True,
                 "prompt_path": "assets/prompts/stage_3_5_2_ergebnis_modellierung.txt",
                 "schema_path": "assets/schemas/stage_3_summary_schema.json"
             },
@@ -83,7 +91,8 @@ class Chapter3Runner:
                 "key": "3.6.1",
                 "prompt_path": "assets/prompts/stage_3_6_1_grundschutz_check.txt",
                 "schema_path": "assets/schemas/stage_3_6_1_grundschutz_check_schema.json",
-                "rag_query": "Dokumentation A.4 IT-Grundschutz-Check, Umsetzungsstatus von Anforderungen, Begründungen für als 'entbehrlich' markierte Anforderungen, Erfüllung von MUSS-Anforderungen, Verweis auf Realisierungsplan A.6."
+                "rag_query": "Analyse des IT-Grundschutz-Checks: Wurde der Umsetzungsstatus für jede Anforderung erhoben und wurden alle MUSS-Anforderungen erfüllt?",
+                "source_categories": ["Grundschutz-Check", "Realisierungsplan"]
             },
             "ergebnisDerDokumentenpruefung": {
                 "key": "3.9",
@@ -97,15 +106,17 @@ class Chapter3Runner:
         """Generates content for a single subchapter using the RAG pipeline."""
         logging.info(f"Starting RAG generation for subchapter: {definition['key']} ({name})")
         
-        # Handle summary chapters which don't have their own RAG query
         if definition.get("is_summary"):
-            # This logic is now handled in the main run() method
             return {name: {}}
 
         prompt_template = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
 
-        context_evidence = self.rag_client.get_context_for_query(definition["rag_query"])
+        # **NEW**: Pass the source categories to the RAG client for filtering.
+        context_evidence = self.rag_client.get_context_for_query(
+            query=definition["rag_query"],
+            source_categories=definition.get("source_categories")
+        )
         prompt = prompt_template.format(context=context_evidence)
 
         try:
@@ -142,15 +153,13 @@ class Chapter3Runner:
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
 
-        # Separate RAG tasks from summary tasks
         rag_definitions = {k: v for k, v in self.subchapter_definitions.items() if not v.get("is_summary")}
         summary_definitions = {k: v for k, v in self.subchapter_definitions.items() if v.get("is_summary")}
 
-        # Run all standard RAG tasks in parallel
         rag_tasks = [self._process_rag_subchapter(name, definition) for name, definition in rag_definitions.items()]
         
         rag_results_list = await asyncio.gather(*rag_tasks)
-        rag_results_list = [r for r in rag_results_list if r] # Filter out potential Nones
+        rag_results_list = [r for r in rag_results_list if r]
 
         aggregated_results = {}
         findings_for_summary = []
@@ -169,7 +178,6 @@ class Chapter3Runner:
 
         summary_text = "\n".join(findings_for_summary) if findings_for_summary else "No specific findings or deviations were generated in the previous steps."
         
-        # Now run summary tasks sequentially, feeding them the collected findings
         summary_tasks = [
             self._process_summary_subchapter(name, definition, summary_text)
             for name, definition in summary_definitions.items()

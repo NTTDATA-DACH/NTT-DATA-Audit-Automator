@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Document Classification Schema",
+    "description": "A schema for the classified list of source documents.",
+    "type": "object",
+    "properties": {
+      "document_map": {
+        "type": "array",
+        "description": "An array mapping each source document to its BSI category.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string",
+              "description": "The full original filename from GCS."
+            },
+            "category": {
+              "type": "string",
+              "description": "The BSI document category.",
+              "enum": [
+                "Sicherheitsleitlinie",
+                "Organisations-Richtlinie",
+                "Informationsverbund",
+                "Netzplan",
+                "Strukturanalyse",
+                "Schutzbedarfsfeststellung",
+                "Modellierung",
+                "Grundschutz-Check",
+                "Risikoanalyse",
+                "Realisierungsplan",
+                "Dienstleister-Liste",
+                "Sonstiges"
+              ]
+            }
+          },
+          "required": ["filename", "category"]
+        }
+      }
+    },
+    "required": ["document_map"]
+  }

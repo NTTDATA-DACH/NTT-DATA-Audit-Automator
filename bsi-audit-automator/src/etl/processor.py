@@ -17,6 +17,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 MAX_FILES_TEST_MODE = 3
 VECTOR_INDEX_PREFIX = "vector_index_data/"
+DOC_MAP_PATH = "output/document_map.json"
 
 class EtlProcessor:
     """
@@ -36,6 +37,45 @@ class EtlProcessor:
             length_function=len,
         )
         logging.info("ETL Processor initialized.")
+
+    def _load_asset_text(self, path: str) -> str:
+        with open(path, 'r', encoding='utf-8') as f: return f.read()
+
+    def _load_asset_json(self, path: str) -> dict:
+        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+
+    async def _classify_source_documents(self, filenames: List[str]) -> None:
+        """
+        Uses an AI model to classify source documents into predefined BSI categories
+        based on their filenames. Saves the result to a map file in GCS.
+        """
+        logging.info("Starting AI-driven document classification based on filenames.")
+
+        # Check if the map already exists to avoid reprocessing
+        if self.gcs_client.blob_exists(DOC_MAP_PATH):
+            logging.info(f"Document map already exists at '{DOC_MAP_PATH}'. Skipping classification.")
+            return
+
+        prompt_template = self._load_asset_text("assets/prompts/etl_classify_documents.txt")
+        schema = self._load_asset_json("assets/schemas/etl_classify_documents_schema.json")
+        
+        # Format the list of filenames as a JSON string for the prompt
+        filenames_json = json.dumps(filenames, indent=2)
+        prompt = prompt_template.format(filenames_json=filenames_json)
+
+        try:
+            classification_result = await self.ai_client.generate_json_response(prompt, schema)
+            
+            # The result is the entire object, we just need to serialize it.
+            self.gcs_client.upload_from_string(
+                content=json.dumps(classification_result, indent=2, ensure_ascii=False),
+                destination_blob_name=DOC_MAP_PATH
+            )
+            logging.info(f"Successfully created and saved document map to '{DOC_MAP_PATH}'.")
+        except Exception as e:
+            logging.error(f"Failed to classify source documents: {e}", exc_info=True)
+            # We raise here because the map is critical for subsequent stages.
+            raise
 
     def _extract_text_from_pdf(self, pdf_bytes: bytes, source_filename: str) -> str:
         """
@@ -130,6 +170,7 @@ class EtlProcessor:
                 "id": str(uuid.uuid4()),
                 "embedding": embedding_vector,
                 "text_content": chunks[i],
+                # The 'source_document' field must contain the full blob name for filtering.
                 "source_document": blob.name
             }
             jsonl_content += json.dumps(record) + "\n"
@@ -151,22 +192,27 @@ class EtlProcessor:
 
         logging.info(f"Successfully uploaded embedding data for {blob.name} to gs://{self.config.bucket_name}/{output_path}")
 
-    def run(self) -> None:
+    async def run(self) -> None:
         """
-        Executes the main ETL pipeline. It lists all source documents, checks their
-        processing status to ensure idempotency, and then processes each new
-        document.
+        Executes the main ETL pipeline. It first classifies all documents, then
+        processes each new document, checking its status to ensure idempotency.
         """
         logging.info("Starting ETL run...")
         source_files = self.gcs_client.list_files()
-
-        if self.config.is_test_mode:
-            logging.warning(f"TEST MODE: Processing only the first {MAX_FILES_TEST_MODE} files.")
-            source_files = source_files[:MAX_FILES_TEST_MODE]
-
+        
         if not source_files:
             logging.warning("No source files found. ETL run is complete with no output.")
             return
+            
+        # Extract just the filenames for the classification step
+        source_filenames = [blob.name for blob in source_files]
+        
+        # **NEW**: Run classification step first.
+        await self._classify_source_documents(source_filenames)
+
+        if self.config.is_test_mode:
+            logging.warning(f"TEST MODE: Processing only the first {MAX_FILES_TEST_MODE} files for embedding.")
+            source_files = source_files[:MAX_FILES_TEST_MODE]
 
         for blob in source_files:
             status_blob_base = self._get_status_blob_path_base(blob.name)
@@ -185,7 +231,6 @@ class EtlProcessor:
                 self._process_single_document(blob)
             except Exception as e:
                 logging.error(f"An unexpected error occurred while processing {blob.name}. Creating '.failed' marker. Error: {e}", exc_info=True)
-                # Create a .failed marker to prevent retries
                 self.gcs_client.upload_from_string(
                     content=str(e),
                     destination_blob_name=failed_marker,

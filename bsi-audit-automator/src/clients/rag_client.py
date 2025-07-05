@@ -3,13 +3,15 @@ import logging
 import json
 from typing import List, Dict, Any
 
-# Corrected import for the IndexEndpoint class
 from google.cloud import aiplatform
 from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint
+from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
+
+DOC_MAP_PATH = "output/document_map.json"
 
 class RagClient:
     """Client for Retrieval-Augmented Generation using Vertex AI Vector Search."""
@@ -17,16 +19,13 @@ class RagClient:
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
         self.gcs_client = gcs_client
-        self.ai_client = ai_client # Inject the AI client
+        self.ai_client = ai_client
 
         aiplatform.init(
             project=config.gcp_project_id,
             location=config.vertex_ai_region
         )
 
-        # --- NEW: FLEXIBLE ENDPOINT INITIALIZATION ---
-        # Use the public endpoint for local development if available,
-        # otherwise use the private endpoint ID for cloud runs.
         if config.index_endpoint_public_domain:
             logging.info(f"Connecting to PUBLIC Vector Search Endpoint: {config.index_endpoint_public_domain}")
             self.index_endpoint = MatchingEngineIndexEndpoint.from_public_endpoint(
@@ -40,8 +39,36 @@ class RagClient:
                 index_endpoint_name=self.config.index_endpoint_id,
             )
 
-        # This lookup map is the key to retrieving text from a chunk ID.
         self._chunk_lookup_map = self._load_chunk_lookup_map()
+        # **NEW**: Load the document category map.
+        self._document_category_map = self._load_document_category_map()
+
+    def _load_document_category_map(self) -> Dict[str, str]:
+        """
+        Loads the document classification map from GCS. The map provides a
+        lookup from document category to a list of filenames.
+        """
+        logging.info(f"Loading document category map from '{DOC_MAP_PATH}'...")
+        category_map = {}
+        try:
+            map_data = self.gcs_client.read_json(DOC_MAP_PATH)
+            doc_map_list = map_data.get("document_map", [])
+            for item in doc_map_list:
+                category = item.get("category")
+                filename = item.get("filename")
+                if category and filename:
+                    if category not in category_map:
+                        category_map[category] = []
+                    category_map[category].append(filename)
+            
+            logging.info(f"Successfully built document category map with {len(category_map)} categories.")
+            return category_map
+        except NotFound:
+            logging.error(f"CRITICAL: Document map file not found at '{DOC_MAP_PATH}'. The ETL process must be run first.")
+            raise
+        except Exception as e:
+            logging.error(f"Failed to build document category map: {e}", exc_info=True)
+            return {}
 
     def _load_chunk_lookup_map(self) -> Dict[str, Dict[str, str]]:
         """
@@ -52,11 +79,9 @@ class RagClient:
         logging.info("Building chunk ID to text lookup map from all batch files...")
 
         try:
-            # Use the GCS client to find all embedding files
             embedding_blobs = self.gcs_client.list_files(prefix="vector_index_data/")
 
             for blob in embedding_blobs:
-                # Skip the placeholder file created by Terraform
                 if "placeholder.json" in blob.name:
                     continue
 
@@ -84,14 +109,15 @@ class RagClient:
             logging.error(f"Failed to build chunk lookup map from batch files: {e}", exc_info=True)
             return {}
 
-    def get_context_for_query(self, query: str, num_neighbors: int = 5) -> str:
+    def get_context_for_query(self, query: str, num_neighbors: int = 5, source_categories: List[str] = None) -> str:
         """
-        Finds the most relevant document chunks for a query and returns their text.
-        The context is prefixed with the source document name for better AI responses.
+        Finds relevant document chunks for a query, optionally filtering the search
+        to specific document categories for higher precision.
 
         Args:
             query: The question or topic to search for.
             num_neighbors: The number of relevant chunks to retrieve.
+            source_categories: A list of BSI categories to restrict the search to.
         Returns:
             A single string containing the concatenated text of all found chunks.
         """
@@ -100,7 +126,6 @@ class RagClient:
 
         context_str = ""
         try:
-            # 1. Embed the text query into a numerical vector first.
             success, embeddings = self.ai_client.get_embeddings([query])
             if not success or not embeddings:
                 logging.error("Failed to generate embedding for the RAG query.")
@@ -108,22 +133,28 @@ class RagClient:
             
             query_vector = embeddings[0]
 
-            # --- NEW: DETAILED LOGGING FOR THE QUERY VECTOR ---
-            if self.config.is_test_mode:
-                dims = len(query_vector)
-                snippet_start = query_vector[:3]
-                snippet_end = query_vector[-3:]
-                logging.info(
-                    f"RAG_CLIENT_TEST_MODE: Sending query_vector to find_neighbors. "
-                    f"Shape: {dims} dims. Start: {snippet_start}, End: {snippet_end}"
-                )
-            # --- END OF NEW LOGGING ---
+            # **NEW**: Build the filter based on categories.
+            filters = None
+            if source_categories and self._document_category_map:
+                allow_list_filenames = []
+                for category in source_categories:
+                    filenames = self._document_category_map.get(category, [])
+                    allow_list_filenames.extend(filenames)
+                
+                if allow_list_filenames:
+                    logging.info(f"Applying search filter for categories: {source_categories} ({len(allow_list_filenames)} files)")
+                    filters = aiplatform.IndexDatapoint.Restriction(
+                        namespace="source_document", allow_list=allow_list_filenames
+                    )
+                else:
+                    logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
 
-            # 2. Use the numerical vector to find neighbors.
             response = self.index_endpoint.find_neighbors(
-                deployed_index_id="bsi_deployed_index_kunde_x", # This must match the deployment
+                deployed_index_id="bsi_deployed_index_kunde_x",
                 queries=[query_vector],
                 num_neighbors=num_neighbors,
+                # The find_neighbors call expects a list of restrictions
+                filter=[filters] if filters else []
             )
 
             if response and response[0]:
