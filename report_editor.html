@@ -117,7 +117,7 @@
             vertical-align: top;
         }
         th { background-color: #f2f2f2; font-weight: bold; }
-        td input { padding: 4px; }
+        td input, td select { padding: 4px; width: 100%; box-sizing: border-box;}
         .action-cell { width: 80px; text-align: center; }
         .delete-row-btn, .add-row-btn {
             background-color: var(--danger-color);
@@ -134,6 +134,18 @@
             margin-top: 10px;
         }
         .add-row-btn:hover { background-color: var(--button-hover-bg); }
+
+        fieldset.baustein-pruefung {
+            border: 1px solid var(--secondary-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        fieldset.baustein-pruefung legend {
+            font-weight: bold;
+            color: var(--primary-color);
+            padding: 0 10px;
+        }
 
         #report-container { padding-top: 20px; }
         #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
@@ -152,7 +164,7 @@
     <div class="container">
         <div id="chapter-filter-buttons"></div>
         <div id="report-container">
-            <p id="initial-message">Load your <code>master_report_template.json</code> to begin.</p>
+            <p id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</p>
         </div>
     </div>
 
@@ -204,7 +216,7 @@
                     if (input.tagName === 'BUTTON') return;
                     const path = input.dataset.path;
                     let value = input.value;
-                    if (input.tagName === 'SELECT') {
+                    if (input.type === 'select-one') { // Adjusted for boolean selects
                         value = value === 'true' ? true : (value === 'false' ? false : null);
                     }
                     setValueByPath(reportData, path, value);
@@ -264,69 +276,93 @@
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
                 for (const subKey in chapterData) {
-                    if (subKey !== 'title' && subKey !== 'description' && subKey !== 'chapterNumber' && typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
-                         chapterDiv.appendChild(renderSection(chapterData[subKey], `${path}.${subKey}`));
+                     // Recurse only on keys that are objects but are not the known structural keys
+                    if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
+                         chapterDiv.appendChild(renderSection(subKey, chapterData[subKey], `${path}.${subKey}`));
                     }
                 }
                 return chapterDiv;
             }
 
-            function renderSection(sectionData, path) {
+            function renderSection(key, sectionData, path) {
                 const sectionDiv = document.createElement('div');
                 sectionDiv.className = 'subchapter';
 
                 if (sectionData.title) sectionDiv.innerHTML += `<h3>${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
                 if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
                 
+                const handledKeys = ['title', 'description', 'subchapterNumber'];
+
                 if (Array.isArray(sectionData.content)) {
                     sectionData.content.forEach((item, index) => {
                         const itemPath = `${path}.content[${index}]`;
                         const itemDiv = document.createElement('div');
                         itemDiv.className = 'content-item';
                         if (item.type === 'question') {
-                            itemDiv.appendChild(createInputField(item.questionText, item.answer, item.answerType, `${itemPath}.answer`));
+                            itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
                         } else if (item.type === 'finding') {
                             itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
                         } else if (item.type === 'prose') {
-                             itemDiv.appendChild(createInputField(item.label, item.text, 'text', `${itemPath}.text`));
+                            itemDiv.appendChild(createTextArea(item.label, item.text, `${itemPath}.text`));
                         }
                         sectionDiv.appendChild(itemDiv);
                     });
+                    handledKeys.push('content');
                 }
                 
                 if (sectionData.table || (sectionData.headers && Array.isArray(sectionData.rows))) {
                     sectionDiv.appendChild(renderTable(sectionData.table || sectionData, path));
+                    handledKeys.push('table', 'headers', 'rows');
                 }
+                
+                // --- SPECIAL CASE RENDERERS FOR CHAPTER 5 ---
+                if (Array.isArray(sectionData.bausteinPruefungen)) {
+                    sectionDiv.appendChild(renderBausteinPruefung(sectionData.bausteinPruefungen, `${path}.bausteinPruefungen`));
+                    handledKeys.push('bausteinPruefungen');
+                }
+                 if (Array.isArray(sectionData.massnahmenPruefungen)) {
+                    sectionDiv.appendChild(renderMassnahmenPruefung(sectionData.massnahmenPruefungen, `${path}.massnahmenPruefungen`));
+                    handledKeys.push('massnahmenPruefungen');
+                }
+                // --- END SPECIAL CASES ---
 
+                // Recursive call for any other nested objects
                 for (const subKey in sectionData) {
-                    if (!['title', 'description', 'content', 'table', 'headers', 'rows', 'subchapterNumber', 'tableId'].includes(subKey) && typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
-                        sectionDiv.appendChild(renderSection(sectionData[subKey], `${path}.${subKey}`));
+                    if (handledKeys.includes(subKey)) continue;
+
+                    if (typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
+                        sectionDiv.appendChild(renderSection(subKey, sectionData[subKey], `${path}.${subKey}`));
                     }
                 }
                 return sectionDiv;
             }
-            
+
             function createInputField(label, value, type, path) {
                 const wrapper = document.createElement('div');
-                wrapper.innerHTML = `<label for="${path}">${label}</label>`;
-                let input;
-                if (type === 'boolean') {
-                    input = document.createElement('select');
-                    input.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Yes</option><option value="false" ${value === false ? 'selected' : ''}>No</option><option value="" ${value === null || value === undefined ? 'selected' : ''}>N/A</option>`;
-                } else {
-                    input = document.createElement('input');
-                    input.type = type || 'text';
-                    input.value = value || '';
-                }
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const input = document.createElement('input');
+                input.type = type || 'text';
+                input.value = value || '';
                 input.id = path;
                 input.dataset.path = path;
                 wrapper.appendChild(input);
                 return wrapper;
             }
 
+            function createSelect(label, value, path) {
+                const wrapper = document.createElement('div');
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const select = document.createElement('select');
+                select.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Ja</option><option value="false" ${value === false ? 'selected' : ''}>Nein</option><option value="" ${value === null || value === undefined ? 'selected' : ''}>N/A</option>`;
+                select.id = path;
+                select.dataset.path = path;
+                wrapper.appendChild(select);
+                return wrapper;
+            }
+
             function createTextArea(label, value, path) {
                 const wrapper = document.createElement('div');
-                wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
                 const textarea = document.createElement('textarea');
                 textarea.id = path;
                 textarea.dataset.path = path;
@@ -348,7 +384,9 @@
                     th.textContent = headerText;
                     headerRow.appendChild(th);
                 });
-                headerRow.insertCell().className = 'action-cell';
+                if (path.includes("anhang.abweichungen")) {
+                    headerRow.insertCell().className = 'action-cell';
+                }
 
                 if (tableData.rows) {
                     tableData.rows.forEach((rowData, rowIndex) => {
@@ -356,35 +394,86 @@
                         const rowPath = `${path}.rows[${rowIndex}]`;
                         tableData.headers.forEach(header => {
                             const cell = row.insertCell();
-                            const input = document.createElement('input');
-                            input.type = 'text';
-                            input.value = rowData[header] || '';
-                            input.dataset.path = `${rowPath}.${header}`;
-                            cell.appendChild(input);
+                            cell.appendChild(createInputField(null, rowData[header] || '', 'text', `${rowPath}.${header}`));
                         });
-                        const actionCell = row.insertCell();
-                        actionCell.className = 'action-cell';
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Delete';
-                        deleteBtn.className = 'delete-row-btn';
-                        deleteBtn.dataset.path = `${path}.rows`;
-                        deleteBtn.dataset.rowIndex = rowIndex;
-                        actionCell.appendChild(deleteBtn);
+                        if (path.includes("anhang.abweichungen")) {
+                            const actionCell = row.insertCell();
+                            actionCell.className = 'action-cell';
+                            const deleteBtn = document.createElement('button');
+                            deleteBtn.textContent = 'Delete';
+                            deleteBtn.className = 'delete-row-btn';
+                            deleteBtn.dataset.path = `${path}.rows`;
+                            deleteBtn.dataset.rowIndex = rowIndex;
+                            actionCell.appendChild(deleteBtn);
+                        }
                     });
                 }
-
-                const footerRow = tfoot.insertRow();
-                const addCell = footerRow.insertCell();
-                addCell.colSpan = tableData.headers.length + 1;
-                const addBtn = document.createElement('button');
-                addBtn.textContent = '+ Add Row';
-                addBtn.className = 'add-row-btn';
-                addBtn.dataset.path = `${path}.rows`;
-                addBtn.dataset.headers = JSON.stringify(tableData.headers);
-                addCell.appendChild(addBtn);
+                
+                if (path.includes("anhang.abweichungen")) {
+                    const footerRow = tfoot.insertRow();
+                    const addCell = footerRow.insertCell();
+                    addCell.colSpan = tableData.headers.length + 1;
+                    const addBtn = document.createElement('button');
+                    addBtn.textContent = '+ Add Row';
+                    addBtn.className = 'add-row-btn';
+                    addBtn.dataset.path = `${path}.rows`;
+                    addBtn.dataset.headers = JSON.stringify(tableData.headers);
+                    addCell.appendChild(addBtn);
+                }
                 
                 tableContainer.appendChild(table);
                 return tableContainer;
+            }
+
+            // Special renderer for Chapter 5.5.2
+            function renderBausteinPruefung(pruefungen, path) {
+                const container = document.createElement('div');
+                pruefungen.forEach((pruefung, pIndex) => {
+                    const pPath = `${path}[${pIndex}]`;
+                    const fieldset = document.createElement('fieldset');
+                    fieldset.className = 'baustein-pruefung';
+                    
+                    const legend = document.createElement('legend');
+                    legend.textContent = `Prüfung für Baustein: ${pruefung.baustein}`;
+                    fieldset.appendChild(legend);
+
+                    fieldset.appendChild(createInputField('Zielobjekt', pruefung.zielobjekt, 'text', `${pPath}.zielobjekt`));
+                    
+                    const anforderungenTable = document.createElement('table');
+                    anforderungenTable.innerHTML = `<thead><tr><th>Nummer</th><th>Anforderung</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
+                    const tbody = anforderungenTable.createTBody();
+                    
+                    pruefung.anforderungen.forEach((anf, aIndex) => {
+                        const aPath = `${pPath}.anforderungen[${aIndex}]`;
+                        const row = tbody.insertRow();
+                        row.insertCell().appendChild(createInputField(null, anf.nummer, 'text', `${aPath}.nummer`));
+                        row.insertCell().appendChild(createInputField(null, anf.anforderung, 'text', `${aPath}.anforderung`));
+                        row.insertCell().appendChild(createInputField(null, anf.bewertung, 'text', `${aPath}.bewertung`));
+                        row.insertCell().appendChild(createInputField(null, anf.auditfeststellung, 'text', `${aPath}.auditfeststellung`));
+                        row.insertCell().appendChild(createInputField(null, anf.abweichungen, 'text', `${aPath}.abweichungen`));
+                    });
+                    fieldset.appendChild(anforderungenTable);
+                    container.appendChild(fieldset);
+                });
+                return container;
+            }
+             // Special renderer for Chapter 5.6.2
+            function renderMassnahmenPruefung(pruefungen, path) {
+                const container = document.createElement('div');
+                const table = document.createElement('table');
+                table.innerHTML = `<thead><tr><th>Maßnahme</th><th>Zielobjekt</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
+                const tbody = table.createTBody();
+                 pruefungen.forEach((massnahme, mIndex) => {
+                    const mPath = `${path}[${mIndex}]`;
+                    const row = tbody.insertRow();
+                    row.insertCell().appendChild(createInputField(null, massnahme.massnahme, 'text', `${mPath}.massnahme`));
+                    row.insertCell().appendChild(createInputField(null, massnahme.zielobjekt, 'text', `${mPath}.zielobjekt`));
+                    row.insertCell().appendChild(createInputField(null, massnahme.bewertung, 'text', `${mPath}.bewertung`));
+                    row.insertCell().appendChild(createInputField(null, massnahme.auditfeststellung, 'text', `${mPath}.auditfeststellung`));
+                    row.insertCell().appendChild(createInputField(null, massnahme.abweichungen, 'text', `${mPath}.abweichungen`));
+                });
+                container.appendChild(table);
+                return container;
             }
 
             function handleAddRow(button) {
@@ -424,23 +513,23 @@
             }
             
             function getValueByPath(obj, path) {
-                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.');
-                let current = obj;
+                const keys = path.replace(/\[(\w+)\]/g, '.$1').replace(/^bsiAuditReport\./, '').split('.');
+                let current = obj.bsiAuditReport;
                 for (let i = 0; i < keys.length; i++) {
-                    if (current === undefined) return undefined;
+                    if (current === undefined || current === null) return undefined;
                     current = current[keys[i]];
                 }
                 return current;
             }
 
             function setValueByPath(obj, path, value) {
-                const keys = path.replace(/\[(\w+)\]/g, '.$1').split('.');
-                let current = obj;
+                const keys = path.replace(/\[(\w+)\]/g, '.$1').replace(/^bsiAuditReport\./, '').split('.');
+                let current = obj.bsiAuditReport;
                 for (let i = 0; i < keys.length - 1; i++) {
                     if(current === undefined || current[keys[i]] === undefined) return; 
                     current = current[keys[i]];
                 }
-                if(current) {
+                if(current && typeof current === 'object') {
                     current[keys[keys.length - 1]] = value;
                 }
             }
