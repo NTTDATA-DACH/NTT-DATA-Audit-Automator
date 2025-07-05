@@ -12,8 +12,6 @@
 #
 # The output will be a file named 'project_context.txt'.
 
-set -e # Exit immediately if a command fails
-
 OUTPUT_FILE="project_context.txt"
 
 # Check for required commands
