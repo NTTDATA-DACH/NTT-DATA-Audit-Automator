@@ -1,16 +1,19 @@
---- a/bsi-audit-automator/src/clients/rag_client.py
-+++ b/bsi-audit-automator/src/clients/rag_client.py
-@@ -136,9 +136,10 @@
-                 
-                 if allow_list_filenames:
-                     logging.info(f"Applying search filter for categories: {source_categories} ({len(allow_list_filenames)} files)")
--                    filters = aiplatform.IndexDatapoint.Restriction(
--                        namespace="source_document", allow_list=allow_list_filenames
--                    )
-+                    # FIX: Use the correct dictionary format for restrictions, not the invalid class path.
-+                    # The API expects a dictionary with 'namespace' and 'allow' keys.
-+                    filters = {"namespace": "source_document", "allow": allow_list_filenames}
+--- a/bsi-audit-automator/src/audit/stages/stage_3_dokumentenpruefung.py
++++ b/bsi-audit-automator/src/audit/stages/stage_3_dokumentenpruefung.py
+@@ -107,11 +107,14 @@
+         # Determine schema based on number of questions
+         num_questions = len(questions)
+         if num_questions == 1: task["schema_path"] = "assets/schemas/generic_1_question_schema.json"
+         elif num_questions == 2: task["schema_path"] = "assets/schemas/generic_2_question_schema.json"
+-        elif num_questions == 4: task["schema_path"] = "assets/schemas/stage_3_7_risikoanalyse_schema.json" # Special case
+-        elif num_questions == 5: task["schema_path"] = "assets/schemas/stage_3_6_1_grundschutz_check_schema.json" # Special case
+-        else: task["schema_path"] = "assets/schemas/stage_3_2_sicherheitsleitlinie_schema.json" # Fallback for 3 questions
+-        
++        elif num_questions == 3: task["schema_path"] = "assets/schemas/generic_3_question_schema.json"
++        elif num_questions == 4: task["schema_path"] = "assets/schemas/generic_4_question_schema.json"
++        elif num_questions == 5: task["schema_path"] = "assets/schemas/generic_5_question_schema.json"
++        else:
++            # Fallback for unexpected number of questions to prevent crashing.
++            logging.error(f"No generic schema available for {num_questions} questions in section '{key}'. Cannot proceed with this task.")
++            return None
 +
-                 else:
-                     logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
- 
