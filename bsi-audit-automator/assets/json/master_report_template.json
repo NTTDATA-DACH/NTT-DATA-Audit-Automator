@@ -1,51 +1,28 @@
 {
-  "version": "1.0.0",
   "bsiAuditReport": {
     "titlePage": {
       "reportTitle": "Auditbericht im Rahmen der Zertifizierung nach ISO 27001 auf der Basis von IT-Grundschutz",
       "auditedInstitution": "",
-      "certificationId": ""
+      "certificationID": ""
     },
     "allgemeines": {
-      "chapterNumber": "1",
+      "chapterNumber": "1.",
       "title": "Allgemeines",
-      "description": "Dieses Kapitel enthält allgemeine Informationen zum durchgeführten Audit.",
-      "verfasser": {
-        "title": "Verfasser",
+      "versionshistorie": {
+        "title": "Versionshistorie",
         "subchapterNumber": "1.1",
-        "name": ""
+        "table": {
+          "headers": ["Datum", "Version", "Verfasser", "Bemerkungen"],
+          "rows": []
+        }
       },
       "auditierteInstitution": {
         "title": "Auditierte Institution",
         "subchapterNumber": "1.2",
         "table": {
-          "headers": [
-            "Institution:",
-            "Straße / Hausnummer:",
-            "PLZ / Ort:",
-            "E-Mail:"
-          ],
-          "rows": [
-            {
-              "Institution:": "",
-              "Straße / Hausnummer:": "",
-              "PLZ / Ort:": "",
-              "E-Mail:": ""
-            }
-          ]
+          "headers": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"],
+          "rows": []
         }
-      },
-      "auditTeam": {
-        "title": "Auditteam",
-        "subchapterNumber": "1.3",
-        "description": "Das Auditteam wurde gemäß den BSI-Anforderungen zusammengestellt. Dieses Feld wird manuell im Report Editor ausgefüllt.",
-        "content": [
-          {
-            "type": "prose",
-            "label": "Manuelle Eingabe für das Auditteam",
-            "text": "Lead Auditor: [Name], Technischer Experte: [Name]"
-          }
-        ]
       },
       "informationsverbund": {
         "title": "Informationsverbund",
@@ -54,12 +31,24 @@
         "content": [
           {
             "type": "prose",
-            "label": "Kurzbezeichnung",
+            "label": "Kurzbezeichnung:",
             "text": ""
           },
           {
             "type": "prose",
-            "label": "Kurzbeschreibung",
+            "label": "Kurzbeschreibung:",
+            "text": ""
+          }
+        ]
+      },
+      "geltungsbereichDerZertifizierung": {
+        "title": "Geltungsbereich der Zertifizierung",
+        "subchapterNumber": "1.2",
+        "description": "Beschreibung des Informationsverbunds, der Geschäftsprozesse, der Anwendungen, der Standorte und der physischen Grenzen.",
+        "content": [
+          {
+            "type": "prose",
+            "label": "Beschreibung des Geltungsbereichs",
             "text": ""
           }
         ]
@@ -67,46 +56,18 @@
       "audittyp": {
         "title": "Audittyp",
         "subchapterNumber": "1.5",
-        "content": ""
-      },
-      "geltungsbereichDerZertifizierung": {
-        "title": "Geltungsbereich der Zertifizierung",
-        "subchapterNumber": "1.2",
-        "description": "Beschreibung des Geltungsbereichs der Zertifizierung.",
-        "content": [
-          {
-            "type": "prose",
-            "text": ""
-          }
-        ]
-      },
-      "grundlageDesAudits": {
-        "title": "Grundlage des Audits",
-        "subchapterNumber": "1.8",
-        "description": "Platzhalter für manuelle Eingabe der formalen Grundlagen.",
-        "content": [
-          {
-            "type": "prose",
-            "text": ""
-          }
-        ]
+        "content": "Zertifizierungsaudit"
       },
       "auditplan": {
-        "title": "Auditplan (Zusammenfassung)",
-        "subchapterNumber": "1.6",
-        "description": "Platzhalter für manuelle Eingabe des Auditplans.",
-        "content": [
-          {
-            "type": "prose",
-            "text": ""
-          }
-        ]
+        "title": "Auditplan (Platzhalter)",
+        "subchapterNumber": "1.5",
+        "description": "Platzhalter für manuell zu füllenden Auditplan.",
+        "content": []
       }
     },
     "dokumentenpruefung": {
-      "chapterNumber": "3",
+      "chapterNumber": "3.",
       "title": "Dokumentenprüfung",
-      "description": "Prüfung der eingereichten Referenzdokumente.",
       "aktualitaetDerReferenzdokumente": {
         "title": "Aktualität der Referenzdokumente",
         "subchapterNumber": "3.1",
@@ -168,67 +129,89 @@
         "title": "Strukturanalyse A.1",
         "subchapterNumber": "3.3",
         "definitionDesInformationsverbundes": {
-          "title": "Definition des Informationsverbundes",
-          "subchapterNumber": "3.3.1",
-          "content": [
-            {
-              "type": "question",
-              "questionText": "Ist der Informationsverbund eindeutig abgegrenzt?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Sind alle infrastrukturellen, organisatorischen, personellen und technischen Komponenten im Informationsverbund enthalten, die zur Aufgabenerfüllung notwendig sind?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Sind die Schnittstellen zu allen weiteren Prozessen definiert?",
-              "answer": null
-            },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
-          ]
+            "title": "Definition des Informationsverbundes",
+            "subchapterNumber": "3.3.1",
+            "content": [
+                {"type": "question", "questionText": "Ist der Informationsverbund eindeutig abgegrenzt?", "answer": null},
+                {"type": "question", "questionText": "Sind alle infrastrukturellen, organisatorischen, personellen und technischen Komponenten im Informationsverbund enthalten, die zur Aufgabenerfüllung notwendig sind?", "answer": null},
+                {"type": "question", "questionText": "Sind die Schnittstellen zu allen weiteren Prozessen definiert?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
         },
         "bereinigterNetzplan": {
-          "title": "Bereinigter Netzplan",
-          "subchapterNumber": "3.3.2",
-          "content": [
-            {
-              "type": "question",
-              "questionText": "Optional: Liegt ein aktueller und vollständiger bereinigter Netzplan vor?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Sind alle Komponenten im Netzplan mit den korrekten Bezeichnern versehen?",
-              "answer": null
-            },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
-          ]
+            "title": "Bereinigter Netzplan",
+            "subchapterNumber": "3.3.2",
+            "content": [
+                {"type": "question", "questionText": "Optional: Liegt ein aktueller und vollständiger bereinigter Netzplan vor?", "answer": null},
+                {"type": "question", "questionText": "Sind alle Komponenten im Netzplan mit den korrekten Bezeichnern versehen?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
         },
         "listeDerGeschaeftsprozesse": {
-          "title": "Liste der Geschäftsprozesse",
-          "subchapterNumber": "3.3.3",
-          "content": [
-            {
-              "type": "question",
-              "questionText": "Enthält die Liste der Geschäftsprozesse alle benötigten Informationen?",
-              "answer": null
+            "title": "Liste der Geschäftsprozesse",
+            "subchapterNumber": "3.3.3",
+            "content": [
+                {"type": "question", "questionText": "Enthält die Liste der Geschäftsprozesse alle benötigten Informationen (eindeutige Bezeichnung, Name, Prozessverantwortlicher, kurze Beschreibung, benötigte Anwendungen)?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "listeDerAnwendungen": {
+            "title": "Liste der Anwendungen",
+            "subchapterNumber": "3.3.4",
+            "content": [
+                {"type": "question", "questionText": "Enthält die Liste der Anwendungen alle benötigten Informationen?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "listeDerItSysteme": {
+            "title": "Liste der IT-Systeme",
+            "subchapterNumber": "3.3.5",
+            "content": [
+                {"type": "question", "questionText": "Enthält die Liste der IT-Systeme alle benötigten Informationen?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "listeDerRaeumeGebaeudeStandorte": {
+            "title": "Liste der Räume, Gebäude und Standorte",
+            "subchapterNumber": "3.3.6",
+            "content": [
+                {"type": "question", "questionText": "Enthält die Liste der Räume, Gebäude und Standorte alle benötigten Informationen?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "listeDerKommunikationsverbindungen": {
+            "title": "Liste der Kommunikationsverbindungen",
+            "subchapterNumber": "3.3.7",
+            "content": [
+                {"type": "question", "questionText": "Enthält die Liste der Kommunikationsverbindungen alle benötigten Informationen?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "stichprobenDokuStrukturanalyse": {
+            "title": "Stichprobendokumentation der Strukturanalyse",
+            "subchapterNumber": "3.3.8",
+            "table": {
+                "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"],
+                "rows": []
             },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
-          ]
+            "content": [
+              {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "listeDerDienstleister": {
+            "title": "Liste der Dienstleister",
+            "subchapterNumber": "3.3.9",
+            "content": [
+                {"type": "question", "questionText": "Liegt eine aktuelle und vollständige Liste aller externen Dienstleister vor?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "ergebnisDerStrukturanalyse": {
+            "title": "Ergebnis der Strukturanalyse",
+            "subchapterNumber": "3.3.10",
+            "content": [
+                {"type": "prose", "label": "Votum Strukturanalyse:", "text": ""}
+            ]
         }
       },
       "schutzbedarfsfeststellungA2": {
@@ -238,22 +221,73 @@
           "title": "Definition der Schutzbedarfskategorien",
           "subchapterNumber": "3.4.1",
           "content": [
-            {
-              "type": "question",
-              "questionText": "Ist die Definition der Schutzbedarfskategorien plausibel und für den Informationsverbund angemessen?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Wurden mehr als drei Schutzbedarfskategorien definiert?",
-              "answer": null
-            },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
+            {"type": "question", "questionText": "Ist die Definition der Schutzbedarfskategorien plausibel und für den Informationsverbund angemessen?", "answer": null},
+            {"type": "question", "questionText": "Wurden mehr als drei Schutzbedarfskategorien definiert?", "answer": null},
+            {"type": "finding", "label": "Feststellung:", "findingText": ""}
           ]
+        },
+        "schutzbedarfGeschaeftsprozesse": {
+            "title": "Schutzbedarf der Geschäftsprozesse",
+            "subchapterNumber": "3.4.2",
+            "content": [
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Geschäftsprozesse vollständig dokumentiert?", "answer": null},
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Geschäftsprozesse nachvollziehbar begründet?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "schutzbedarfAnwendungen": {
+            "title": "Schutzbedarf der Anwendungen",
+            "subchapterNumber": "3.4.3",
+            "content": [
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Anwendungen vollständig dokumentiert?", "answer": null},
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Anwendungen nachvollziehbar begründet?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "schutzbedarfItSysteme": {
+            "title": "Schutzbedarf der IT-Systeme",
+            "subchapterNumber": "3.4.4",
+            "content": [
+                {"type": "question", "questionText": "Ist der Schutzbedarf der IT-Systeme vollständig dokumentiert?", "answer": null},
+                {"type": "question", "questionText": "Ist der Schutzbedarf der IT-Systeme nachvollziehbar begründet?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "schutzbedarfRaeume": {
+            "title": "Schutzbedarf der Räume, Gebäude und Standorte",
+            "subchapterNumber": "3.4.5",
+            "content": [
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Räume, Gebäude und Standorte vollständig dokumentiert?", "answer": null},
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Räume, Gebäude und Standorte nachvollziehbar begründet?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "schutzbedarfKommunikationsverbindungen": {
+            "title": "Schutzbedarf der Kommunikationsverbindungen",
+            "subchapterNumber": "3.4.6",
+            "content": [
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Außenverbindungen und kritischen Kommunikationsverbindungen vollständig dokumentiert?", "answer": null},
+                {"type": "question", "questionText": "Ist der Schutzbedarf der Kommunikationsverbindungen nachvollziehbar begründet?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "stichprobenDokuSchutzbedarf": {
+            "title": "Stichprobendokumentation der Schutzbedarfsfeststellung",
+            "subchapterNumber": "3.4.7",
+            "table": {
+                "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Ableitung des Schutzbedarfs nachvollziehbar", "Verknüpfungen zu Zielobjekten nachvollziehbar"],
+                "rows": []
+            },
+            "content": [
+              {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "ergebnisDerSchutzbedarfsfeststellung": {
+            "title": "Ergebnis der Schutzbedarfsfeststellung",
+            "subchapterNumber": "3.4.8",
+            "content": [
+                {"type": "prose", "label": "Votum Schutzbedarfsfeststellung:", "text": ""}
+            ]
         }
       },
       "modellierungDesInformationsverbundesA3": {
@@ -263,42 +297,18 @@
           "title": "Modellierungsdetails",
           "subchapterNumber": "3.5.1",
           "content": [
-            {
-              "type": "question",
-              "questionText": "Ist jeder Baustein des IT-Grundschutz-Kompendiums auf alle relevanten Zielobjekte angewandt?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Ist für jeden Baustein des IT-Grundschutz-Kompendiums, der nicht angewandt wurde, eine plausible Begründung vorhanden?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Wurden alle Zielobjekte angemessen berücksichtigt, für die keine Bausteine des IT-Grundschutz-Kompendiums vorhanden sind?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Gibt es benutzerdefinierte Bausteine?",
-              "answer": null
-            },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
+            {"type": "question", "questionText": "Ist jeder Baustein des IT-Grundschutz-Kompendiums auf alle relevanten Zielobjekte angewandt?", "answer": null},
+            {"type": "question", "questionText": "Ist für jeden Baustein des IT-Grundschutz-Kompendiums, der nicht angewandt wurde, eine plausible Begründung vorhanden?", "answer": null},
+            {"type": "question", "questionText": "Wurden alle Zielobjekte angemessen berücksichtigt, für die keine Bausteine des IT-Grundschutz-Kompendiums vorhanden sind?", "answer": null},
+            {"type": "question", "questionText": "Gibt es benutzerdefinierte Bausteine?", "answer": null},
+            {"type": "finding", "label": "Feststellung:", "findingText": ""}
           ]
         },
         "ergebnisDerModellierung": {
           "title": "Ergebnis der Modellierung",
           "subchapterNumber": "3.5.2",
           "content": [
-            {
-              "type": "prose",
-              "label": "Votum Modellierung:",
-              "text": ""
-            }
+            {"type": "prose", "label": "Votum Modellierung:", "text": ""}
           ]
         }
       },
@@ -309,38 +319,73 @@
           "title": "Details zum IT-Grundschutz-Check",
           "subchapterNumber": "3.6.1",
           "content": [
-            {
-              "type": "question",
-              "questionText": "Wurde zu jeder Anforderung der Umsetzungsstatus erhoben?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Wurden alle Anforderungen mit Umsetzungsstatus „entbehrlich“ plausibel begründet?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Sind alle MUSS-Teilanforderungen erfüllt?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Wurden die nicht oder nur teilweise umgesetzten Anforderungen im Referenzdokument A.6 dokumentiert?",
-              "answer": null
-            },
-            {
-              "type": "question",
-              "questionText": "Sind alle Anforderungen innerhalb der letzten 12 Monate überprüft worden?",
-              "answer": null
-            },
-            {
-              "type": "finding",
-              "label": "Feststellung:",
-              "findingText": ""
-            }
+            {"type": "question", "questionText": "Wurde zu jeder Anforderung der Umsetzungsstatus erhoben?", "answer": null},
+            {"type": "question", "questionText": "Wurden alle Anforderungen mit Umsetzungsstatus „entbehrlich“ plausibel begründet?", "answer": null},
+            {"type": "question", "questionText": "Sind alle MUSS-Teilanforderungen erfüllt?", "answer": null},
+            {"type": "question", "questionText": "Wurden die nicht oder nur teilweise umgesetzten Anforderungen im Referenzdokument A.6 dokumentiert?", "answer": null},
+            {"type": "question", "questionText": "Sind alle Anforderungen innerhalb der letzten 12 Monate überprüft worden?", "answer": null},
+            {"type": "finding", "label": "Feststellung:", "findingText": ""}
           ]
+        },
+        "benutzerdefinierteBausteine": {
+            "title": "Benutzerdefinierte Bausteine",
+            "subchapterNumber": "3.6.2",
+            "content": [
+                {"type": "question", "questionText": "Wurden benutzerdefinierte Bausteine erstellt und modelliert?", "answer": null},
+                {"type": "question", "questionText": "Sind alle Anforderungen der Institution in den benutzerdefinierten Bausteinen enthalten?", "answer": null},
+                {"type": "finding", "label": "Feststellung:", "findingText": ""}
+            ]
+        },
+        "ergebnisItGrundschutzCheck": {
+            "title": "Ergebnis IT-Grundschutz-Check",
+            "subchapterNumber": "3.6.3",
+            "content": [
+                {"type": "prose", "label": "Votum IT-Grundschutz-Check:", "text": ""}
+            ]
         }
+      },
+      "risikoanalyseA5": {
+          "title": "Risikoanalyse A.5",
+          "subchapterNumber": "3.7",
+          "risikoanalyse": {
+              "title": "Risikoanalyse",
+              "subchapterNumber": "3.7.1",
+              "content": [
+                  {"type": "question", "questionText": "Wurde für alle Zielobjekte, deren Schutzbedarf über „normal“ liegt, eine Risikoanalyse durchgeführt?", "answer": null},
+                  {"type": "question", "questionText": "Ist die Risikoanalyse aussagekräftig und nachvollziehbar?", "answer": null},
+                  {"type": "question", "questionText": "Ist das vom Management getragene Restrisiko für den Informationsverbund angemessen?", "answer": null},
+                  {"type": "question", "questionText": "Wurde der Management-Report zur Risikoanalyse von der Institutionsleitung unterschrieben?", "answer": null},
+                  {"type": "finding", "label": "Feststellung:", "findingText": ""}
+              ]
+          },
+          "ergebnisRisikoanalyse": {
+              "title": "Ergebnis Risikoanalyse",
+              "subchapterNumber": "3.7.2",
+              "content": [
+                  {"type": "prose", "label": "Votum Risikoanalyse:", "text": ""}
+              ]
+          }
+      },
+      "realisierungsplanA6": {
+          "title": "Realisierungsplan A.6",
+          "subchapterNumber": "3.8",
+          "realisierungsplan": {
+              "title": "Realisierungsplan",
+              "subchapterNumber": "3.8.1",
+              "content": [
+                  {"type": "question", "questionText": "Liegt ein Realisierungsplan A.6 vor?", "answer": null},
+                  {"type": "question", "questionText": "Werden die bestehenden Risiken nachvollziehbar dokumentiert?", "answer": null},
+                  {"type": "question", "questionText": "Besteht ein Umsetzungsplan für die Reduzierung des Restrisikos?", "answer": null},
+                  {"type": "finding", "label": "Feststellung:", "findingText": ""}
+              ]
+          },
+          "ergebnisRealisierungsplan": {
+              "title": "Ergebnis Realisierungsplan",
+              "subchapterNumber": "3.8.2",
+              "content": [
+                  {"type": "prose", "label": "Votum Realisierungsplan:", "text": ""}
+              ]
+          }
       },
       "ergebnisDerDokumentenpruefung": {
         "title": "Ergebnis der Dokumentenprüfung",
@@ -360,163 +405,73 @@
       }
     },
     "erstellungEinesPruefplans": {
-      "chapterNumber": "4",
+      "chapterNumber": "4.",
       "title": "Erstellung eines Prüfplans",
-      "description": "Planung des Audits basierend auf dem Audittyp.",
       "auditplanung": {
         "title": "Auditplanung",
         "subchapterNumber": "4.1",
         "auswahlBausteineErstRezertifizierung": {
           "title": "Auswahl Bausteine Erst-/Rezertifizierungsverfahren",
           "subchapterNumber": "4.1.1",
-          "table": {
-            "headers": [
-              "Schicht",
-              "Baustein",
-              "Zielobjekt",
-              "Begründung zur Auswahl"
-            ],
-            "rows": []
-          }
-        },
-        "auswahlBausteineUeberwachung": {
-          "title": "Auswahl Bausteine Überwachungsaudit",
-          "subchapterNumber": "4.1.2",
-          "table": {
-            "headers": [
-              "Schicht",
-              "Baustein",
-              "Zielobjekt",
-              "Begründung zur Auswahl"
-            ],
-            "rows": []
-          }
+          "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
+          "rows": []
         }
       }
     },
     "vorOrtAudit": {
-      "chapterNumber": "5",
+      "chapterNumber": "5.",
       "title": "Vor-Ort-Audit",
-      "description": "Ergebnisse und Feststellungen aus der Vor-Ort-Prüfung.",
-      "wirksamkeitSicherheitsmanagementsystem": {
-        "title": "Wirksamkeit des Sicherheitsmanagementsystems",
-        "subchapterNumber": "5.1",
-        "description": "Dieser Abschnitt wird manuell vom Auditor während der Vor-Ort-Prüfung ausgefüllt.",
-        "content": []
-      },
       "verifikationDesITGrundschutzChecks": {
         "title": "Verifikation des IT-Grundschutz-Checks",
         "subchapterNumber": "5.5",
-        "zusammenfassung": {
-          "title": "Zusammenfassung des IT-Grundschutz-Checks",
-          "subchapterNumber": "5.5.1",
-          "description": "Dieser Abschnitt wird manuell vom Auditor ausgefüllt.",
-          "content": []
-        },
         "einzelergebnisse": {
           "title": "Einzelergebnisse des IT-Grundschutz-Checks",
           "subchapterNumber": "5.5.2",
-          "description": "Deterministisch generierte Checkliste der zu prüfenden Bausteine und deren Anforderungen für den Auditor.",
-          "bausteinPruefungen": [
-            {
-              "baustein": "",
-              "zielobjekt": "",
-              "anforderungen": [
-                {
-                  "nummer": "",
-                  "anforderung": "",
-                  "bewertung": "",
-                  "auditfeststellung": "",
-                  "abweichungen": ""
-                }
-              ]
-            }
-          ]
+          "bausteinPruefungen": []
         }
       },
       "risikoanalyseA5": {
         "title": "Risikoanalyse A.5",
         "subchapterNumber": "5.6",
-        "zusammenfassung": {
-          "title": "Zusammenfassung der Risikoanalyse",
-          "subchapterNumber": "5.6.1",
-          "description": "Dieser Abschnitt wird manuell vom Auditor ausgefüllt.",
-          "content": []
-        },
         "einzelergebnisseDerRisikoanalyse": {
-          "title": "Einzelergebnisse der Risikoanalyse",
-          "subchapterNumber": "5.6.2",
-          "description": "Deterministisch generierte Checkliste der zu prüfenden zusätzlichen Maßnahmen für den Auditor.",
-          "massnahmenPruefungen": [
-            {
-              "massnahme": "",
-              "zielobjekt": "",
-              "bewertung": "",
-              "auditfeststellung": "",
-              "abweichungen": ""
-            }
-          ]
+            "title": "Einzelergebnisse der Risikoanalyse",
+            "subchapterNumber": "5.6.2",
+            "massnahmenPruefungen": []
         }
       }
     },
     "anhang": {
-      "chapterNumber": "7",
+      "chapterNumber": "7.",
       "title": "Anhang",
       "referenzdokumente": {
         "title": "Referenzdokumente",
         "subchapterNumber": "7.1",
-        "description": "Liste der für das Audit eingereichten Dokumente.",
         "table": {
-          "headers": [
-            "Nr.",
-            "Kurzbezeichnung",
-            "Dateiname / Verweis",
-            "Version, Datum",
-            "Relevante Änderungen"
-          ],
+          "headers": ["Nr.", "Kurzbezeichnung", "Dateiname / Verweis", "Version, Datum", "Relevante Änderungen"],
           "rows": []
         }
       },
       "abweichungenUndEmpfehlungen": {
         "title": "Abweichungen und Empfehlungen",
         "subchapterNumber": "7.2",
-        "description": "Zusammenfassende Liste aller im Audit festgestellten Abweichungen und Empfehlungen.",
-        "geringfuegigeAbweichungen": {
-          "title": "Geringfügige Abweichungen",
-          "table": {
-            "headers": [
-              "Nr.",
-              "Beschreibung der Abweichung",
-              "Quelle (Kapitel)",
-              "Behebungsfrist",
-              "Status"
-            ],
-            "rows": []
-          }
-        },
         "schwerwiegendeAbweichungen": {
           "title": "Schwerwiegende Abweichungen",
           "table": {
-            "headers": [
-              "Nr.",
-              "Beschreibung der Abweichung",
-              "Quelle (Kapitel)",
-              "Behebungsfrist",
-              "Status"
-            ],
+            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
+            "rows": []
+          }
+        },
+        "geringfuegigeAbweichungen": {
+          "title": "Geringfügige Abweichungen",
+          "table": {
+            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
             "rows": []
           }
         },
         "empfehlungen": {
           "title": "Empfehlungen",
           "table": {
-            "headers": [
-              "Nr.",
-              "Beschreibung der Empfehlung",
-              "Quelle (Kapitel)",
-              "Behebungsfrist",
-              "Status"
-            ],
+            "headers": ["Nr.", "Beschreibung der Empfehlung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
             "rows": []
           }
         }

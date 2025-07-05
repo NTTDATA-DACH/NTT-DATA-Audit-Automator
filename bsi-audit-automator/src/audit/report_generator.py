@@ -186,24 +186,56 @@ class ReportGenerator:
         key_to_path_map = {
             "aktualitaetDerReferenzdokumente": ["aktualitaetDerReferenzdokumente"],
             "sicherheitsleitlinieUndRichtlinienInA0": ["sicherheitsleitlinieUndRichtlinienInA0"],
+            # Strukturanalyse A.1
             "definitionDesInformationsverbundes": ["strukturanalyseA1", "definitionDesInformationsverbundes"],
             "bereinigterNetzplan": ["strukturanalyseA1", "bereinigterNetzplan"],
             "listeDerGeschaeftsprozesse": ["strukturanalyseA1", "listeDerGeschaeftsprozesse"],
+            "listeDerAnwendungen": ["strukturanalyseA1", "listeDerAnwendungen"],
+            "listeDerItSysteme": ["strukturanalyseA1", "listeDerItSysteme"],
+            "listeDerRaeumeGebaeudeStandorte": ["strukturanalyseA1", "listeDerRaeumeGebaeudeStandorte"],
+            "listeDerKommunikationsverbindungen": ["strukturanalyseA1", "listeDerKommunikationsverbindungen"],
+            "stichprobenDokuStrukturanalyse": ["strukturanalyseA1", "stichprobenDokuStrukturanalyse"],
+            "listeDerDienstleister": ["strukturanalyseA1", "listeDerDienstleister"],
+            "ergebnisDerStrukturanalyse": ["strukturanalyseA1", "ergebnisDerStrukturanalyse"],
+            # Schutzbedarfsfeststellung A.2
             "definitionDerSchutzbedarfskategorien": ["schutzbedarfsfeststellungA2", "definitionDerSchutzbedarfskategorien"],
+            "schutzbedarfGeschaeftsprozesse": ["schutzbedarfsfeststellungA2", "schutzbedarfGeschaeftsprozesse"],
+            "schutzbedarfAnwendungen": ["schutzbedarfsfeststellungA2", "schutzbedarfAnwendungen"],
+            "schutzbedarfItSysteme": ["schutzbedarfsfeststellungA2", "schutzbedarfItSysteme"],
+            "schutzbedarfRaeume": ["schutzbedarfsfeststellungA2", "schutzbedarfRaeume"],
+            "schutzbedarfKommunikationsverbindungen": ["schutzbedarfsfeststellungA2", "schutzbedarfKommunikationsverbindungen"],
+            "stichprobenDokuSchutzbedarf": ["schutzbedarfsfeststellungA2", "stichprobenDokuSchutzbedarf"],
+            "ergebnisDerSchutzbedarfsfeststellung": ["schutzbedarfsfeststellungA2", "ergebnisDerSchutzbedarfsfeststellung"],
+            # Modellierung A.3
             "modellierungsdetails": ["modellierungDesInformationsverbundesA3", "modellierungsdetails"],
             "ergebnisDerModellierung": ["modellierungDesInformationsverbundesA3", "ergebnisDerModellierung"],
+            # IT-Grundschutz-Check A.4
             "detailsZumItGrundschutzCheck": ["itGrundschutzCheckA4", "detailsZumItGrundschutzCheck"],
+            "benutzerdefinierteBausteine": ["itGrundschutzCheckA4", "benutzerdefinierteBausteine"],
+            "ergebnisItGrundschutzCheck": ["itGrundschutzCheckA4", "ergebnisItGrundschutzCheck"],
+            # Risikoanalyse A.5 & Realisierungsplan A.6
+            "risikoanalyseA5": ["risikoanalyseA5", "risikoanalyse"],
+            "ergebnisRisikoanalyse": ["risikoanalyseA5", "ergebnisRisikoanalyse"],
+            "realisierungsplanA6": ["realisierungsplanA6", "realisierungsplan"],
+            "ergebnisRealisierungsplan": ["realisierungsplanA6", "ergebnisRealisierungsplan"],
+            # Final result
             "ergebnisDerDokumentenpruefung": ["ergebnisDerDokumentenpruefung"],
         }
 
         for subchapter_key, result in stage_data.items():
             if not isinstance(result, dict): continue
+            
             path_keys = key_to_path_map.get(subchapter_key)
-            if not path_keys: continue
+            if not path_keys:
+                logging.warning(f"No path mapping found for stage_data key '{subchapter_key}'. Skipping population.")
+                continue
 
             target_section = chapter_3_target
-            for key in path_keys:
-                target_section = target_section.get(key, {})
+            try:
+                for key in path_keys:
+                    target_section = target_section.get(key, {})
+            except (AttributeError, TypeError):
+                 logging.warning(f"Could not traverse path {path_keys} for '{subchapter_key}' in report template."); continue
 
             if not target_section:
                 logging.warning(f"Could not find target section for '{subchapter_key}' in report template."); continue
@@ -223,11 +255,27 @@ class ReportGenerator:
                 answer_idx = 0
                 for item in target_section.get("content", []):
                     if item.get("type") == "question":
-                        if answer_idx < len(answers): item["answer"] = answers[answer_idx]; answer_idx += 1
-                        else: logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'"); break
+                        if answer_idx < len(answers):
+                            item["answer"] = answers[answer_idx]
+                            answer_idx += 1
+                        else:
+                            logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'")
+                            break
             elif "votum" in result:
                 for item in target_section.get("content", []):
-                    if item.get("type") == "prose": item["text"] = result.get("votum", ""); break
+                    if item.get("type") == "prose":
+                        item["text"] = result.get("votum", "")
+                        break
+            
+            # NEW: Populate table data
+            if "table" in result and isinstance(result.get("table"), dict):
+                target_table_section = target_section.get("table")
+                if isinstance(target_table_section, dict):
+                    target_table_section['rows'] = result['table'].get('rows', [])
+                    logging.info(f"Populated table for '{subchapter_key}'.")
+                else:
+                    logging.warning(f"Could not populate table for '{subchapter_key}' as target section is not a dict.")
+
 
     def _populate_chapter_4(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 4 (Prüfplan) content into the report."""
