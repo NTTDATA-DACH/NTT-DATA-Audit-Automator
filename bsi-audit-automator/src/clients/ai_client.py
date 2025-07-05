@@ -10,6 +10,7 @@ from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
+
 from src.config import AppConfig
 
 # Constants for the AI client, aligned with the project brief.

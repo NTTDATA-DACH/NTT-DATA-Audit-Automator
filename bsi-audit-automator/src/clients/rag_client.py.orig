@@ -137,10 +137,9 @@ class RagClient:
                 
                 if allow_list_filenames:
                     logging.info(f"Applying search filter for categories: {source_categories} ({len(allow_list_filenames)} files)")
-                    # FIX: Use the correct dictionary format for restrictions, not the invalid class path.
-                    # The API expects a dictionary with 'namespace' and 'allow' keys.
-                    filters = {"namespace": "source_document", "allow": allow_list_filenames}
-
+                    filters = aiplatform.IndexDatapoint.Restriction(
+                        namespace="source_document", allow_list=allow_list_filenames
+                    )
                 else:
                     logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
 
