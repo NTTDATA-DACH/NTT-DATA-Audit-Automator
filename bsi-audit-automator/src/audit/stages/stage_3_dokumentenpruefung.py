@@ -16,10 +16,9 @@ class Chapter3Runner:
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
 
-    # NEW: Static map for RAG metadata not present in the template.
-    # This keeps the template clean while providing necessary context.
     _RAG_METADATA_MAP = {
-        "aktualitaetDerReferenzdokumente": {"source_categories": ["Grundschutz-Check", "Organisations-Richtlinie"]},
+        # FIX: aktualitaetDerReferenzdokumente should search ALL documents, so no category filter.
+        "aktualitaetDerReferenzdokumente": {"source_categories": None},
         "sicherheitsleitlinieUndRichtlinienInA0": {"source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie"]},
         "definitionDesInformationsverbundes": {"source_categories": ["Informationsverbund", "Strukturanalyse"]},
         "bereinigterNetzplan": {"source_categories": ["Netzplan", "Strukturanalyse"]},
@@ -48,8 +47,9 @@ class Chapter3Runner:
         self.config = config
         self.ai_client = ai_client
         self.rag_client = rag_client
-        # NEW: The execution plan is now built dynamically from the template
         self.execution_plan = self._build_execution_plan_from_template()
+        # NEW: Load the document map once for business logic checks
+        self._doc_map = self.rag_client._document_category_map
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME} with dynamic execution plan.")
 
     def _load_asset_text(self, path: str) -> str:
@@ -57,6 +57,58 @@ class Chapter3Runner:
 
     def _load_asset_json(self, path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+
+    def _check_document_coverage(self) -> Dict[str, Any]:
+        """
+        Checks if all critical BSI document types are present.
+        Returns a finding if any are missing.
+        """
+        REQUIRED_CATEGORIES = {
+            "Sicherheitsleitlinie", "Strukturanalyse", "Schutzbedarfsfeststellung",
+            "Modellierung", "Grundschutz-Check", "Risikoanalyse", "Realisierungsplan"
+        }
+        present_categories = set(self._doc_map.keys())
+        missing_categories = REQUIRED_CATEGORIES - present_categories
+
+        if not missing_categories:
+            return {"category": "OK", "description": "Alle kritischen Dokumententypen sind vorhanden."}
+        else:
+            desc = f"Die folgenden kritischen Dokumententypen wurden in den eingereichten Unterlagen nicht gefunden oder klassifiziert: {', '.join(sorted(list(missing_categories)))}. Dies stellt eine schwerwiegende Abweichung dar, da die grundlegende Dokumentation für das Audit unvollständig ist."
+            logging.warning(f"Document coverage check failed. Missing: {missing_categories}")
+            return {"category": "AS", "description": desc}
+
+    def _check_richtlinien_coverage(self) -> Dict[str, Any]:
+        """
+        Checks for the 5 required policies (A.0.1 - A.0.5).
+        Returns a finding if any are missing.
+        """
+        REQUIRED_RICHTLINIEN = {
+            "A.0.1 Leitlinie zur Informationssicherheit": ["Sicherheitsleitlinie"],
+            "A.0.2 Richtlinie zur Risikoanalyse": ["Risikoanalyse"],
+            "A.0.3 Richtlinie zur Lenkung von Dokumenten und Aufzeichnungen": ["Organisations-Richtlinie"],
+            "A.0.4 Richtlinie zur internen ISMS-Auditierung": ["Organisations-Richtlinie"],
+            "A.0.5 Richtlinie zur Lenkung von Korrektur- und Vorbeugungsmaßnahmen": ["Organisations-Richtlinie"],
+        }
+        
+        missing_richtlinien = []
+        for policy, categories in REQUIRED_RICHTLINIEN.items():
+            found = any(cat in self._doc_map for cat in categories)
+            if not found:
+                # Fallback: Use RAG to search for the policy name in the Org-Richtlinien
+                logging.info(f"Policy document for '{policy}' not found by category. Searching content...")
+                context = self.rag_client.get_context_for_query(
+                    queries=[f"Suche nach der Richtlinie '{policy}'"],
+                    source_categories=["Sicherheitsleitlinie", "Organisations-Richtlinie"]
+                )
+                if "No highly relevant context found" in context:
+                     missing_richtlinien.append(policy)
+        
+        if not missing_richtlinien:
+            return {"category": "OK", "description": "Alle geforderten Richtlinien (A.0.1-A.0.5) scheinen vorhanden oder in den übergeordneten Dokumenten enthalten zu sein."}
+        else:
+            desc = f"Die folgenden geforderten Richtlinien konnten weder als eigenständiges Dokument noch inhaltlich in den übergeordneten Richtlinien gefunden werden: {', '.join(missing_richtlinien)}."
+            logging.warning(f"Richtlinien check failed. Missing: {missing_richtlinien}")
+            return {"category": "AG", "description": desc}
 
     def _build_execution_plan_from_template(self) -> List[Dict[str, Any]]:
         """
@@ -66,8 +118,6 @@ class Chapter3Runner:
         plan = []
         template = self._load_asset_json(self.TEMPLATE_PATH)
         ch3_template = template.get("bsiAuditReport", {}).get("dokumentenpruefung", {})
-
-        # Ensure a consistent order for processing subchapters
         subchapter_keys = sorted(ch3_template.keys())
 
         for subchapter_key in subchapter_keys:
@@ -90,8 +140,6 @@ class Chapter3Runner:
         if not content: return None
 
         task = {"key": key}
-
-        # Check for summary tasks first
         if any("Votum" in item.get("label", "") for item in content if item.get("type") == "prose"):
             task["type"] = "summary"
             task["prompt_path"] = "assets/prompts/generic_summary_prompt.txt"
@@ -99,7 +147,6 @@ class Chapter3Runner:
             task["summary_topic"] = data.get("title", key)
             return task
 
-        # Process RAG tasks
         questions = [item["questionText"] for item in content if item.get("type") == "question"]
         if not questions: return None
         
@@ -107,23 +154,20 @@ class Chapter3Runner:
         task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
         task["prompt_path"] = "assets/prompts/generic_question_prompt.txt"
         
-        # FIX: The list of raw questions is now used for the RAG query
         metadata = self._RAG_METADATA_MAP.get(key, {})
         task["rag_queries"] = metadata.get("rag_queries", questions)
         task["source_categories"] = metadata.get("source_categories")
 
-        # Determine schema based on number of questions
         num_questions = len(questions)
         if num_questions == 1: task["schema_path"] = "assets/schemas/generic_1_question_schema.json"
         elif num_questions == 2: task["schema_path"] = "assets/schemas/generic_2_question_schema.json"
         elif num_questions == 3: task["schema_path"] = "assets/schemas/generic_3_question_schema.json"
-        elif num_questions == 4: task["schema_path"] = "assets/schemas/stage_3_7_risikoanalyse_schema.json" # Keep special case
+        elif num_questions == 4: task["schema_path"] = "assets/schemas/stage_3_7_risikoanalyse_schema.json"
         elif num_questions == 5: task["schema_path"] = "assets/schemas/generic_5_question_schema.json"
         else:
-            logging.error(f"No generic schema available for {num_questions} questions in section '{key}'. Cannot proceed with this task.")
+            logging.error(f"No generic schema for {num_questions} questions in section '{key}'.")
             return None
 
-        # Handle special table-generating prompts (if any)
         if "stichproben" in key.lower():
             task["prompt_path"] = f"assets/prompts/stage_3_{data['subchapterNumber'].replace('.', '_')}_{key}.txt"
             task["schema_path"] = f"assets/schemas/stage_3_{data['subchapterNumber'].replace('.', '_')}_{key}_schema.json"
@@ -138,7 +182,6 @@ class Chapter3Runner:
         prompt_template_str = self._load_asset_text(task["prompt_path"])
         schema = self._load_asset_json(task["schema_path"])
 
-        # FIX: Use the new rag_queries list and call the refactored RAG client
         context_evidence = self.rag_client.get_context_for_query(
             queries=task["rag_queries"],
             source_categories=task.get("source_categories")
@@ -151,6 +194,17 @@ class Chapter3Runner:
 
         try:
             generated_data = await self.ai_client.generate_json_response(prompt, schema)
+            
+            # Inject findings from business logic checks into specific sections
+            if key == "aktualitaetDerReferenzdokumente":
+                coverage_finding = self._check_document_coverage()
+                if coverage_finding['category'] != 'OK':
+                    generated_data['finding'] = coverage_finding
+            elif key == "sicherheitsleitlinieUndRichtlinienInA0":
+                 richtlinien_finding = self._check_richtlinien_coverage()
+                 if richtlinien_finding['category'] != 'OK':
+                    generated_data['finding'] = richtlinien_finding
+
             return {key: generated_data}
         except Exception as e:
             logging.error(f"Failed to generate data for subchapter {key}: {e}", exc_info=True)
@@ -194,9 +248,7 @@ class Chapter3Runner:
         return "\n".join(findings_for_summary) if findings_for_summary else "No specific findings or deviations were generated."
 
     async def run(self) -> dict:
-        """
-        Executes the dynamically generated plan for Chapter 3.
-        """
+        """Executes the dynamically generated plan for Chapter 3."""
         logging.info(f"Executing dynamically generated plan for stage: {self.STAGE_NAME}")
         
         aggregated_results = {}

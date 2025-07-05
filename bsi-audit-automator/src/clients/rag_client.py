@@ -14,9 +14,9 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
-# **NEW**: Constants for dynamic context filtering
-SIMILARITY_THRESHOLD = 0.7  # Lower is stricter. Cosine distance of 0.7 is a reasonable starting point.
-NEIGHBOR_POOL_SIZE = 10     # Fetch a larger pool of candidates to filter from.
+# Constants for RAG retrieval - Drastically increased to provide more context.
+NUM_TOP_NEIGHBORS = 20      # The number of neighbors to retrieve for context.
+NEIGHBOR_POOL_SIZE = 50     # Fetch a much larger pool of candidates to select from.
 
 
 class RagClient:
