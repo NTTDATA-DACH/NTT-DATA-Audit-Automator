@@ -1,5 +1,5 @@
 # The Google Cloud project ID.
-project_id = "bsi-auditor-3"
+project_id = "bsi-auditor-4"
 
 # The region where all resources will be deployed.
 # Must be a region that supports Vertex AI Vector Search.
