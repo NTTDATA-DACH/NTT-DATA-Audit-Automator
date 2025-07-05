@@ -36,8 +36,8 @@ echo "📦 Deploying new Cloud Run Job '${JOB_NAME}'..."
 gcloud run jobs deploy "${JOB_NAME}" \
   --image "${IMAGE_URI}" \
   --tasks 1 \
-  --max-retries 3 \
-  --memory 4Gi \
+  --max-retries 1 \
+  --memory 8Gi \
   --cpu 2 \
   --region "${REGION}" \
   --project "${PROJECT_ID}" \
