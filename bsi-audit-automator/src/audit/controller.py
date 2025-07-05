@@ -2,8 +2,8 @@
 import logging
 import json
 import asyncio
-import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from collections import defaultdict
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -38,100 +38,103 @@ class AuditController:
             "Chapter-3": (self.config, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.ai_client),
             "Chapter-5": (self.config, self.gcs_client, self.ai_client),
-            "Chapter-7": (self.config, self.gcs_client), # AI Client no longer needed here
+            "Chapter-7": (self.config, self.gcs_client),
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")
 
-    def _append_finding(self, finding: Dict[str, Any], source_chapter: str, source_subchapter_key: Optional[str] = None) -> None:
-        """Appends a single structured finding to the central list with a unique ID."""
-        # Use a short UUID for the ID to prevent collisions in parallel environments.
-        finding_id = f"{finding['category']}-{uuid.uuid4().hex[:12]}"
-        
-        # Construct a more detailed source reference
-        source_ref = source_chapter.replace('Chapter-', '')
-        if source_subchapter_key:
-            source_ref += f" ({source_subchapter_key})"
-            
+    def _collect_finding(self, finding: Dict[str, Any], stage_name: str) -> None:
+        """Collects a raw finding object, adding source context before appending."""
+        source_ref = stage_name.replace('Chapter-', '')
         self.all_findings.append({
-            "id": finding_id,
+            # ID is NOT assigned here. It will be assigned sequentially at the end.
             "category": finding['category'],
             "description": finding['description'],
             "source_chapter": source_ref
         })
-        logging.info(f"Collected finding from {source_ref}: {finding['category']}")
+        logging.info(f"Collected finding from {stage_name}: {finding['category']}")
 
-    def _extract_findings_recursive(self, data: Any, stage_name: str) -> None:
+    def _extract_findings_recursive(self, data: Any) -> List[Dict[str, Any]]:
         """
-        Recursively traverses a nested data structure (dicts and lists) to find
-        and store all structured `finding` objects. This is more robust than a
-        flat search.
+        Recursively traverses a data structure to find all structured `finding` objects.
+        Returns a flat list of all findings discovered.
         """
+        found = []
         if isinstance(data, dict):
-            # Check if the current dictionary is a finding object itself
             if 'finding' in data and isinstance(data['finding'], dict):
-                finding = data['finding']
-                if finding and finding.get('category') != 'OK':
-                    # Try to find a subchapter key for better context
-                    subchapter_key = next((k for k, v in data.items() if isinstance(v, dict) and 'finding' in v), None)
-                    self._append_finding(finding, stage_name, subchapter_key)
+                finding_obj = data['finding']
+                if finding_obj and finding_obj.get('category') != 'OK':
+                    found.append(finding_obj)
             
-            # Recurse into the values of the dictionary
-            for key, value in data.items():
-                self._extract_findings_recursive(value, stage_name)
-
+            for value in data.values():
+                found.extend(self._extract_findings_recursive(value))
+        
         elif isinstance(data, list):
-            # Recurse into each item in the list
             for item in data:
-                self._extract_findings_recursive(item, stage_name)
+                found.extend(self._extract_findings_recursive(item))
+        
+        return found
 
     def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> None:
         """
-        Public entry point to parse stage results for findings. It uses a recursive
-        helper to ensure all nested findings are discovered.
-
-        Args:
-            stage_name: The name of the stage that produced the result (e.g., 'Chapter-3').
-            result_data: The JSON-like dictionary returned by the stage runner.
+        Parses stage results, finds all structured `finding` objects recursively,
+        and adds them to the central collection.
         """
         if not result_data:
             return
-        self._extract_findings_recursive(result_data, stage_name)
 
+        discovered_findings = self._extract_findings_recursive(result_data)
+        for finding in discovered_findings:
+            self._collect_finding(finding, stage_name)
 
     def _save_all_findings(self) -> None:
         """
-        Saves the centrally collected list of all non-'OK' findings to a 
-        dedicated JSON file in GCS for final report assembly.
+        Saves the centrally collected list of all non-'OK' findings. It assigns
+        a sequential, report-friendly ID to each finding just before saving.
         """
         if not self.all_findings:
             logging.info("No findings were collected during the audit. Skipping save.")
             return
 
+        # Assign sequential, category-based IDs now that all findings are collected.
+        findings_with_ids = []
+        counters = defaultdict(int)
+        for finding in self.all_findings:
+            category = finding['category']
+            counters[category] += 1
+            finding_id = f"{category}-{counters[category]}"
+            
+            # Create a new dict with the ID and the rest of the finding data
+            findings_with_ids.append({"id": finding_id, **finding})
+
         findings_path = f"{self.config.output_prefix}results/all_findings.json"
         self.gcs_client.upload_from_string(
-            content=json.dumps(self.all_findings, indent=2, ensure_ascii=False),
+            content=json.dumps(findings_with_ids, indent=2, ensure_ascii=False),
             destination_blob_name=findings_path
         )
-        logging.info(f"Successfully saved {len(self.all_findings)} findings to {findings_path}")
+        logging.info(f"Successfully saved {len(findings_with_ids)} findings with sequential IDs to {findings_path}")
 
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
-        Runs all defined audit stages in parallel, collecting findings after each
-        stage. It respects resumability by skipping already completed stages.
-
-        Args:
-            force_overwrite: If True, all stages will be re-run even if results exist.
+        Runs all defined audit stages using a dependency-aware parallel execution flow.
+        Independent stages are run concurrently, and dependent stages run sequentially after.
         """
-        logging.info("Starting to run all audit stages in parallel...")
-        
-        # Create a list of tasks to run concurrently.
-        tasks = [
+        # Define stages that can run in parallel (no inter-dependencies)
+        parallel_stages = ["Chapter-1", "Chapter-3", "Chapter-4", "Chapter-7"]
+        # Define stages that must run after the parallel group (e.g., Ch5 depends on Ch4)
+        sequential_stages = ["Chapter-5"]
+
+        logging.info(f"Starting parallel execution for independent stages: {parallel_stages}")
+        parallel_tasks = [
             self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-            for stage_name in self.stage_runner_classes.keys()
+            for stage_name in parallel_stages
         ]
-        
-        # Execute all stages concurrently and wait for them to complete.
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*parallel_tasks)
+        logging.info("Completed parallel execution of independent stages.")
+
+        logging.info(f"Starting sequential execution for dependent stages: {sequential_stages}")
+        for stage_name in sequential_stages:
+            await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
+        logging.info("Completed sequential execution of dependent stages.")
         
         self._save_all_findings()
         logging.info("All audit stages completed.")
@@ -139,14 +142,6 @@ class AuditController:
     async def run_single_stage(self, stage_name: str, force_overwrite: bool = False) -> Dict[str, Any]:
         """
         Runs a single, specified audit stage and collects findings from its result.
-
-        Args:
-            stage_name: The name of the stage to run (e.g., 'Chapter-1').
-            force_overwrite: If True, the stage will run even if a result file
-                             already exists. If False, it will skip.
-
-        Returns:
-            The result data dictionary from the completed stage.
         """
         if stage_name not in self.stage_runner_classes:
             logging.error(f"Unknown stage '{stage_name}'. Available: {list(self.stage_runner_classes.keys())}")
@@ -154,6 +149,8 @@ class AuditController:
 
         stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
         
+        # For full runs, we check for existing results unless `force` is specified.
+        # For single runs (`--run-stage`), force_overwrite is True by default.
         if not force_overwrite:
             try:
                 existing_data = self.gcs_client.read_json(stage_output_path)
