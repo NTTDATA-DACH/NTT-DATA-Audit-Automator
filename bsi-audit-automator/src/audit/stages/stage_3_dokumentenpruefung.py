@@ -30,6 +30,7 @@ class Chapter3Runner:
 
     def _load_subchapter_definitions(self) -> Dict[str, Any]:
         """Loads definitions for subchapters, including their specific RAG queries and source categories."""
+        # REFACTOR: Using generic prompts and schemas. Unique content (questions) is defined here.
         return {
             # 3.1 & 3.2
             "aktualitaetDerReferenzdokumente": {"key": "3.1", "prompt_path": "assets/prompts/stage_3_1_aktualitaet.txt", "schema_path": "assets/schemas/stage_3_1_aktualitaet_schema.json", "rag_query": "Überprüfe die Aktualität und Lenkung der Referenzdokumente.", "source_categories": ["Grundschutz-Check", "Organisations-Richtlinie"]},
@@ -39,38 +40,38 @@ class Chapter3Runner:
             "definitionDesInformationsverbundes": {"key": "3.3.1", "prompt_path": "assets/prompts/stage_3_3_1_informationsverbund.txt", "schema_path": "assets/schemas/stage_3_3_1_informationsverbund_schema.json", "rag_query": "Ist der Informationsverbund klar abgegrenzt?", "source_categories": ["Informationsverbund", "Strukturanalyse"]},
             "bereinigterNetzplan": {"key": "3.3.2", "prompt_path": "assets/prompts/stage_3_3_2_netzplan.txt", "schema_path": "assets/schemas/stage_3_3_2_netzplan_schema.json", "rag_query": "Liegt ein aktueller Netzplan vor?", "source_categories": ["Netzplan", "Strukturanalyse"]},
             "listeDerGeschaeftsprozesse": {"key": "3.3.3", "prompt_path": "assets/prompts/stage_3_3_3_geschaeftsprozesse.txt", "schema_path": "assets/schemas/stage_3_3_3_geschaeftsprozesse_schema.json", "rag_query": "Enthält die Liste der Geschäftsprozesse alle erforderlichen Informationen?", "source_categories": ["Strukturanalyse"]},
-            "listeDerAnwendungen": {"key": "3.3.4", "prompt_path": "assets/prompts/stage_3_3_4_anwendungen.txt", "schema_path": "assets/schemas/stage_3_3_4_anwendungen_schema.json", "rag_query": "Analyse der Liste der Anwendungen auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
-            "listeDerItSysteme": {"key": "3.3.5", "prompt_path": "assets/prompts/stage_3_3_5_itsysteme.txt", "schema_path": "assets/schemas/stage_3_3_5_itsysteme_schema.json", "rag_query": "Analyse der Liste der IT-Systeme auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
-            "listeDerRaeumeGebaeudeStandorte": {"key": "3.3.6", "prompt_path": "assets/prompts/stage_3_3_6_raeume.txt", "schema_path": "assets/schemas/stage_3_3_6_raeume_schema.json", "rag_query": "Analyse der Liste der Räume, Gebäude und Standorte auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
-            "listeDerKommunikationsverbindungen": {"key": "3.3.7", "prompt_path": "assets/prompts/stage_3_3_7_kommunikation.txt", "schema_path": "assets/schemas/stage_3_3_7_kommunikation_schema.json", "rag_query": "Analyse der Liste der Kommunikationsverbindungen.", "source_categories": ["Strukturanalyse"]},
+            "listeDerAnwendungen": {"key": "3.3.4", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_1_question_schema.json", "questions": "1. Enthält die Liste der Anwendungen alle benötigten Informationen (eindeutige Bezeichnung, Beschreibung, Plattform, Raum, Anzahl, Zuordnung zu IT-Systemen, Status, Benutzer, Verantwortlicher)?", "rag_query": "Analyse der Liste der Anwendungen auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
+            "listeDerItSysteme": {"key": "3.3.5", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_1_question_schema.json", "questions": "1. Enthält die Liste der IT-Systeme alle benötigten Informationen (eindeutige Bezeichnung, Beschreibung, Plattform, Anzahl, Aufstellung, Status, Benutzer, Verantwortlicher)?", "rag_query": "Analyse der Liste der IT-Systeme auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
+            "listeDerRaeumeGebaeudeStandorte": {"key": "3.3.6", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_1_question_schema.json", "questions": "1. Enthält die Liste der Räume, Gebäude und Standorte alle benötigten Informationen (eindeutige Bezeichnung, Beschreibung, Art, Anzahl, Status, Verantwortlicher)?", "rag_query": "Analyse der Liste der Räume, Gebäude und Standorte auf Vollständigkeit.", "source_categories": ["Strukturanalyse"]},
+            "listeDerKommunikationsverbindungen": {"key": "3.3.7", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_1_question_schema.json", "questions": "1. Enthält die Liste der Kommunikationsverbindungen alle benötigten Informationen und sind die Grenzen des Informationsverbundes dokumentiert?", "rag_query": "Analyse der Liste der Kommunikationsverbindungen.", "source_categories": ["Strukturanalyse"]},
             "stichprobenDokuStrukturanalyse": {"key": "3.3.8", "prompt_path": "assets/prompts/stage_3_3_8_stichproben_struktur.txt", "schema_path": "assets/schemas/stage_3_3_8_stichproben_struktur_schema.json", "rag_query": "Erstelle eine Stichprobendokumentation der Strukturanalyse.", "source_categories": ["Strukturanalyse"]},
-            "listeDerDienstleister": {"key": "3.3.9", "prompt_path": "assets/prompts/stage_3_3_9_dienstleister.txt", "schema_path": "assets/schemas/stage_3_3_9_dienstleister_schema.json", "rag_query": "Liegt eine aktuelle Liste externer Dienstleister vor?", "source_categories": ["Strukturanalyse", "Dienstleister-Liste"]},
-            "ergebnisDerStrukturanalyse": {"key": "3.3.10", "is_summary": True, "prompt_path": "assets/prompts/stage_3_3_10_ergebnis_struktur.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "listeDerDienstleister": {"key": "3.3.9", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_1_question_schema.json", "questions": "1. Liegt eine aktuelle und vollständige Liste aller externen Dienstleister vor, die Einfluss auf den Informationsverbund nehmen können?", "rag_query": "Liegt eine aktuelle Liste externer Dienstleister vor?", "source_categories": ["Strukturanalyse", "Dienstleister-Liste"]},
+            "ergebnisDerStrukturanalyse": {"key": "3.3.10", "is_summary": True, "prompt_path": "assets/prompts/generic_summary_prompt.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "Strukturanalyse (A.1)"},
             
             # 3.4 Schutzbedarfsfeststellung A.2
             "definitionDerSchutzbedarfskategorien": {"key": "3.4.1", "prompt_path": "assets/prompts/stage_3_4_1_schutzbedarfskategorien.txt", "schema_path": "assets/schemas/stage_3_4_1_schutzbedarfskategorien_schema.json", "rag_query": "Ist die Definition der Schutzbedarfskategorien plausibel?", "source_categories": ["Schutzbedarfsfeststellung"]},
-            "schutzbedarfGeschaeftsprozesse": {"key": "3.4.2", "prompt_path": "assets/prompts/stage_3_4_2_schutzbedarf_gp.txt", "schema_path": "assets/schemas/stage_3_4_2_schutzbedarf_gp_schema.json", "rag_query": "Ist der Schutzbedarf der Geschäftsprozesse nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
-            "schutzbedarfAnwendungen": {"key": "3.4.3", "prompt_path": "assets/prompts/stage_3_4_3_schutzbedarf_anw.txt", "schema_path": "assets/schemas/stage_3_4_3_schutzbedarf_anw_schema.json", "rag_query": "Ist der Schutzbedarf der Anwendungen nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
-            "schutzbedarfItSysteme": {"key": "3.4.4", "prompt_path": "assets/prompts/stage_3_4_4_schutzbedarf_its.txt", "schema_path": "assets/schemas/stage_3_4_4_schutzbedarf_its_schema.json", "rag_query": "Ist der Schutzbedarf der IT-Systeme nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
-            "schutzbedarfRaeume": {"key": "3.4.5", "prompt_path": "assets/prompts/stage_3_4_5_schutzbedarf_raeume.txt", "schema_path": "assets/schemas/stage_3_4_5_schutzbedarf_raeume_schema.json", "rag_query": "Ist der Schutzbedarf der Räume nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
-            "schutzbedarfKommunikationsverbindungen": {"key": "3.4.6", "prompt_path": "assets/prompts/stage_3_4_6_schutzbedarf_komm.txt", "schema_path": "assets/schemas/stage_3_4_6_schutzbedarf_komm_schema.json", "rag_query": "Ist der Schutzbedarf der Kommunikationsverbindungen nachvollziehbar?", "source_categories": ["Schutzbedarfsfeststellung"]},
+            "schutzbedarfGeschaeftsprozesse": {"key": "3.4.2", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Ist der Schutzbedarf der Geschäftsprozesse vollständig dokumentiert?\n2. Ist der Schutzbedarf der Geschäftsprozesse nachvollziehbar begründet?", "rag_query": "Ist der Schutzbedarf der Geschäftsprozesse nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
+            "schutzbedarfAnwendungen": {"key": "3.4.3", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Ist der Schutzbedarf der Anwendungen vollständig dokumentiert?\n2. Ist der Schutzbedarf der Anwendungen nachvollziehbar begründet?", "rag_query": "Ist der Schutzbedarf der Anwendungen nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
+            "schutzbedarfItSysteme": {"key": "3.4.4", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Ist der Schutzbedarf der IT-Systeme vollständig dokumentiert?\n2. Ist der Schutzbedarf der IT-Systeme nachvollziehbar begründet?", "rag_query": "Ist der Schutzbedarf der IT-Systeme nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
+            "schutzbedarfRaeume": {"key": "3.4.5", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Ist der Schutzbedarf der Räume, Gebäude und Standorte vollständig dokumentiert?\n2. Ist der Schutzbedarf der Räume, Gebäude und Standorte nachvollziehbar begründet?", "rag_query": "Ist der Schutzbedarf der Räume nachvollziehbar dokumentiert?", "source_categories": ["Schutzbedarfsfeststellung"]},
+            "schutzbedarfKommunikationsverbindungen": {"key": "3.4.6", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Ist der Schutzbedarf der Außenverbindungen und kritischen Kommunikationsverbindungen vollständig dokumentiert?\n2. Ist der Schutzbedarf der Kommunikationsverbindungen nachvollziehbar begründet?", "rag_query": "Ist der Schutzbedarf der Kommunikationsverbindungen nachvollziehbar?", "source_categories": ["Schutzbedarfsfeststellung"]},
             "stichprobenDokuSchutzbedarf": {"key": "3.4.7", "prompt_path": "assets/prompts/stage_3_4_7_stichproben_schutzbedarf.txt", "schema_path": "assets/schemas/stage_3_4_7_stichproben_schutzbedarf_schema.json", "rag_query": "Führe eine Stichprobenprüfung der Schutzbedarfsfeststellung durch.", "source_categories": ["Strukturanalyse", "Schutzbedarfsfeststellung"]},
-            "ergebnisDerSchutzbedarfsfeststellung": {"key": "3.4.8", "is_summary": True, "prompt_path": "assets/prompts/stage_3_4_8_ergebnis_schutzbedarf.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "ergebnisDerSchutzbedarfsfeststellung": {"key": "3.4.8", "is_summary": True, "prompt_path": "assets/prompts/generic_summary_prompt.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "Schutzbedarfsfeststellung (A.2)"},
             
             # 3.5 Modellierung
             "modellierungsdetails": {"key": "3.5.1", "prompt_path": "assets/prompts/stage_3_5_1_modellierungsdetails.txt", "schema_path": "assets/schemas/stage_3_5_1_modellierungsdetails_schema.json", "rag_query": "Analyse der Modellierung.", "source_categories": ["Modellierung", "Grundschutz-Check"]},
-            "ergebnisDerModellierung": {"key": "3.5.2", "is_summary": True, "prompt_path": "assets/prompts/stage_3_5_2_ergebnis_modellierung.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "ergebnisDerModellierung": {"key": "3.5.2", "is_summary": True, "prompt_path": "assets/prompts/stage_3_5_2_ergebnis_modellierung.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "Modellierung (A.3)"},
             
             # 3.6 Grundschutz-Check
             "detailsZumItGrundschutzCheck": {"key": "3.6.1", "prompt_path": "assets/prompts/stage_3_6_1_grundschutz_check.txt", "schema_path": "assets/schemas/stage_3_6_1_grundschutz_check_schema.json", "rag_query": "Analyse des IT-Grundschutz-Checks.", "source_categories": ["Grundschutz-Check", "Realisierungsplan"]},
-            "benutzerdefinierteBausteine": {"key": "3.6.2", "prompt_path": "assets/prompts/stage_3_6_2_bausteine_custom.txt", "schema_path": "assets/schemas/stage_3_6_2_bausteine_custom_schema.json", "rag_query": "Gibt es benutzerdefinierte Bausteine?", "source_categories": ["Grundschutz-Check", "Modellierung"]},
-            "ergebnisItGrundschutzCheck": {"key": "3.6.3", "is_summary": True, "prompt_path": "assets/prompts/stage_3_6_3_ergebnis_check.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "benutzerdefinierteBausteine": {"key": "3.6.2", "prompt_path": "assets/prompts/generic_question_prompt.txt", "schema_path": "assets/schemas/generic_2_question_schema.json", "questions": "1. Wurden benutzerdefinierte Bausteine erstellt und modelliert?\n2. Sind alle Anforderungen der Institution in den benutzerdefinierten Bausteinen enthalten?", "rag_query": "Gibt es benutzerdefinierte Bausteine?", "source_categories": ["Grundschutz-Check", "Modellierung"]},
+            "ergebnisItGrundschutzCheck": {"key": "3.6.3", "is_summary": True, "prompt_path": "assets/prompts/generic_summary_prompt.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "IT-Grundschutz-Check (A.4)"},
 
             # 3.7 & 3.8
             "risikoanalyseA5": {"key": "3.7.1", "prompt_path": "assets/prompts/stage_3_7_risikoanalyse.txt", "schema_path": "assets/schemas/stage_3_7_risikoanalyse_schema.json", "rag_query": "Analyse der Risikoanalyse A.5.", "source_categories": ["Risikoanalyse"]},
-            "ergebnisRisikoanalyse": {"key": "3.7.2", "is_summary": True, "prompt_path": "assets/prompts/stage_3_7_1_ergebnis_risikoanalyse.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "ergebnisRisikoanalyse": {"key": "3.7.2", "is_summary": True, "prompt_path": "assets/prompts/generic_summary_prompt.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "Risikoanalyse (A.5)"},
             "realisierungsplanA6": {"key": "3.8.1", "prompt_path": "assets/prompts/stage_3_8_realisierungsplan.txt", "schema_path": "assets/schemas/stage_3_8_realisierungsplan_schema.json", "rag_query": "Analyse des Realisierungsplans A.6.", "source_categories": ["Realisierungsplan"]},
-            "ergebnisRealisierungsplan": {"key": "3.8.2", "is_summary": True, "prompt_path": "assets/prompts/stage_3_8_1_ergebnis_realisierungsplan.txt", "schema_path": "assets/schemas/stage_3_summary_schema.json"},
+            "ergebnisRealisierungsplan": {"key": "3.8.2", "is_summary": True, "prompt_path": "assets/prompts/generic_summary_prompt.txt", "schema_path": "assets/schemas/generic_summary_schema.json", "summary_topic": "Realisierungsplan (A.6)"},
             
             # 3.9
             "ergebnisDerDokumentenpruefung": {"key": "3.9", "is_summary": True, "prompt_path": "assets/prompts/stage_3_9_ergebnis.txt", "schema_path": "assets/schemas/stage_3_9_ergebnis_schema.json"}
@@ -80,14 +81,19 @@ class Chapter3Runner:
         """Generates content for a single subchapter using the RAG pipeline."""
         logging.info(f"Starting RAG generation for subchapter: {definition['key']} ({name})")
         
-        prompt_template = self._load_asset_text(definition["prompt_path"])
+        prompt_template_str = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
 
         context_evidence = self.rag_client.get_context_for_query(
             query=definition["rag_query"],
             source_categories=definition.get("source_categories")
         )
-        prompt = prompt_template.format(context=context_evidence)
+        
+        # Format the prompt with context and specific questions if they exist
+        format_args = {"context": context_evidence}
+        if "questions" in definition:
+            format_args["questions"] = definition["questions"]
+        prompt = prompt_template_str.format(**format_args)
 
         try:
             generated_data = await self.ai_client.generate_json_response(prompt, schema)
@@ -102,10 +108,13 @@ class Chapter3Runner:
         key = definition['key']
         logging.info(f"Starting summary generation for subchapter: {key} ({name})")
 
-        prompt_template = self._load_asset_text(definition["prompt_path"])
+        prompt_template_str = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
 
-        prompt = prompt_template.format(previous_findings=previous_findings)
+        format_args = {"previous_findings": previous_findings}
+        if "summary_topic" in definition:
+            format_args["summary_topic"] = definition["summary_topic"]
+        prompt = prompt_template_str.format(**format_args)
 
         try:
             generated_data = await self.ai_client.generate_json_response(prompt, schema)
@@ -119,6 +128,7 @@ class Chapter3Runner:
         """Extracts and formats findings from a list of results for summary prompts."""
         findings_for_summary = []
         for res_dict in results_list:
+            if not res_dict: continue
             subchapter_name = list(res_dict.keys())[0]
             result_data = res_dict.get(subchapter_name)
             
