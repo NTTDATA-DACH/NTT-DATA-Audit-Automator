@@ -1,8 +1,10 @@
 # src/audit/report_generator.py
 import logging
 import json
+import asyncio
 from google.cloud.exceptions import NotFound
-from typing import Dict, Any
+from typing import Dict, Any, List
+from jsonschema import validate, ValidationError
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
@@ -16,15 +18,68 @@ class ReportGenerator:
         self.config = config
         self.gcs_client = gcs_client
         self.gcs_report_path = "report/master_report_template.json"
+        self.report_schema = self._load_report_schema()
         logging.info("Report Generator initialized.")
+    
+    def _load_report_schema(self) -> Dict[str, Any]:
+        """Loads the master template to use as a validation schema."""
+        try:
+            with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"FATAL: Could not load the master report schema from {self.LOCAL_MASTER_TEMPLATE_PATH}. Error: {e}")
+            raise
 
-    def _initialize_report_on_gcs(self) -> dict:
+    def _set_value_by_path(self, report: Dict, path: str, value: Any):
+        """
+        Safely sets a value in a nested dictionary using a dot-separated path.
+        This is more robust than sequential `get` calls.
+        """
+        keys = path.split('.')
+        current_level = report
+        for i, key in enumerate(keys[:-1]):
+            if not isinstance(current_level, dict) or key not in current_level:
+                logging.warning(f"Template path '{path}' missing part '{key}'. Cannot set value.")
+                return
+            current_level = current_level[key]
+        
+        if isinstance(current_level, dict):
+            current_level[keys[-1]] = value
+        else:
+            logging.warning(f"Target for path '{path}' is not a dictionary. Cannot set final key '{keys[-1]}'.")
+
+    def _ensure_list_path_exists(self, report: Dict, path: str, min_length: int = 1, default_item: Dict = None) -> List:
+        """
+        Ensures a list at a given path exists and has a minimum length, padding it if necessary.
+        Returns the list object for modification.
+        """
+        if default_item is None:
+            default_item = {"type": "prose", "text": ""}
+
+        keys = path.split('.')
+        current_level = report
+        for key in keys:
+            if not isinstance(current_level, dict) or key not in current_level:
+                logging.warning(f"Template path '{path}' missing part '{key}'. Cannot ensure list path.")
+                return []
+            current_level = current_level[key]
+
+        if not isinstance(current_level, list):
+            logging.warning(f"Target for path '{path}' is not a list. Cannot pad.")
+            return []
+        
+        while len(current_level) < min_length:
+            current_level.append(default_item.copy())
+            
+        return current_level
+
+    async def _initialize_report_on_gcs(self) -> dict:
         """
         Loads the report template. It first tries to load from a working copy on GCS,
         falling back to the local `master_report_template.json` if it doesn't exist.
         """
         try:
-            report = self.gcs_client.read_json(self.gcs_report_path)
+            report = await self.gcs_client.read_json_async(self.gcs_report_path)
             logging.info(f"Loaded existing report template from GCS: {self.gcs_report_path}")
             return report
         except NotFound:
@@ -33,12 +88,10 @@ class ReportGenerator:
                 report = json.load(f)
             
             # Pre-populate with basic info
-            report['bsiAuditReport']['titlePage']['auditedInstitution'] = "Audited Institution"
-            audittyp_section = report.get('bsiAuditReport', {}).get('allgemeines', {}).get('audittyp', {})
-            if audittyp_section:
-                audittyp_section['content'] = self.config.audit_type
+            self._set_value_by_path(report, 'bsiAuditReport.titlePage.auditedInstitution', "Audited Institution")
+            self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', self.config.audit_type)
             
-            self.gcs_client.upload_from_string(
+            await self.gcs_client.upload_from_string_async(
                 content=json.dumps(report, indent=2, ensure_ascii=False),
                 destination_blob_name=self.gcs_report_path
             )
@@ -47,49 +100,28 @@ class ReportGenerator:
 
     def _populate_chapter_1(self, report: dict, stage_data: dict) -> None:
         """Populates the 'Allgemeines' (Chapter 1) of the report defensively."""
-        target_chapter = report.get('bsiAuditReport', {}).get('allgemeines')
-        if not target_chapter:
-            logging.error("Report template is missing 'bsiAuditReport.allgemeines' structure. Cannot populate Chapter 1.")
-            return
+        geltungsbereich_data = stage_data.get('geltungsbereichDerZertifizierung', {})
+        
+        # Populate Geltungsbereich (1.2)
+        final_text = geltungsbereich_data.get('description', '')
+        if isinstance(geltungsbereich_data.get('finding'), dict):
+            finding = geltungsbereich_data['finding']
+            if finding.get('category') != 'OK':
+                final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
+        
+        geltungsbereich_list = self._ensure_list_path_exists(report, 'bsiAuditReport.allgemeines.geltungsbereichDerZertifizierung.content')
+        if geltungsbereich_list:
+            geltungsbereich_list[0]['text'] = final_text
 
-        # Populate Informationsverbund (1.4) and Geltungsbereich (1.2) from the same AI result
-        geltungsbereich_data = stage_data.get('geltungsbereichDerZertifizierung', {}) # This is the key used in stage_1_runner
-        target_section_gelt = target_chapter.get('geltungsbereichDerZertifizierung')
-        target_section_info = target_chapter.get('informationsverbund')
+        # Populate Informationsverbund (1.4)
+        info_list = self._ensure_list_path_exists(report, 'bsiAuditReport.allgemeines.informationsverbund.content', min_length=2)
+        if info_list:
+            info_list[0]['text'] = geltungsbereich_data.get('kurzbezeichnung', '')
+            info_list[1]['text'] = geltungsbereich_data.get('kurzbeschreibung', '')
 
-        # Populate Geltungsbereich with the main text
-        if target_section_gelt and isinstance(geltungsbereich_data, dict):
-            # Main description text goes into Geltungsbereich
-            final_text = geltungsbereich_data.get('description', '')
-            if isinstance(geltungsbereich_data.get('finding'), dict):
-                finding = geltungsbereich_data['finding']
-                if finding.get('category') != 'OK':
-                    final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
-            
-            # Defensively ensure the structure exists before writing to it
-            if 'content' not in target_section_gelt or not isinstance(target_section_gelt.get('content'), list):
-                target_section_gelt['content'] = []
-            if not target_section_gelt['content']:
-                target_section_gelt['content'].append({"type": "prose", "text": ""})
-            target_section_gelt['content'][0]['text'] = final_text
-        else:
-            logging.warning("Could not populate 'geltungsbereichDerZertifizierung' due to missing key in stage data or report template.")
-
-        # Populate Informationsverbund with its specific fields from the same AI result
-        if target_section_info and isinstance(geltungsbereich_data, dict) and isinstance(target_section_info.get('content'), list):
-            target_section_info['content'][0]['text'] = geltungsbereich_data.get('kurzbezeichnung', '')
-            target_section_info['content'][1]['text'] = geltungsbereich_data.get('kurzbeschreibung', '')
-        else:
-             logging.warning("Could not populate 'informationsverbund' due to missing key in stage data or report template.")
-
-        # Populate Audittyp (1.3)
-        # The key in stage_1_general is 'audittyp' and it holds a simple string.
-        target_section_typ = target_chapter.get('audittyp')
-        if target_section_typ and 'content' in target_section_typ:
-            target_section_typ['content'] = stage_data.get('audittyp', {}).get('content', self.config.audit_type)
-        else:
-            logging.warning("Could not populate 'audittyp' due to missing key in stage data or report template.")
-
+        # Populate Audittyp (1.5)
+        audittyp_content = stage_data.get('audittyp', {}).get('content', self.config.audit_type)
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', audittyp_content)
 
     def _populate_chapter_7_findings(self, report: dict) -> None:
         """Populates the findings tables in Chapter 7.2 from the central findings file."""
@@ -101,245 +133,188 @@ class ReportGenerator:
             logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
             return
 
-        findings_section = report.get('bsiAuditReport', {}).get('anhang', {}).get('abweichungenUndEmpfehlungen')
-        if not findings_section:
-            logging.warning("Report template is missing '...anhang.abweichungenUndEmpfehlungen'. Skipping findings population.")
-            return
+        ag_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows')
+        as_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows')
+        e_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows')
+        
+        if ag_table_rows is None or as_table_rows is None or e_table_rows is None: return
 
-        ag_table = findings_section.get('geringfuegigeAbweichungen', {}).get('table', {}).get('rows')
-        as_table = findings_section.get('schwerwiegendeAbweichungen', {}).get('table', {}).get('rows')
-        e_table = findings_section.get('empfehlungen', {}).get('table', {}).get('rows')
-
-        if not all(isinstance(table, list) for table in [ag_table, as_table, e_table]):
-            logging.warning("One or more findings tables are missing the 'rows' list in the report template. Skipping population.")
-            return
-
-        ag_table.clear(); as_table.clear(); e_table.clear()
+        ag_table_rows.clear(); as_table_rows.clear(); e_table_rows.clear()
+        ag_counter, as_counter, e_counter = 0, 0, 0
 
         for finding in all_findings:
             category = finding.get('category')
-            base_row_data = {
-                "Nr.": finding.get('id', f"{category}-?"),
-                "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'),
-                "Behebungsfrist": "30 Tage nach Audit",  # Placeholder
-                "Status": "Offen"  # Default
-            }
-
             if category == 'AG':
-                row_data = base_row_data.copy()
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                ag_table.append(row_data)
+                ag_counter += 1
+                ag_table_rows.append({
+                    "Nr.": f"AG-{ag_counter}", "Beschreibung der Abweichung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "30 Tage nach Audit", "Status": "Offen"
+                })
             elif category == 'AS':
-                row_data = base_row_data.copy()
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                as_table.append(row_data)
+                as_counter += 1
+                as_table_rows.append({
+                    "Nr.": f"AS-{as_counter}", "Beschreibung der Abweichung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "30 Tage nach Audit", "Status": "Offen"
+                })
             elif category == 'E':
-                row_data = base_row_data.copy()
-                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')
-                # Recommendations don't have a strict deadline or status in the same way
-                row_data["Behebungsfrist"] = "N/A"
-                row_data["Status"] = "Zur Umsetzung empfohlen"
-                e_table.append(row_data)
+                e_counter += 1
+                e_table_rows.append({
+                    "Nr.": f"E-{e_counter}", "Beschreibung der Empfehlung": finding.get('description', 'N/A'),
+                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "N/A", "Status": "Zur Umsetzung empfohlen"
+                })
         
         logging.info(f"Populated Chapter 7.2 with {len(all_findings)} total findings.")
 
-    def assemble_report(self) -> None:
+    async def assemble_report(self) -> None:
         """
         Main method to assemble the final report. It loads all stage results
         and collected findings, populates a master template, and saves the final
         output to GCS.
         """
-        report = self._initialize_report_on_gcs()
+        report = await self._initialize_report_on_gcs()
 
-        for stage_name in self.STAGES_TO_AGGREGATE:
-            stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
-            try:
-                stage_data = self.gcs_client.read_json(stage_output_path)
-                self._populate_report(report, stage_name, stage_data)
-            except NotFound:
-                logging.warning(f"Result for stage '{stage_name}' not found. Skipping population.")
-                continue
+        # Read all stage results concurrently for better performance
+        stage_read_tasks = [self.gcs_client.read_json_async(f"{self.config.output_prefix}results/{s}.json") for s in self.STAGES_TO_AGGREGATE]
+        stage_results = await asyncio.gather(*stage_read_tasks, return_exceptions=True)
+        
+        stage_data_map = {}
+        for i, result in enumerate(stage_results):
+            stage_name = self.STAGES_TO_AGGREGATE[i]
+            if isinstance(result, Exception):
+                logging.warning(f"Result for stage '{stage_name}' not found or failed to load. Skipping population. Error: {result}")
+            else:
+                stage_data_map[stage_name] = result
+
+        for stage_name, stage_data in stage_data_map.items():
+            self._populate_report(report, stage_name, stage_data)
         
         self._populate_chapter_7_findings(report)
 
+        # Validate the final report against the schema before saving
+        try:
+            validate(instance=report, schema=self.report_schema)
+            logging.info("Final report successfully validated against the master schema.")
+        except ValidationError as e:
+            logging.error(f"CRITICAL: Final report failed schema validation. Report will not be saved. Error: {e.message}")
+            return # Do not save a corrupted report
+
         final_report_path = f"{self.config.output_prefix}final_audit_report.json"
-        self.gcs_client.upload_from_string(
+        await self.gcs_client.upload_from_string_async(
             content=json.dumps(report, indent=2, ensure_ascii=False),
             destination_blob_name=final_report_path
         )
         logging.info(f"Final report assembled and saved to: gs://{self.config.bucket_name}/{final_report_path}")
         
-        self.gcs_client.upload_from_string(
-            content=json.dumps(report, indent=2, ensure_ascii=False),
+        # Optimized write: copy the final report to the working directory instead of a second upload
+        await self.gcs_client.copy_blob_async(
+            source_blob_name=final_report_path,
             destination_blob_name=self.gcs_report_path
         )
-        logging.info(f"Updated master report state on GCS: gs://{self.config.bucket_name}/{self.gcs_report_path}")
+        logging.info(f"Updated master report state on GCS via copy: gs://{self.config.bucket_name}/{self.gcs_report_path}")
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 3 (Dokumentenprüfung) content into the report."""
-        chapter_3_target = report.get('bsiAuditReport', {}).get('dokumentenpruefung')
-        if not chapter_3_target:
-            logging.error("Report template is missing 'bsiAuditReport.dokumentenpruefung' structure. Cannot populate Chapter 3.")
-            return
-
-        # Mapping from stage_data keys to their location in the report template
+        base_path = "bsiAuditReport.dokumentenpruefung"
         key_to_path_map = {
-            "aktualitaetDerReferenzdokumente": ["aktualitaetDerReferenzdokumente"],
-            "sicherheitsleitlinieUndRichtlinienInA0": ["sicherheitsleitlinieUndRichtlinienInA0"],
-            # Strukturanalyse A.1
-            "definitionDesInformationsverbundes": ["strukturanalyseA1", "definitionDesInformationsverbundes"],
-            "bereinigterNetzplan": ["strukturanalyseA1", "bereinigterNetzplan"],
-            "listeDerGeschaeftsprozesse": ["strukturanalyseA1", "listeDerGeschaeftsprozesse"],
-            "listeDerAnwendungen": ["strukturanalyseA1", "listeDerAnwendungen"],
-            "listeDerItSysteme": ["strukturanalyseA1", "listeDerItSysteme"],
-            "listeDerRaeumeGebaeudeStandorte": ["strukturanalyseA1", "listeDerRaeumeGebaeudeStandorte"],
-            "listeDerKommunikationsverbindungen": ["strukturanalyseA1", "listeDerKommunikationsverbindungen"],
-            "stichprobenDokuStrukturanalyse": ["strukturanalyseA1", "stichprobenDokuStrukturanalyse"],
-            "listeDerDienstleister": ["strukturanalyseA1", "listeDerDienstleister"],
-            "ergebnisDerStrukturanalyse": ["strukturanalyseA1", "ergebnisDerStrukturanalyse"],
-            # Schutzbedarfsfeststellung A.2
-            "definitionDerSchutzbedarfskategorien": ["schutzbedarfsfeststellungA2", "definitionDerSchutzbedarfskategorien"],
-            "schutzbedarfGeschaeftsprozesse": ["schutzbedarfsfeststellungA2", "schutzbedarfGeschaeftsprozesse"],
-            "schutzbedarfAnwendungen": ["schutzbedarfsfeststellungA2", "schutzbedarfAnwendungen"],
-            "schutzbedarfItSysteme": ["schutzbedarfsfeststellungA2", "schutzbedarfItSysteme"],
-            "schutzbedarfRaeume": ["schutzbedarfsfeststellungA2", "schutzbedarfRaeume"],
-            "schutzbedarfKommunikationsverbindungen": ["schutzbedarfsfeststellungA2", "schutzbedarfKommunikationsverbindungen"],
-            "stichprobenDokuSchutzbedarf": ["schutzbedarfsfeststellungA2", "stichprobenDokuSchutzbedarf"],
-            "ergebnisDerSchutzbedarfsfeststellung": ["schutzbedarfsfeststellungA2", "ergebnisDerSchutzbedarfsfeststellung"],
-            # Modellierung A.3
-            "modellierungsdetails": ["modellierungDesInformationsverbundesA3", "modellierungsdetails"],
-            "ergebnisDerModellierung": ["modellierungDesInformationsverbundesA3", "ergebnisDerModellierung"],
-            # IT-Grundschutz-Check A.4
-            "detailsZumItGrundschutzCheck": ["itGrundschutzCheckA4", "detailsZumItGrundschutzCheck"],
-            "benutzerdefinierteBausteine": ["itGrundschutzCheckA4", "benutzerdefinierteBausteine"],
-            "ergebnisItGrundschutzCheck": ["itGrundschutzCheckA4", "ergebnisItGrundschutzCheck"],
-            # Risikoanalyse A.5 & Realisierungsplan A.6
-            "risikoanalyseA5": ["risikoanalyseA5", "risikoanalyse"],
-            "ergebnisRisikoanalyse": ["risikoanalyseA5", "ergebnisRisikoanalyse"],
-            "realisierungsplanA6": ["realisierungsplanA6", "realisierungsplan"],
-            "ergebnisRealisierungsplan": ["realisierungsplanA6", "ergebnisRealisierungsplan"],
-            # Final result
-            "ergebnisDerDokumentenpruefung": ["ergebnisDerDokumentenpruefung"],
+            # ... (Full map as defined in previous correct implementation)
+            "aktualitaetDerReferenzdokumente": f"{base_path}.aktualitaetDerReferenzdokumente",
+            "sicherheitsleitlinieUndRichtlinienInA0": f"{base_path}.sicherheitsleitlinieUndRichtlinienInA0",
+            "definitionDesInformationsverbundes": f"{base_path}.strukturanalyseA1.definitionDesInformationsverbundes",
+            "bereinigterNetzplan": f"{base_path}.strukturanalyseA1.bereinigterNetzplan",
+            "listeDerGeschaeftsprozesse": f"{base_path}.strukturanalyseA1.listeDerGeschaeftsprozesse",
+            "listeDerAnwendungen": f"{base_path}.strukturanalyseA1.listeDerAnwendungen",
+            "listeDerItSysteme": f"{base_path}.strukturanalyseA1.listeDerItSysteme",
+            "listeDerRaeumeGebaeudeStandorte": f"{base_path}.strukturanalyseA1.listeDerRaeumeGebaeudeStandorte",
+            "listeDerKommunikationsverbindungen": f"{base_path}.strukturanalyseA1.listeDerKommunikationsverbindungen",
+            "stichprobenDokuStrukturanalyse": f"{base_path}.strukturanalyseA1.stichprobenDokuStrukturanalyse",
+            "listeDerDienstleister": f"{base_path}.strukturanalyseA1.listeDerDienstleister",
+            "ergebnisDerStrukturanalyse": f"{base_path}.strukturanalyseA1.ergebnisDerStrukturanalyse",
+            "definitionDerSchutzbedarfskategorien": f"{base_path}.schutzbedarfsfeststellungA2.definitionDerSchutzbedarfskategorien",
+            "schutzbedarfGeschaeftsprozesse": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfGeschaeftsprozesse",
+            "schutzbedarfAnwendungen": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfAnwendungen",
+            "schutzbedarfItSysteme": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfItSysteme",
+            "schutzbedarfRaeume": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfRaeume",
+            "schutzbedarfKommunikationsverbindungen": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfKommunikationsverbindungen",
+            "stichprobenDokuSchutzbedarf": f"{base_path}.schutzbedarfsfeststellungA2.stichprobenDokuSchutzbedarf",
+            "ergebnisDerSchutzbedarfsfeststellung": f"{base_path}.schutzbedarfsfeststellungA2.ergebnisDerSchutzbedarfsfeststellung",
+            "modellierungsdetails": f"{base_path}.modellierungDesInformationsverbundesA3.modellierungsdetails",
+            "ergebnisDerModellierung": f"{base_path}.modellierungDesInformationsverbundesA3.ergebnisDerModellierung",
+            "detailsZumItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.detailsZumItGrundschutzCheck",
+            "benutzerdefinierteBausteine": f"{base_path}.itGrundschutzCheckA4.benutzerdefinierteBausteine",
+            "ergebnisItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.ergebnisItGrundschutzCheck",
+            "risikoanalyseA5": f"{base_path}.risikoanalyseA5.risikoanalyse",
+            "ergebnisRisikoanalyse": f"{base_path}.risikoanalyseA5.ergebnisRisikoanalyse",
+            "realisierungsplanA6": f"{base_path}.realisierungsplanA6.realisierungsplan",
+            "ergebnisRealisierungsplan": f"{base_path}.realisierungsplanA6.ergebnisRealisierungsplan",
+            "ergebnisDerDokumentenpruefung": f"{base_path}.ergebnisDerDokumentenpruefung",
         }
 
         for subchapter_key, result in stage_data.items():
             if not isinstance(result, dict): continue
             
-            path_keys = key_to_path_map.get(subchapter_key)
-            if not path_keys:
-                logging.warning(f"No path mapping found for stage_data key '{subchapter_key}'. Skipping population.")
-                continue
+            target_path = key_to_path_map.get(subchapter_key)
+            if not target_path: continue
 
-            target_section = chapter_3_target
-            try:
-                for key in path_keys:
-                    target_section = target_section.get(key, {})
-            except (AttributeError, TypeError):
-                 logging.warning(f"Could not traverse path {path_keys} for '{subchapter_key}' in report template."); continue
-
-            if not target_section:
-                logging.warning(f"Could not find target section for '{subchapter_key}' in report template."); continue
-            
             # Populate finding text
             if 'finding' in result and isinstance(result.get('finding'), dict):
                 finding = result['finding']
                 finding_text = f"[{finding.get('category')}] {finding.get('description')}"
-                for item in target_section.get("content", []):
-                    if item.get("type") == "finding":
-                        item["findingText"] = finding_text
-                        break
+                finding_list = self._ensure_list_path_exists(report, f"{target_path}.content")
+                if finding_list:
+                    for item in finding_list:
+                        if item.get("type") == "finding":
+                            item["findingText"] = finding_text; break
             
             # Populate answers for questions or text for prose
             if "answers" in result:
                 answers = result.get("answers", [])
-                answer_idx = 0
-                for item in target_section.get("content", []):
-                    if item.get("type") == "question":
-                        if answer_idx < len(answers):
-                            item["answer"] = answers[answer_idx]
-                            answer_idx += 1
-                        else:
-                            logging.warning(f"Not enough answers in result for questions in '{subchapter_key}'")
-                            break
+                content_list = self._ensure_list_path_exists(report, f"{target_path}.content", len(answers))
+                if content_list:
+                    answer_idx = 0
+                    for item in content_list:
+                        if item.get("type") == "question":
+                            if answer_idx < len(answers):
+                                item["answer"] = answers[answer_idx]; answer_idx += 1
             elif "votum" in result:
-                for item in target_section.get("content", []):
-                    if item.get("type") == "prose":
-                        item["text"] = result.get("votum", "")
-                        break
+                content_list = self._ensure_list_path_exists(report, f"{target_path}.content")
+                if content_list:
+                    for item in content_list:
+                        if item.get("type") == "prose": item["text"] = result.get("votum", ""); break
             
-            # NEW: Populate table data
+            # Populate table data
             if "table" in result and isinstance(result.get("table"), dict):
-                target_table_section = target_section.get("table")
-                if isinstance(target_table_section, dict):
-                    target_table_section['rows'] = result['table'].get('rows', [])
-                    logging.info(f"Populated table for '{subchapter_key}'.")
-                else:
-                    logging.warning(f"Could not populate table for '{subchapter_key}' as target section is not a dict.")
-
+                self._set_value_by_path(report, f"{target_path}.table.rows", result['table'].get('rows', []))
 
     def _populate_chapter_4(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 4 (Prüfplan) content into the report."""
-        chapter_4_target = report.get('bsiAuditReport', {}).get('erstellungEinesPruefplans', {}).get('auditplanung')
-        if not chapter_4_target:
-            logging.error("Report template is missing '...erstellungEinesPruefplans.auditplanung' structure. Cannot populate Chapter 4.")
-            return
-            
         ch4_plan_key = next(iter(stage_data)) if stage_data else None
         if not ch4_plan_key: return
 
         result = stage_data.get(ch4_plan_key, {})
         target_key_map = {"auswahlBausteineUeberwachung": "auswahlBausteineErstRezertifizierung"}
         target_key = target_key_map.get(ch4_plan_key, ch4_plan_key)
-
-        target_section = chapter_4_target.get(target_key)
-        if isinstance(target_section, dict):
-            target_section['rows'] = result.get('rows', [])
-        else:
-            logging.warning(f"Could not find or invalid target section for '{ch4_plan_key}' (mapped to '{target_key}') in Chapter 4.")
+        
+        path = f"bsiAuditReport.erstellungEinesPruefplans.auditplanung.{target_key}.rows"
+        self._set_value_by_path(report, path, result.get('rows', []))
 
     def _populate_chapter_5(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 5 (Vor-Ort-Audit) content into the report."""
-        chapter_5_target = report.get('bsiAuditReport', {}).get('vorOrtAudit')
-        if not chapter_5_target:
-            logging.error("Report template is missing 'bsiAuditReport.vorOrtAudit' structure. Cannot populate Chapter 5.")
-            return
+        if "verifikationDesITGrundschutzChecks" in stage_data:
+            data = stage_data["verifikationDesITGrundschutzChecks"]
+            path = "bsiAuditReport.vorOrtAudit.verifikationDesITGrundschutzChecks.einzelergebnisse.bausteinPruefungen"
+            self._set_value_by_path(report, path, data.get("bausteinPruefungen", []))
 
-        for subchapter_key, result in stage_data.items():
-            if not isinstance(result, dict): continue
-
-            if subchapter_key == "verifikationDesITGrundschutzChecks":
-                target_section_wrapper = chapter_5_target.get(subchapter_key, {})
-                target_section = target_section_wrapper.get("einzelergebnisse")
-                if isinstance(target_section, dict):
-                    target_section["bausteinPruefungen"] = result.get("bausteinPruefungen", [])
-                else:
-                    logging.warning(f"Could not find target structure 'einzelergebnisse' for '{subchapter_key}'")
-            
-            elif subchapter_key == "einzelergebnisseDerRisikoanalyse":
-                target_section_wrapper = chapter_5_target.get("risikoanalyseA5", {})
-                target_section = target_section_wrapper.get(subchapter_key)
-                if isinstance(target_section, dict):
-                    target_section["massnahmenPruefungen"] = result.get("massnahmenPruefungen", [])
-                else: logging.warning(f"Could not find target structure for '{subchapter_key}'")
+        if "einzelergebnisseDerRisikoanalyse" in stage_data:
+            data = stage_data["einzelergebnisseDerRisikoanalyse"]
+            path = "bsiAuditReport.vorOrtAudit.risikoanalyseA5.einzelergebnisseDerRisikoanalyse.massnahmenPruefungen"
+            self._set_value_by_path(report, path, data.get("massnahmenPruefungen", []))
 
     def _populate_chapter_7(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 7 (Anhang) content into the report."""
-        anhang_target = report.get('bsiAuditReport', {}).get('anhang')
-        if not anhang_target:
-            logging.error("Report template is missing 'bsiAuditReport.anhang' structure. Cannot populate Chapter 7.")
-            return
-
-        # Populate reference documents table
         ref_docs_data = stage_data.get('referenzdokumente', {})
-        target_section = anhang_target.get('referenzdokumente')
-        if isinstance(target_section, dict) and isinstance(ref_docs_data.get('table'), dict):
-            target_table = target_section.get('table')
-            if isinstance(target_table, dict):
-                target_table['rows'] = ref_docs_data['table'].get('rows', [])
-            else:
-                 logging.warning("Could not populate 'referenzdokumente' because target 'table' is not a dict.")
-        else:
-            logging.warning("Could not populate 'referenzdokumente' due to missing or invalid structure.")
+        if isinstance(ref_docs_data.get('table'), dict):
+            path = "bsiAuditReport.anhang.referenzdokumente.table.rows"
+            self._set_value_by_path(report, path, ref_docs_data['table'].get('rows', []))
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict) -> None:
         """Router function to call the correct population logic for a given stage."""
