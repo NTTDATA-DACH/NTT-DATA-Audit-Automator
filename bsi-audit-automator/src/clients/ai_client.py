@@ -19,7 +19,6 @@ EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 
 # Constants for robust generation
 MAX_RETRIES = 5
-EMBEDDING_BATCH_SIZE = 200
 
 
 class AiClient:
@@ -48,8 +47,8 @@ class AiClient:
 
     def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
         """
-        Generates vector embeddings for a list of text chunks in batches,
-        with a robust retry mechanism per batch.
+        Generates vector embeddings for a list of text chunks one by one,
+        with a robust retry mechanism for each chunk.
 
         Args:
             texts: A list of text strings to embed.
@@ -62,41 +61,36 @@ class AiClient:
             return True, []
 
         all_embeddings = []
-        logging.info(f"Generating embeddings for {len(texts)} chunks in batches of {EMBEDDING_BATCH_SIZE}...")
+        logging.info(f"Generating embeddings for {len(texts)} chunks individually...")
         
-        for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
-            batch_texts = texts[i:i + EMBEDDING_BATCH_SIZE]
-            batch_num = (i // EMBEDDING_BATCH_SIZE) + 1
-            
+        for i, text in enumerate(texts):
             for attempt in range(MAX_RETRIES):
                 try:
-                    response = self.embedding_model.get_embeddings(batch_texts)
-                    embeddings_for_batch = [embedding.values for embedding in response]
+                    # The model expects a list, even if it's a single item. This is the fix.
+                    response = self.embedding_model.get_embeddings([text])
+                    all_embeddings.append(response[0].values)
+
+                    if (i + 1) % 25 == 0:
+                        logging.info(f"Embedding progress: {i + 1}/{len(texts)} chunks complete.")
                     
-                    if len(embeddings_for_batch) != len(batch_texts):
-                        raise ValueError(f"API returned {len(embeddings_for_batch)} embeddings for a batch of {len(batch_texts)} texts.")
+                    time.sleep(0.05) # Small delay to be a good API citizen
+                    break  # Success, break the retry loop for this chunk
 
-                    all_embeddings.extend(embeddings_for_batch)
-
-                    logging.info(f"Embedding batch {batch_num} successful. Total embeddings: {len(all_embeddings)}/{len(texts)}")
-                    time.sleep(0.1) # Small delay to respect rate limits
-                    break  # Success, break the retry loop for this batch
-                
                 except api_core_exceptions.GoogleAPICallError as e:
                     wait_time = 2 ** attempt
-                    if e.code == 429:
-                        logging.warning(f"Embedding batch {batch_num} hit rate limit. Retrying in {wait_time}s...")
+                    if e.code == 429: # HTTP status for "Too Many Requests"
+                        logging.warning(f"Embedding for chunk {i+1} hit rate limit. Retrying in {wait_time}s...")
                     else:
-                        logging.error(f"Embedding batch {batch_num} failed with API Error: {e}. Retrying in {wait_time}s...", exc_info=self.config.is_test_mode)
+                        logging.error(f"Embedding for chunk {i+1} failed with API Error: {e}. Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 
                 except Exception as e:
                     wait_time = 2 ** attempt
-                    logging.error(f"An unexpected error occurred in embedding batch {batch_num}: {e}. Retrying in {wait_time}s...", exc_info=True)
+                    logging.error(f"An unexpected error occurred embedding chunk {i+1}: {e}. Retrying in {wait_time}s...", exc_info=True)
                     time.sleep(wait_time)
 
                 if attempt == MAX_RETRIES - 1:
-                    logging.critical(f"Embedding for batch {batch_num} failed after all retries.")
+                    logging.critical(f"Embedding for chunk {i+1} failed after all retries.")
                     return False, all_embeddings # Return failure status and partial results
         
         logging.info(f"Successfully generated {len(all_embeddings)} embeddings for {len(texts)} texts.")
