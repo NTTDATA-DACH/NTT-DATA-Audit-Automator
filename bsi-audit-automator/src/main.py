@@ -14,17 +14,15 @@ from .audit.report_generator import ReportGenerator
 
 EMBEDDINGS_PATH_PREFIX = "vector_index_data/"
 
-def main():
+async def main_async():
     """
-    Main entry point for the BSI Audit Automator.
-    Parses command-line arguments to determine which pipeline stage to run.
+    Asynchronous main function to handle all pipeline operations.
     """
     setup_logging(config)
 
     parser = argparse.ArgumentParser(
         description="BSI Grundschutz Audit Automation Pipeline."
     )
-    # Define mutually exclusive arguments: you can only run one stage at a time.
     group = parser.add_mutually_exclusive_group(required=True)
     
     group.add_argument(
@@ -56,60 +54,54 @@ def main():
 
     args = parser.parse_args()
 
-    # Instantiate clients once
     gcs_client = GcsClient(config)
+    ai_client = AiClient(config)
 
+    if args.run_etl:
+        logging.info("Starting ETL phase...")
+        etl_processor = EtlProcessor(config, gcs_client, ai_client)
+        # **FIX**: The async run method must be awaited.
+        await etl_processor.run()
+
+    elif args.generate_report:
+        logging.info("Starting final report assembly...")
+        generator = ReportGenerator(config, gcs_client)
+        generator.assemble_report()
+
+    else:  # These are the async audit tasks
+        rag_dependent_tasks = args.run_stage or args.run_all_stages
+        if rag_dependent_tasks:
+            logging.info(f"Checking for required ETL output files in: {EMBEDDINGS_PATH_PREFIX}")
+            embedding_files = [b for b in gcs_client.list_files(prefix=EMBEDDINGS_PATH_PREFIX) if "placeholder.json" not in b.name]
+            
+            if not embedding_files:
+                logging.critical(
+                    f"\n\n--- PREREQUISITE MISSING ---\n"
+                    f"No embedding files found in '{EMBEDDINGS_PATH_PREFIX}' in bucket '{config.bucket_name}'.\n"
+                    f"You must run the ETL process first to generate embeddings for the source documents.\n"
+                    f"Please run: python -m src.main --run-etl\n"
+                )
+                exit(1)
+
+        rag_client = RagClient(config, gcs_client, ai_client)
+        controller = AuditController(config, gcs_client, ai_client, rag_client)
+
+        if args.run_stage:
+            await controller.run_single_stage(args.run_stage, force_overwrite=True)
+        elif args.run_all_stages:
+            await controller.run_all_stages(force_overwrite=args.force)
+
+def main():
+    """
+    Main entry point for the BSI Audit Automator.
+    Parses command-line arguments and runs the appropriate async task.
+    """
     try:
-        if args.run_etl:
-            logging.info("Starting ETL phase...")
-            ai_client = AiClient(config)
-            etl_processor = EtlProcessor(config, gcs_client, ai_client)
-            etl_processor.run()
-
-        elif args.generate_report:
-            logging.info("Starting final report assembly...")
-            generator = ReportGenerator(config, gcs_client)
-            generator.assemble_report()
-
-        else:  # These are the async audit tasks
-            # --- PRE-FLIGHT CHECK for RAG-dependent stages ---
-            rag_dependent_tasks = args.run_stage or args.run_all_stages
-            if rag_dependent_tasks:
-                logging.info(f"Checking for required ETL output files in: {EMBEDDINGS_PATH_PREFIX}")
-                # List files and filter out the placeholder needed by Terraform
-                embedding_files = [b for b in gcs_client.list_files(prefix=EMBEDDINGS_PATH_PREFIX) if "placeholder.json" not in b.name]
-                
-                if not embedding_files:
-                    logging.critical(
-                        f"\n\n--- PREREQUISITE MISSING ---\n"
-                        f"No embedding files found in '{EMBEDDINGS_PATH_PREFIX}' in bucket '{config.bucket_name}'.\n"
-                        f"You must run the ETL process first to generate embeddings for the source documents.\n"
-                        f"Please run: python -m src.main --run-etl\n"
-                    )
-                    exit(1)
-
-            ai_client = AiClient(config)
-            rag_client = RagClient(config, gcs_client, ai_client)
-            controller = AuditController(config, gcs_client, ai_client, rag_client)
-
-            async def run_audit_tasks():
-                if args.run_stage:
-                    # When running a single stage, the intent is to always execute and
-                    # overwrite that specific stage.
-                    await controller.run_single_stage(args.run_stage, force_overwrite=True)
-                elif args.run_all_stages:
-                    # For a full run, we respect resumability by default. The --force
-                    # flag is used to override this and re-run everything.
-                    await controller.run_all_stages(force_overwrite=args.force)
-
-            asyncio.run(run_audit_tasks())
-
+        asyncio.run(main_async())
+        logging.info("Pipeline step completed successfully.")
     except Exception as e:
         logging.critical(f"A critical error occurred in the pipeline: {e}", exc_info=True)
         exit(1)
-
-    logging.info("Pipeline step completed successfully.")
-
 
 if __name__ == "__main__":
     main()
