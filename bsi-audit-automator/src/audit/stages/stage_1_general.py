@@ -27,11 +27,11 @@ class Chapter1Runner:
     async def _process_geltungsbereich(self) -> Dict[str, Any]:
         """Handles 1.2 Geltungsbereich and 1.4 Informationsverbund using a filtered RAG query."""
         logging.info("Processing 1.2 Geltungsbereich and 1.4 Informationsverbund...")
-        query = "Name, Umfang und Abgrenzung des Informationsverbunds, betroffene Geschäftsprozesse, Standorte und Anwendungen. Kurzbezeichnung und Kurzbeschreibung des Informationsverbunds."
+        queries = ["Name, Umfang und Abgrenzung des Informationsverbunds, betroffene Geschäftsprozesse, Standorte und Anwendungen.", "Kurzbezeichnung und Kurzbeschreibung des Informationsverbunds."]
         
         # **FIX**: Apply category filtering to narrow the search to relevant documents.
         context = self.rag_client.get_context_for_query(
-            query,
+            queries,
             source_categories=['Informationsverbund', 'Strukturanalyse']
         )
         

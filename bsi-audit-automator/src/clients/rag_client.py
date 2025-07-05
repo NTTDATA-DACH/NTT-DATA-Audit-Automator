@@ -113,77 +113,77 @@ class RagClient:
             logging.error(f"Failed to build chunk lookup map from batch files: {e}", exc_info=True)
             return {}
 
-    def get_context_for_query(self, query: str, source_categories: List[str] = None) -> str:
+    def get_context_for_query(self, queries: List[str], source_categories: List[str] = None) -> str:
         """
-        Finds relevant document chunks for a query, dynamically filtering them by
-        similarity score for the highest quality context.
+        Finds relevant document chunks for a list of queries. It queries for each,
+        filters by similarity, de-duplicates the results, and returns a single
+        consolidated context string.
         """
         if self.config.is_test_mode:
-            logging.info(f"RAG_CLIENT_TEST_MODE: Sending query to vector DB: '{query}'")
+            logging.info(f"RAG_CLIENT_TEST_MODE: Sending {len(queries)} queries to vector DB.")
 
         context_str = ""
         try:
-            success, embeddings = self.ai_client.get_embeddings([query])
-            if not success or not embeddings:
-                logging.error("Failed to generate embedding for the RAG query.")
-                return "Error: Could not generate embedding for query."
-            
-            query_vector = embeddings[0]
+            # 1. Embed all queries in a single batch call.
+            success, query_vectors = self.ai_client.get_embeddings(queries)
+            if not success or not query_vectors:
+                logging.error("Failed to generate embeddings for the RAG queries.")
+                return "Error: Could not generate embeddings for queries."
 
-            search_filters = [] 
+            # 2. Build the filter once.
+            search_filters: List[Namespace] = []
             if source_categories and self._document_category_map:
                 allow_list_filenames = []
                 for category in source_categories:
                     filenames = self._document_category_map.get(category, [])
                     allow_list_filenames.extend(filenames)
-                
                 if allow_list_filenames:
                     logging.info(f"Applying search filter for categories: {source_categories} ({len(allow_list_filenames)} files)")
-                    
-                    # 👇 *** FIX: Create a Namespace object instead of a dictionary ***
-                    namespace_filter = Namespace(
-                        name="source_document",
-                        allow_tokens=allow_list_filenames
-                    )
+                    namespace_filter = Namespace(name="source_document", allow_tokens=allow_list_filenames)
                     search_filters.append(namespace_filter)
-
                 else:
                     logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
 
-            response = self.index_endpoint.find_neighbors(
-                deployed_index_id="bsi_deployed_index_kunde_x",
-                queries=[query_vector],
-                num_neighbors=NEIGHBOR_POOL_SIZE,
-                filter=search_filters # 👈 *** CHANGE: Pass the list of filter objects ***
-            )
+            # 3. Gather unique, high-quality neighbors from all queries.
+            unique_neighbors: Dict[str, Any] = {}
+            for i, query_vector in enumerate(query_vectors):
+                logging.info(f"Executing search for query {i+1}/{len(queries)}...")
+                response = self.index_endpoint.find_neighbors(
+                    deployed_index_id="bsi_deployed_index_kunde_x",
+                    queries=[query_vector],
+                    num_neighbors=NEIGHBOR_POOL_SIZE,
+                    filter=search_filters
+                )
 
-            if response and response[0]:
+                if not response or not response[0]:
+                    logging.warning(f"Query {i+1} returned no initial neighbors.")
+                    continue
+
                 all_neighbors = response[0]
-                
-                # **NEW**: Filter the retrieved neighbors by their distance score.
-                # A lower distance means higher similarity.
                 quality_neighbors = [n for n in all_neighbors if n.distance <= SIMILARITY_THRESHOLD]
                 
-                logging.info(f"Filtering {len(all_neighbors)} neighbors down to {len(quality_neighbors)} by similarity score (<= {SIMILARITY_THRESHOLD}).")
-
-                if not quality_neighbors:
-                    logging.warning("No neighbors met the similarity threshold.")
-                    return "No highly relevant context found in the documents."
-
+                logging.info(f"Query {i+1}: Filtered {len(all_neighbors)} neighbors down to {len(quality_neighbors)} by similarity.")
+                
                 for neighbor in quality_neighbors:
-                    chunk_id = neighbor.id
-                    context_info = self._chunk_lookup_map.get(chunk_id)
-                    if context_info:
-                        context_str += f"-- CONTEXT FROM DOCUMENT: {context_info['source_document']} (Similarity: {1-neighbor.distance:.2%}) --\n"
-                        context_str += f"{context_info['text_content']}\n\n"
-                    else:
-                        logging.warning(f"Could not find text for chunk ID: {chunk_id}")
-                
-                return context_str
-            else:
-                logging.warning("Vector DB query returned no neighbors.")
-                return "No relevant context found in the documents."
-                
+                    if neighbor.id not in unique_neighbors:
+                        unique_neighbors[neighbor.id] = neighbor
+
+            # 4. Build the final context string from the unique neighbors.
+            if not unique_neighbors:
+                logging.warning("No neighbors from any query met the similarity threshold.")
+                return "No highly relevant context found in the documents."
+            
+            logging.info(f"Found {len(unique_neighbors)} unique, high-quality chunks across all queries.")
+            for chunk_id, neighbor in unique_neighbors.items():
+                context_info = self._chunk_lookup_map.get(chunk_id)
+                if context_info:
+                    context_str += f"-- CONTEXT FROM DOCUMENT: {context_info['source_document']} (Similarity: {1-neighbor.distance:.2%}) --\n"
+                    context_str += f"{context_info['text_content']}\n\n"
+                else:
+                    logging.warning(f"Could not find text for chunk ID: {chunk_id}")
+            
+            return context_str
+
         except Exception as e:
             logging.error(f"Error querying Vector DB: {e}", exc_info=True)
             return "Error retrieving context from Vector DB."

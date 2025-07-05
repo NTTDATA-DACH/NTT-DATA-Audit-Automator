@@ -28,7 +28,7 @@ class Chapter3Runner:
         "listeDerItSysteme": {"source_categories": ["Strukturanalyse"]},
         "listeDerRaeumeGebaeudeStandorte": {"source_categories": ["Strukturanalyse"]},
         "listeDerKommunikationsverbindungen": {"source_categories": ["Strukturanalyse"]},
-        "stichprobenDokuStrukturanalyse": {"rag_query": "Erstelle eine Stichprobendokumentation der Strukturanalyse.", "source_categories": ["Strukturanalyse"]},
+        "stichprobenDokuStrukturanalyse": {"rag_queries": ["Erstelle eine Stichprobendokumentation der Strukturanalyse."], "source_categories": ["Strukturanalyse"]},
         "listeDerDienstleister": {"source_categories": ["Strukturanalyse", "Dienstleister-Liste"]},
         "definitionDerSchutzbedarfskategorien": {"source_categories": ["Schutzbedarfsfeststellung"]},
         "schutzbedarfGeschaeftsprozesse": {"source_categories": ["Schutzbedarfsfeststellung"]},
@@ -36,7 +36,7 @@ class Chapter3Runner:
         "schutzbedarfItSysteme": {"source_categories": ["Schutzbedarfsfeststellung"]},
         "schutzbedarfRaeume": {"source_categories": ["Schutzbedarfsfeststellung"]},
         "schutzbedarfKommunikationsverbindungen": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "stichprobenDokuSchutzbedarf": {"rag_query": "Führe eine Stichprobenprüfung der Schutzbedarfsfeststellung durch.", "source_categories": ["Strukturanalyse", "Schutzbedarfsfeststellung"]},
+        "stichprobenDokuSchutzbedarf": {"rag_queries": ["Führe eine Stichprobenprüfung der Schutzbedarfsfeststellung durch."], "source_categories": ["Strukturanalyse", "Schutzbedarfsfeststellung"]},
         "modellierungsdetails": {"source_categories": ["Modellierung", "Grundschutz-Check"]},
         "detailsZumItGrundschutzCheck": {"source_categories": ["Grundschutz-Check", "Realisierungsplan"]},
         "benutzerdefinierteBausteine": {"source_categories": ["Grundschutz-Check", "Modellierung"]},
@@ -67,10 +67,16 @@ class Chapter3Runner:
         template = self._load_asset_json(self.TEMPLATE_PATH)
         ch3_template = template.get("bsiAuditReport", {}).get("dokumentenpruefung", {})
 
-        for subchapter_key, subchapter_data in ch3_template.items():
+        # Ensure a consistent order for processing subchapters
+        subchapter_keys = sorted(ch3_template.keys())
+
+        for subchapter_key in subchapter_keys:
+            subchapter_data = ch3_template[subchapter_key]
             if not isinstance(subchapter_data, dict): continue
             
-            for section_key, section_data in subchapter_data.items():
+            section_keys = sorted(subchapter_data.keys())
+            for section_key in section_keys:
+                section_data = subchapter_data[section_key]
                 if not isinstance(section_data, dict): continue
 
                 task = self._create_task_from_section(section_key, section_data)
@@ -83,9 +89,9 @@ class Chapter3Runner:
         content = data.get("content", [])
         if not content: return None
 
-        task = {"key": key, "type": "rag"} # Default to RAG task
+        task = {"key": key}
 
-        # Check for summary tasks
+        # Check for summary tasks first
         if any("Votum" in item.get("label", "") for item in content if item.get("type") == "prose"):
             task["type"] = "summary"
             task["prompt_path"] = "assets/prompts/generic_summary_prompt.txt"
@@ -96,25 +102,28 @@ class Chapter3Runner:
         # Process RAG tasks
         questions = [item["questionText"] for item in content if item.get("type") == "question"]
         if not questions: return None
-            
-        task["questions"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
+        
+        task["type"] = "rag"
+        task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
         task["prompt_path"] = "assets/prompts/generic_question_prompt.txt"
         
+        # FIX: The list of raw questions is now used for the RAG query
+        metadata = self._RAG_METADATA_MAP.get(key, {})
+        task["rag_queries"] = metadata.get("rag_queries", questions)
+        task["source_categories"] = metadata.get("source_categories")
+
         # Determine schema based on number of questions
         num_questions = len(questions)
         if num_questions == 1: task["schema_path"] = "assets/schemas/generic_1_question_schema.json"
         elif num_questions == 2: task["schema_path"] = "assets/schemas/generic_2_question_schema.json"
-        elif num_questions == 4: task["schema_path"] = "assets/schemas/stage_3_7_risikoanalyse_schema.json" # Special case
-        elif num_questions == 5: task["schema_path"] = "assets/schemas/stage_3_6_1_grundschutz_check_schema.json" # Special case
-        else: task["schema_path"] = "assets/schemas/stage_3_2_sicherheitsleitlinie_schema.json" # Fallback for 3 questions
-        
-        # Add RAG metadata
-        metadata = self._RAG_METADATA_MAP.get(key, {})
-        # **BUGFIX**: RAG query is now all questions combined for better context.
-        task["rag_query"] = metadata.get("rag_query", " ".join(questions))
-        task["source_categories"] = metadata.get("source_categories")
+        elif num_questions == 3: task["schema_path"] = "assets/schemas/generic_3_question_schema.json"
+        elif num_questions == 4: task["schema_path"] = "assets/schemas/stage_3_7_risikoanalyse_schema.json" # Keep special case
+        elif num_questions == 5: task["schema_path"] = "assets/schemas/generic_5_question_schema.json"
+        else:
+            logging.error(f"No generic schema available for {num_questions} questions in section '{key}'. Cannot proceed with this task.")
+            return None
 
-        # Handle special table-generating prompts
+        # Handle special table-generating prompts (if any)
         if "stichproben" in key.lower():
             task["prompt_path"] = f"assets/prompts/stage_3_{data['subchapterNumber'].replace('.', '_')}_{key}.txt"
             task["schema_path"] = f"assets/schemas/stage_3_{data['subchapterNumber'].replace('.', '_')}_{key}_schema.json"
@@ -129,15 +138,16 @@ class Chapter3Runner:
         prompt_template_str = self._load_asset_text(task["prompt_path"])
         schema = self._load_asset_json(task["schema_path"])
 
+        # FIX: Use the new rag_queries list and call the refactored RAG client
         context_evidence = self.rag_client.get_context_for_query(
-            query=task["rag_query"],
+            queries=task["rag_queries"],
             source_categories=task.get("source_categories")
         )
         
-        format_args = {"context": context_evidence}
-        if "questions" in task:
-            format_args["questions"] = task["questions"]
-        prompt = prompt_template_str.format(**format_args)
+        prompt = prompt_template_str.format(
+            context=context_evidence, 
+            questions=task["questions_formatted"]
+        )
 
         try:
             generated_data = await self.ai_client.generate_json_response(prompt, schema)
@@ -190,23 +200,23 @@ class Chapter3Runner:
         logging.info(f"Executing dynamically generated plan for stage: {self.STAGE_NAME}")
         
         aggregated_results = {}
-        all_findings_text = ""
+        processed_rag_results = []
         
-        rag_tasks = [task for task in self.execution_plan if task.get("type") == "rag"]
-        summary_tasks = [task for task in self.execution_plan if task.get("type") == "summary"]
+        rag_tasks = [task for task in self.execution_plan if task and task.get("type") == "rag"]
+        summary_tasks = [task for task in self.execution_plan if task and task.get("type") == "summary"]
 
         if rag_tasks:
             logging.info(f"--- Processing {len(rag_tasks)} RAG subchapters ---")
             rag_coroutines = [self._process_rag_subchapter(task) for task in rag_tasks]
-            rag_results_list = await asyncio.gather(*rag_coroutines)
+            processed_rag_results = await asyncio.gather(*rag_coroutines)
             
-            for res in rag_results_list:
+            for res in processed_rag_results:
                 aggregated_results.update(res)
-            
-            all_findings_text = self._get_findings_from_results(rag_results_list)
 
         if summary_tasks:
             logging.info(f"--- Processing {len(summary_tasks)} summary subchapters ---")
+            all_findings_text = self._get_findings_from_results(processed_rag_results)
+            
             summary_coroutines = [self._process_summary_subchapter(task, all_findings_text) for task in summary_tasks]
             summary_results_list = await asyncio.gather(*summary_coroutines)
 

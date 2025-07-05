@@ -1,14 +1,29 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Generic Schema for a Summary Votum",
+    "title": "Generic Summary Votum Response",
+    "description": "A schema for a summary section that provides a final verdict ('Votum') and a structured finding.",
     "type": "object",
     "properties": {
       "votum": {
         "type": "string",
-        "description": "The final summary verdict for a specific phase or section."
+        "description": "The summary verdict or assessment for the entire section."
+      },
+      "finding": {
+        "type": "object",
+        "description": "A single, overarching finding for the entire summarized section. Set to 'OK' if the overall status is compliant.",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "The overall category for the summary: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK'.",
+            "enum": ["AG", "AS", "E", "OK"]
+          },
+          "description": {
+            "type": "string",
+            "description": "A clear, concise description of the overall finding for the section."
+          }
+        },
+        "required": ["category", "description"]
       }
     },
-    "required": [
-      "votum"
-    ]
+    "required": ["votum", "finding"]
   }
