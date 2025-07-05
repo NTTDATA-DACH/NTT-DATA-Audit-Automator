@@ -18,6 +18,12 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
 *   **[✅] Bugfix - Intuitive Stage Execution:** Corrected the main control flow to align with user intent. `--run-stage` now *always* overwrites its specific target. `--run-all-stages` now correctly skips completed stages by default for resumability, and can be overridden with `--force`.
 *   **[✅] Bugfix - SDK Schema Parsing (COMPLETE):** Resolved a recurring `TypeError` by refactoring all affected schemas (Chapters 1 and 3). The fix ensures the `"items"` keyword for arrays always uses a single schema object (e.g., `{"items": {"type": "..."}}`) instead of the unsupported "tuple validation" format (`{"items": [...]}`), ensuring full compatibility with the Vertex AI SDK's schema parser.
+*   **[✅] Corrected Chapter 7.2 Findings Tables (TODO 15):** Restructured the findings tables in `master_report_template.json` to match the BSI standard (`Nr.`, `Beschreibung`, `Quelle`, `Behebungsfrist`, `Status`). The `ReportGenerator` now correctly populates these tables with default deadlines and status, ensuring the final report is compliant.
+*   **[✅] Added Missing Report Chapters & Generation Logic (TODO 13 & 14):** Significantly expanded the application's scope to align with the official BSI template.
+    *   Updated `master_report_template.json` with structures for all missing chapters and subchapters (e.g., 1.4, 3.3.2, 3.3.3, 3.4, 3.5, 3.6, 5.6.2).
+    *   Created a comprehensive set of new prompts and schemas to drive AI generation for these new sections.
+    *   Enhanced `Chapter3Runner`, `Chapter5Runner`, and `ReportGenerator` to process and populate this new content.
+*   **[✅] Improved RAG Context and Traceability (TODO 12):** Refactored the `RagClient` to include the source document filename in the context provided to the AI. This replaces generic chunk IDs with clear document references (e.g., `CONTEXT FROM DOCUMENT: ...`), improving the traceability and clarity of AI-generated findings.
 
 ---
 
@@ -62,21 +68,3 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 11: Improve Prompts and Schemas.**
     *   **Directory:** `assets/`
     *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
-
-*   **[ ] TODO 12: replace references to tupels**
-    *   **Directory:** `src/`
-    *   **Action:** In texts generated the reference is to a tupel, but I want the name of the document (example "Dokumente: e8a5eda0, 7a258f6f", "(Kontext-Chunks 66c78704, 92a5a6d1, 601027fa)").
-
-*   **[ ] TODO 13: BUG Chapters missing in master report template.**
-    *   **Directory:** `src/`
-    *   **Action:** add 1.4, 3.5 AND check 5.5.2 and 5.6.2, there should be a table now with all the controls!
-
-*   **[ ] TODO 14: BUG Generated contents missing**
-    *   **Directory:** ``
-    *   **Action:** add Chapter 3.3.2, 3.3.3, 3.4, 3.5,3.6 
-
-*   **[ ] TODO 15: Report chapter 7.2.**
-    *   **Directory:** `assets/json/`
-    *   **Action 1:** subchapters have wrong numbering (my mistake)
-    *   **Action 1:** Table should be [Nr, Beschreibung, Datum, Status] (Status in [Offen, Korrekt])
-    
