@@ -28,8 +28,7 @@ GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
 INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
-# This is the line that was causing the error, it has been removed.
-# INDEX_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_public_domain)"
+INDEX_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_public_domain)"
 INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
 
 # --- INTERACTIVE SELECTION: Audit Type ---
@@ -94,11 +93,11 @@ echo "🚀 Executing task with args: [main.py ${TASK_ARGS}]"
 
 # NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
 # command arguments of the deployed job, allowing us to run any task.
-# The reference to INDEX_PUBLIC_DOMAIN has been removed from the env vars list.
+# The INDEX_ENDPOINT_PUBLIC_DOMAIN is now passed to the job.
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,ETL_STATUS_PREFIX=output/etl_status/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,ETL_STATUS_PREFIX=output/etl_status/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},INDEX_ENDPOINT_PUBLIC_DOMAIN=${INDEX_PUBLIC_DOMAIN}" \
   --args="${TASK_ARGS}"
 
 echo "✅ Job execution' finished."

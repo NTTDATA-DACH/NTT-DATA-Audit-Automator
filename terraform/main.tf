@@ -149,7 +149,6 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
       }
     }
   }
-  depends_on = [google_service_networking_connection.vertex_vpc_connection, google_storage_bucket_object.json_placeholder]
 }
 
 resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
@@ -157,19 +156,26 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   description  = "Endpoint for querying the BSI audit index for project ${var.project_id}."
   region       = var.region
   # --- FIX FOR PROJECT NUMBER ERROR ---
-  # Manually construct the network string using the project NUMBER, not the ID.
-  # This matches the specific format required by this API.
-  network      = "projects/${var.project_number}/global/networks/${google_compute_network.bsi_vpc.name}"
-
-  # The endpoint must depend on the peering connection.
-  depends_on = [google_service_networking_connection.vertex_vpc_connection]
+  # To make the endpoint accessible from cloud shell, we enable the public endpoint.
+  public_endpoint_enabled = true
 
   # --- FIX: USE A PROVISIONER TO DEPLOY THE INDEX ---
   # This runs the gcloud command on the local machine after the endpoint is created.
   provisioner "local-exec" {
-    when    = create
+    when = create
     command = "gcloud ai index-endpoints deploy-index ${self.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index_kunde_x --display-name='BSI Deployed Index' --project=${var.project_id} --region=${var.region}"
   }
+
+  # --- FIX: ADD A DESTROY PROVISIONER TO UNDEPLOY THE INDEX ---
+  # This runs before the resource is destroyed, ensuring the endpoint is empty.
+  # It MUST only use 'self' attributes, not 'var' attributes.
+  provisioner "local-exec" {
+    when = destroy
+    command = "gcloud ai index-endpoints undeploy-index ${self.name} --deployed-index-id=bsi_deployed_index_kunde_x --project=${self.project} --region=${self.region} --quiet"
+  }
+
+  # The endpoint depends on the index existing first.
+  depends_on = [google_vertex_ai_index.bsi_audit_index]
 }
 
 # 3. IAM & PERMISSIONS: Applying the Principle of Least Privilege

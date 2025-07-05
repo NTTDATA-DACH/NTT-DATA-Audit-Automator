@@ -1,0 +1,16 @@
+--- a/bsi-audit-automator/terraform/main.tf
++++ b/bsi-audit-automator/terraform/main.tf
+@@ -129,6 +129,13 @@
+     command = "gcloud ai index-endpoints undeploy-index ${self.name} --deployed-index-id=bsi_deployed_index_kunde_x --project=${self.project} --region=${self.region} --quiet"
+   }
+ 
++  # --- FIX: PREVENT CREATE_BEFORE_DESTROY RACE CONDITION ---
++  # When changing the endpoint from private to public, Terraform must destroy the old
++  # one completely before creating the new one. The default behavior can cause API errors.
++  lifecycle {
++    create_before_destroy = false
++  }
+
+   # The endpoint depends on the index existing first.
+   depends_on = [google_vertex_ai_index.bsi_audit_index]
+ }
