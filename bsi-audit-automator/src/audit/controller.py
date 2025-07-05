@@ -2,7 +2,8 @@
 import logging
 import json
 import asyncio
-from typing import List, Dict, Any
+import uuid
+from typing import List, Dict, Any, Optional
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -41,10 +42,52 @@ class AuditController:
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")
 
+    def _append_finding(self, finding: Dict[str, Any], source_chapter: str, source_subchapter_key: Optional[str] = None) -> None:
+        """Appends a single structured finding to the central list with a unique ID."""
+        # Use a short UUID for the ID to prevent collisions in parallel environments.
+        finding_id = f"{finding['category']}-{uuid.uuid4().hex[:12]}"
+        
+        # Construct a more detailed source reference
+        source_ref = source_chapter.replace('Chapter-', '')
+        if source_subchapter_key:
+            source_ref += f" ({source_subchapter_key})"
+            
+        self.all_findings.append({
+            "id": finding_id,
+            "category": finding['category'],
+            "description": finding['description'],
+            "source_chapter": source_ref
+        })
+        logging.info(f"Collected finding from {source_ref}: {finding['category']}")
+
+    def _extract_findings_recursive(self, data: Any, stage_name: str) -> None:
+        """
+        Recursively traverses a nested data structure (dicts and lists) to find
+        and store all structured `finding` objects. This is more robust than a
+        flat search.
+        """
+        if isinstance(data, dict):
+            # Check if the current dictionary is a finding object itself
+            if 'finding' in data and isinstance(data['finding'], dict):
+                finding = data['finding']
+                if finding and finding.get('category') != 'OK':
+                    # Try to find a subchapter key for better context
+                    subchapter_key = next((k for k, v in data.items() if isinstance(v, dict) and 'finding' in v), None)
+                    self._append_finding(finding, stage_name, subchapter_key)
+            
+            # Recurse into the values of the dictionary
+            for key, value in data.items():
+                self._extract_findings_recursive(value, stage_name)
+
+        elif isinstance(data, list):
+            # Recurse into each item in the list
+            for item in data:
+                self._extract_findings_recursive(item, stage_name)
+
     def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> None:
         """
-        Parses stage results, finds structured `finding` objects, and appends
-        any deviations or recommendations to the central findings list.
+        Public entry point to parse stage results for findings. It uses a recursive
+        helper to ensure all nested findings are discovered.
 
         Args:
             stage_name: The name of the stage that produced the result (e.g., 'Chapter-3').
@@ -52,18 +95,8 @@ class AuditController:
         """
         if not result_data:
             return
+        self._extract_findings_recursive(result_data, stage_name)
 
-        for subchapter_key, subchapter_data in result_data.items():
-            if isinstance(subchapter_data, dict) and 'finding' in subchapter_data:
-                finding = subchapter_data['finding']
-                if finding and finding.get('category') != 'OK':
-                    self.all_findings.append({
-                        "id": f"{finding['category']}-{len(self.all_findings) + 1}",
-                        "category": finding['category'],
-                        "description": finding['description'],
-                        "source_chapter": stage_name.replace('Chapter-', '') + f" ({subchapter_key})"
-                    })
-                    logging.info(f"Collected finding from {stage_name}/{subchapter_key}: {finding['category']}")
 
     def _save_all_findings(self) -> None:
         """
@@ -83,15 +116,22 @@ class AuditController:
 
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
-        Runs all defined audit stages in sequence, collecting findings after each
+        Runs all defined audit stages in parallel, collecting findings after each
         stage. It respects resumability by skipping already completed stages.
 
         Args:
             force_overwrite: If True, all stages will be re-run even if results exist.
         """
-        logging.info("Starting to run all audit stages.")
-        for stage_name in self.stage_runner_classes.keys():
-            await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
+        logging.info("Starting to run all audit stages in parallel...")
+        
+        # Create a list of tasks to run concurrently.
+        tasks = [
+            self.run_single_stage(stage_name, force_overwrite=force_overwrite)
+            for stage_name in self.stage_runner_classes.keys()
+        ]
+        
+        # Execute all stages concurrently and wait for them to complete.
+        await asyncio.gather(*tasks)
         
         self._save_all_findings()
         logging.info("All audit stages completed.")
