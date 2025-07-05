@@ -4,26 +4,39 @@ This project automates BSI Grundschutz security audits by transforming customer 
 
 ## End-to-End Workflow
 
-### Starting a New Audit or Resetting Data
-**Use this process when starting with a new customer or when source documents have changed significantly.** This ensures no data from a previous audit contaminates the new one.
+### Managing Audit Data: Refresh vs. Reset
+Before starting, choose the correct method to prepare your environment.
 
-1.  **Run the Reset Script:** From the project root (`bsi-audit-automator/`), execute the reset script. This will wipe all data from GCS and mark the Vertex AI index for recreation.
+#### **Option 1: Fast Refresh (Recommended for Data Updates)**
+Use this when you get new source files for an audit and want to start over without touching the cloud infrastructure.
+
+1.  **Run the Refresh Script:** This moves old embedding data to an archive and clears the index. It's much faster than a full reset.
+    ```bash
+    bash ./scripts/refresh_audit_data.sh
+    ```
+2.  **Confirm the Action:** Type `y` to proceed.
+3.  **Wait for Index Update:** The script triggers an index update. In the GCP Console, wait for the "Dense vector count" of your index to drop to 0. This can take 5-10 minutes.
+4.  **Proceed to the Standard Workflow below.**
+
+#### **Option 2: Full Reset (For Infrastructure Changes)**
+Use this only if you need to start from a "scorched-earth" state, for example, for a new customer or if you've changed the Terraform configuration for the index itself.
+
+1.  **Run the Reset Script:** This wipes all GCS data AND marks the index resource in Terraform for recreation.
     ```bash
     bash ./scripts/reset_audit.sh
     ```
-2.  **Confirm the Action:** The script will show you what it's about to delete and ask for confirmation. Type `y` and press Enter.
-3.  **Recreate the Index:** Follow the script's instructions by navigating to the Terraform directory and applying the change. This destroys the old index and creates a new, empty one.
+2.  **Recreate the Index:** Follow the script's instructions to run `terraform apply`.
     ```bash
     cd ../terraform
     terraform apply -auto-approve
     cd ..
     ```
-4.  **Proceed with the standard workflow below.** The system is now in a clean state.
+3.  **Proceed to the Standard Workflow below.**
 
 ### Standard Workflow
 
-1.  **Infrastructure Deployment:** If this is the first run, use Terraform in the `terraform/` directory to create the GCS Bucket, VPC Network, and all necessary Vertex AI and IAM resources.
-2.  **Upload Customer Documents:** Upload the customer's documentation (PDFs) to the `source_documents/` path in the GCS bucket created by Terraform.
+1.  **Infrastructure Deployment:** If this is the very first run, use Terraform in the `terraform/` directory to create the GCS Bucket, VPC Network, and all necessary Vertex AI and IAM resources.
+2.  **Upload Customer Documents:** Upload the customer's documentation (PDFs) to the `source_documents/` path in the GCS bucket.
 3.  **Deploy the Job Container:** Build and deploy the application container to Cloud Run Jobs.
     ```bash
     # Run from the project root
@@ -34,18 +47,18 @@ This project automates BSI Grundschutz security audits by transforming customer 
     # Select "Run ETL (Embedding)" from the menu
     bash ./scripts/execute-audit-job.sh
     ```
-5.  **Wait for Indexing:** The Vertex AI Index automatically ingests the new embedding files from GCS. This process can take 5-20 minutes. You can monitor the "Dense vector count" on the Matching Engine page in the GCP Console to see when it's ready.
-6.  **Execute Audit Stages:** Once the ETL is complete, run the audit stages. The controller collects all findings (deviations/recommendations) as it proceeds. The process is resumable; it will skip already completed stages.
+5.  **Wait for Indexing:** After the ETL job uploads the new embedding files, the Vertex AI Index automatically ingests them. This process can take 5-20 minutes. You can monitor the "Dense vector count" on the Matching Engine page in the GCP Console to see when it's ready.
+6.  **Execute Audit Stages:** Once the ETL is complete and the index is populated, run the audit stages.
     ```bash
     # To run all stages sequentially, select "Run All Audit Stages"
     bash ./scripts/execute-audit-job.sh
     ```
-7.  **Generate the Final Report:** After the stages are complete, this task assembles the final report. It populates the content from each stage's output and fills the findings tables in Chapter 7.2 from the centrally collected `all_findings.json` file.
+7.  **Generate the Final Report:** After the stages are complete, this task assembles the final report from all generated components.
     ```bash
     # Select "Generate Final Report" from the menu
     bash ./scripts/execute-audit-job.sh
     ```
-8.  **Manual Review and Finalization:** Open the generated `final_audit_report.json` located in the `output/` GCS prefix. Load it into the `report_editor.html` tool to perform the final manual review, fill in placeholder sections (like 1.4 Audit-Team), and make any necessary adjustments before exporting the final version.
+8.  **Manual Review and Finalization:** Open the generated `final_audit_report.json` from the `output/` GCS prefix in the `report_editor.html` tool to perform the final manual review and make any necessary adjustments.
 
 ## The Audit Stages Explained
 
@@ -65,4 +78,4 @@ This project automates BSI Grundschutz security audits by transforming customer 
 
 *   **Chapter 7: Appendix** (`audit/stages/stage_7_anhang.py`): Generates content for the report's appendix.
     *   **7.1 (Reference Documents):** A **deterministic** task that lists all files found in the source GCS folder.
-    *   **7.2 (Deviations & Recommendations):** This section is **not** populated by the Chapter 7 runner. It is populated by the **`ReportGenerator`** at the very end, using the `all_findings.json` file (collected by the `AuditController` across all stages) to build the final, categorized tables of findings.
+    .
