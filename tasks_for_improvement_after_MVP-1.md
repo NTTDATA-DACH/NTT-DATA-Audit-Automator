@@ -63,7 +63,20 @@ This document tracks completed enhancements and the prioritized backlog of featu
     *   **Directory:** `assets/`
     *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
 
-*   **[ ] TODO 11: replace references to tupels**
+*   **[ ] TODO 12: replace references to tupels**
     *   **Directory:** `src/`
-    *   **Action:** In texts generated the reference is to a tupel, but I want the name of the document
+    *   **Action:** In texts generated the reference is to a tupel, but I want the name of the document (example "Dokumente: e8a5eda0, 7a258f6f", "(Kontext-Chunks 66c78704, 92a5a6d1, 601027fa)").
+
+*   **[ ] TODO 13: BUG Chapters missing in master report template.**
+    *   **Directory:** `src/`
+    *   **Action:** add 1.4, 3.5 AND check 5.5.2 and 5.6.2, there should be a table now with all the controls!
+
+*   **[ ] TODO 14: BUG Generated contents missing**
+    *   **Directory:** ``
+    *   **Action:** add Chapter 3.3.2, 3.3.3, 3.4, 3.5,3.6 
+
+*   **[ ] TODO 15: Report chapter 7.2.**
+    *   **Directory:** `assets/json/`
+    *   **Action 1:** subchapters have wrong numbering (my mistake)
+    *   **Action 1:** Table should be [Nr, Beschreibung, Datum, Status] (Status in [Offen, Korrekt])
     
