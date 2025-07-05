@@ -4,7 +4,7 @@ import json
 from typing import List, Dict, Any
 
 from google.cloud import aiplatform
-from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint
+from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint, Namespace
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -128,7 +128,8 @@ class RagClient:
             
             query_vector = embeddings[0]
 
-            filters = None
+            # The filter must be a list of Namespace objects.
+            filters: List[Namespace] = []
             if source_categories and self._document_category_map:
                 allow_list_filenames = []
                 for category in source_categories:
@@ -137,9 +138,13 @@ class RagClient:
                 
                 if allow_list_filenames:
                     logging.info(f"Applying search filter for categories: {source_categories} ({len(allow_list_filenames)} files)")
-                    # FIX: Use the correct dictionary format for restrictions, not the invalid class path.
-                    # The API expects a dictionary with 'namespace' and 'allow' keys.
-                    filters = {"namespace": "source_document", "allow": allow_list_filenames}
+                    
+                    # CORRECT FIX: Instantiate the Namespace class from the SDK.
+                    namespace_filter = Namespace(
+                        name="source_document", 
+                        allow_tokens=allow_list_filenames
+                    )
+                    filters.append(namespace_filter)
 
                 else:
                     logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
@@ -148,7 +153,7 @@ class RagClient:
                 deployed_index_id="bsi_deployed_index_kunde_x",
                 queries=[query_vector],
                 num_neighbors=NEIGHBOR_POOL_SIZE,
-                filter=[filters] if filters else []
+                filter=filters
             )
 
             if response and response[0]:
