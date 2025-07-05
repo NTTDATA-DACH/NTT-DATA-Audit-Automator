@@ -66,6 +66,22 @@ class Chapter5Runner:
 
         logging.info(f"Successfully generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit.")
         return {name: {"bausteinPruefungen": baustein_pruefungen_list}}
+        
+    def _generate_risikoanalyse_checklist(self) -> Dict[str, Any]:
+        """
+        Generates a placeholder checklist for the risk analysis measures (5.6.2).
+        The actual measures would need to be extracted from A.5/A.6 in a future feature.
+        """
+        name = "einzelergebnisseDerRisikoanalyse"
+        logging.info(f"Generating placeholder checklist for {name} (5.6.2)...")
+        # For now, this returns a placeholder structure.
+        # Future implementation would use RAG to read A.5/A.6 and populate this.
+        return {
+            name: {
+                "massnahmenPruefungen": []
+            }
+        }
+
 
     async def run(self) -> dict:
         """
@@ -82,9 +98,14 @@ class Chapter5Runner:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
         
-        # The only automated task is to generate the checklist.
-        # This is now a synchronous, deterministic function, so no 'await' is needed.
-        result = self._generate_control_checklist(chapter_4_data)
+        # Generate the checklist for 5.5.2 (deterministic)
+        checklist_result = self._generate_control_checklist(chapter_4_data)
+        
+        # Generate the placeholder for 5.6.2 (deterministic placeholder)
+        risiko_result = self._generate_risikoanalyse_checklist()
+        
+        # Merge results
+        final_result = {**checklist_result, **risiko_result}
             
         logging.info(f"Successfully prepared data for stage {self.STAGE_NAME}")
-        return result
+        return final_result

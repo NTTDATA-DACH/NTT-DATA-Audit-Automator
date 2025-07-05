@@ -43,12 +43,12 @@ class RagClient:
         # This lookup map is the key to retrieving text from a chunk ID.
         self._chunk_lookup_map = self._load_chunk_lookup_map()
 
-    def _load_chunk_lookup_map(self) -> Dict[str, str]:
+    def _load_chunk_lookup_map(self) -> Dict[str, Dict[str, str]]:
         """
         Downloads all embedding batch files from GCS and creates a mapping from
-        chunk ID to its text content for fast lookups.
+        chunk ID to its text content and source document for fast lookups.
         """
-        lookup_map = {}
+        lookup_map: Dict[str, Dict[str, str]] = {}
         logging.info("Building chunk ID to text lookup map from all batch files...")
 
         try:
@@ -68,8 +68,12 @@ class RagClient:
                         data = json.loads(line)
                         chunk_id = data.get("id")
                         chunk_text = data.get("text_content")
-                        if chunk_id and chunk_text:
-                            lookup_map[chunk_id] = f"-- CONTEXT FROM CHUNK {chunk_id} --\n{chunk_text}\n\n"
+                        source_doc = data.get("source_document")
+                        if chunk_id and chunk_text and source_doc:
+                            lookup_map[chunk_id] = {
+                                "text_content": chunk_text,
+                                "source_document": source_doc
+                            }
                     except json.JSONDecodeError:
                         logging.warning(f"Skipping invalid JSON line in {blob.name}: '{line}'")
                         continue
@@ -83,11 +87,11 @@ class RagClient:
     def get_context_for_query(self, query: str, num_neighbors: int = 5) -> str:
         """
         Finds the most relevant document chunks for a query and returns their text.
+        The context is prefixed with the source document name for better AI responses.
 
         Args:
             query: The question or topic to search for.
             num_neighbors: The number of relevant chunks to retrieve.
-
         Returns:
             A single string containing the concatenated text of all found chunks.
         """
@@ -130,9 +134,10 @@ class RagClient:
 
                 for neighbor in neighbors:
                     chunk_id = neighbor.id
-                    chunk_text = self._chunk_lookup_map.get(chunk_id)
-                    if chunk_text:
-                        context_str += chunk_text
+                    context_info = self._chunk_lookup_map.get(chunk_id)
+                    if context_info:
+                        context_str += f"-- CONTEXT FROM DOCUMENT: {context_info['source_document']} --\n"
+                        context_str += f"{context_info['text_content']}\n\n"
                     else:
                         logging.warning(f"Could not find text for chunk ID: {chunk_id}")
                 
