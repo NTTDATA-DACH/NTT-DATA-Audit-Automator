@@ -25,12 +25,16 @@ class Chapter1Runner:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _process_geltungsbereich(self) -> Dict[str, Any]:
-        """Handles 1.2 Geltungsbereich and 1.4 Informationsverbund using RAG."""
+        """Handles 1.2 Geltungsbereich and 1.4 Informationsverbund using a filtered RAG query."""
         logging.info("Processing 1.2 Geltungsbereich and 1.4 Informationsverbund...")
         query = "Name, Umfang und Abgrenzung des Informationsverbunds, betroffene Geschäftsprozesse, Standorte und Anwendungen. Kurzbezeichnung und Kurzbeschreibung des Informationsverbunds."
-        context = self.rag_client.get_context_for_query(query)
         
-        # If RAG returns the specific fallback string, bypass the AI call.
+        # **FIX**: Apply category filtering to narrow the search to relevant documents.
+        context = self.rag_client.get_context_for_query(
+            query,
+            source_categories=['Informationsverbund', 'Strukturanalyse']
+        )
+        
         if "No relevant context found" in context:
             logging.warning("No RAG context found for Geltungsbereich. Generating deterministic response.")
             return {
@@ -53,20 +57,17 @@ class Chapter1Runner:
         """Executes the generation logic for Chapter 1."""
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         
-        # The AI call populates a single complex object for Geltungsbereich and Informationsverbund
         geltungsbereich_result = await self._process_geltungsbereich()
 
-        # Final assembly including deterministic and manual placeholders
         final_result = {
             "verfasser": {
-                "name": "Dixie" # Deterministic
+                "name": "Dixie"
             },
             "geltungsbereichDerZertifizierung": geltungsbereich_result,
-            # Placeholders for sections to be filled in manually or by other processes
             "auditierteInstitution": {},
             "grundlageDesAudits": {},
             "audittyp": {
-                "content": self.config.audit_type # Deterministic
+                "content": self.config.audit_type
             },
             "auditplan": {}
         }

@@ -12,6 +12,10 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
+# **NEW**: Constants for dynamic context filtering
+SIMILARITY_THRESHOLD = 0.7  # Lower is stricter. Cosine distance of 0.7 is a reasonable starting point.
+NEIGHBOR_POOL_SIZE = 10     # Fetch a larger pool of candidates to filter from.
+
 
 class RagClient:
     """Client for Retrieval-Augmented Generation using Vertex AI Vector Search."""
@@ -40,7 +44,6 @@ class RagClient:
             )
 
         self._chunk_lookup_map = self._load_chunk_lookup_map()
-        # **NEW**: Load the document category map.
         self._document_category_map = self._load_document_category_map()
 
     def _load_document_category_map(self) -> Dict[str, str]:
@@ -85,7 +88,6 @@ class RagClient:
                 if "placeholder.json" in blob.name:
                     continue
 
-                logging.debug(f"Processing batch file for lookup map: {blob.name}")
                 jsonl_content = self.gcs_client.read_text_file(blob.name)
                 
                 for line in jsonl_content.strip().split('\n'):
@@ -109,17 +111,10 @@ class RagClient:
             logging.error(f"Failed to build chunk lookup map from batch files: {e}", exc_info=True)
             return {}
 
-    def get_context_for_query(self, query: str, num_neighbors: int = 5, source_categories: List[str] = None) -> str:
+    def get_context_for_query(self, query: str, source_categories: List[str] = None) -> str:
         """
-        Finds relevant document chunks for a query, optionally filtering the search
-        to specific document categories for higher precision.
-
-        Args:
-            query: The question or topic to search for.
-            num_neighbors: The number of relevant chunks to retrieve.
-            source_categories: A list of BSI categories to restrict the search to.
-        Returns:
-            A single string containing the concatenated text of all found chunks.
+        Finds relevant document chunks for a query, dynamically filtering them by
+        similarity score for the highest quality context.
         """
         if self.config.is_test_mode:
             logging.info(f"RAG_CLIENT_TEST_MODE: Sending query to vector DB: '{query}'")
@@ -133,7 +128,6 @@ class RagClient:
             
             query_vector = embeddings[0]
 
-            # **NEW**: Build the filter based on categories.
             filters = None
             if source_categories and self._document_category_map:
                 allow_list_filenames = []
@@ -152,29 +146,32 @@ class RagClient:
             response = self.index_endpoint.find_neighbors(
                 deployed_index_id="bsi_deployed_index_kunde_x",
                 queries=[query_vector],
-                num_neighbors=num_neighbors,
-                # The find_neighbors call expects a list of restrictions
+                num_neighbors=NEIGHBOR_POOL_SIZE,
                 filter=[filters] if filters else []
             )
 
             if response and response[0]:
-                neighbors = response[0]
-                if self.config.is_test_mode:
-                    neighbor_details = [f"(id={n.id}, dist={n.distance:.4f})" for n in neighbors]
-                    logging.info(f"RAG_CLIENT_TEST_MODE: Found {len(neighbors)} neighbors: {', '.join(neighbor_details)}")
+                all_neighbors = response[0]
+                
+                # **NEW**: Filter the retrieved neighbors by their distance score.
+                # A lower distance means higher similarity.
+                quality_neighbors = [n for n in all_neighbors if n.distance <= SIMILARITY_THRESHOLD]
+                
+                logging.info(f"Filtering {len(all_neighbors)} neighbors down to {len(quality_neighbors)} by similarity score (<= {SIMILARITY_THRESHOLD}).")
 
-                for neighbor in neighbors:
+                if not quality_neighbors:
+                    logging.warning("No neighbors met the similarity threshold.")
+                    return "No highly relevant context found in the documents."
+
+                for neighbor in quality_neighbors:
                     chunk_id = neighbor.id
                     context_info = self._chunk_lookup_map.get(chunk_id)
                     if context_info:
-                        context_str += f"-- CONTEXT FROM DOCUMENT: {context_info['source_document']} --\n"
+                        context_str += f"-- CONTEXT FROM DOCUMENT: {context_info['source_document']} (Similarity: {1-neighbor.distance:.2%}) --\n"
                         context_str += f"{context_info['text_content']}\n\n"
                     else:
                         logging.warning(f"Could not find text for chunk ID: {chunk_id}")
                 
-                if self.config.is_test_mode:
-                    logging.info(f"RAG_CLIENT_TEST_MODE: Final retrieved context string length: {len(context_str)} chars.")
-
                 return context_str
             else:
                 logging.warning("Vector DB query returned no neighbors.")
