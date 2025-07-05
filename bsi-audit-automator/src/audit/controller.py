@@ -119,9 +119,9 @@ class AuditController:
         Independent stages are run concurrently, and dependent stages run sequentially after.
         """
         # Define stages that can run in parallel (no inter-dependencies)
-        parallel_stages = ["Chapter-1", "Chapter-3", "Chapter-4", "Chapter-7"]
-        # Define stages that must run after the parallel group (e.g., Ch5 depends on Ch4)
-        sequential_stages = ["Chapter-5"]
+        parallel_stages = ["Chapter-1", "Chapter-3", "Chapter-4"]
+        # Define stages that must run sequentially after the parallel group
+        sequential_stages = ["Chapter-5", "Chapter-7"]
 
         logging.info(f"Starting parallel execution for independent stages: {parallel_stages}")
         parallel_tasks = [
