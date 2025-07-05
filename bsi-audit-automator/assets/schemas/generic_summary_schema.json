@@ -1,0 +1,14 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Generic Schema for a Summary Votum",
+    "type": "object",
+    "properties": {
+      "votum": {
+        "type": "string",
+        "description": "The final summary verdict for a specific phase or section."
+      }
+    },
+    "required": [
+      "votum"
+    ]
+  }
