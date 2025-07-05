@@ -1,8 +1,0 @@
-# index_metadata.yaml
-contentsDeltaUri: "gs://bsi-auditor-3-audit-data/vector_index_data/"
-config:
-  dimensions: 3072
-  approximateNeighborsCount: 150
-  algorithmConfig:
-    treeAhConfig:
-      leafNodeEmbeddingCount: 500
