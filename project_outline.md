@@ -27,6 +27,7 @@ The audit process and resulting report must be based on two key documents:
     *   **Generative Model:** `gemini-2.5-pro`
     *   **Embedding Model:** `gemini-embedding-001` (for `3072` dimension vectors, as configured in Terraform).
 *   **Robustness:** All API calls use an asynchronous, parallel-limited (`Semaphore`), and robust error-handling wrapper with an exponential backoff retry loop.
+*   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. The `AiClient` handles this by iterating and making individual, robust requests.
 
 **4. AI Collaboration & Development Protocol**
 
