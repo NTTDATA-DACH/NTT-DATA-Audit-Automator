@@ -198,12 +198,14 @@
                 reader.onload = (e) => {
                     try {
                         reportData = JSON.parse(e.target.result);
+                        console.log('[DEBUG] Successfully parsed JSON file. Full data object:', JSON.parse(JSON.stringify(reportData)));
                         initialMessage.style.display = 'none';
                         renderReport(reportData);
                         createFilterButtons(reportData);
                         exportButton.disabled = false;
                     } catch (error) {
                         alert('Error parsing JSON file: ' + error.message);
+                        console.error("JSON Parsing Error:", error);
                     }
                 };
                 reader.readAsText(file);
@@ -216,7 +218,7 @@
                     if (input.tagName === 'BUTTON') return;
                     const path = input.dataset.path;
                     let value = input.value;
-                    if (input.type === 'select-one') { // Adjusted for boolean selects
+                    if (input.type === 'select-one') {
                         value = value === 'true' ? true : (value === 'false' ? false : null);
                     }
                     setValueByPath(reportData, path, value);
@@ -276,7 +278,6 @@
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
                 for (const subKey in chapterData) {
-                     // Recurse only on keys that are objects but are not the known structural keys
                     if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
                          chapterDiv.appendChild(renderSection(subKey, chapterData[subKey], `${path}.${subKey}`));
                     }
@@ -287,6 +288,8 @@
             function renderSection(key, sectionData, path) {
                 const sectionDiv = document.createElement('div');
                 sectionDiv.className = 'subchapter';
+
+                console.log(`[DEBUG] Rendering section. Path: ${path}`, 'Data:', JSON.parse(JSON.stringify(sectionData || {})));
 
                 if (sectionData.title) sectionDiv.innerHTML += `<h3>${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
                 if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
@@ -310,14 +313,11 @@
                     handledKeys.push('content');
                 }
                 
-                // Simplified logic: Now we ONLY look for a 'table' object.
                 if (sectionData.table) {
-                    // Pass the table object directly and append '.table' to the path for correctness.
                     sectionDiv.appendChild(renderTable(sectionData.table, `${path}.table`));
                     handledKeys.push('table');
                 }
                 
-                // --- SPECIAL CASE RENDERERS FOR CHAPTER 5 ---
                 if (Array.isArray(sectionData.bausteinPruefungen)) {
                     sectionDiv.appendChild(renderBausteinPruefung(sectionData.bausteinPruefungen, `${path}.bausteinPruefungen`));
                     handledKeys.push('bausteinPruefungen');
@@ -325,9 +325,7 @@
                     sectionDiv.appendChild(renderMassnahmenPruefung(sectionData.massnahmenPruefungen, `${path}.massnahmenPruefungen`));
                     handledKeys.push('massnahmenPruefungen');
                 }
-                // --- END SPECIAL CASES ---
 
-                // Recursive call for any other nested objects
                 for (const subKey in sectionData) {
                     if (handledKeys.includes(subKey)) continue;
 
@@ -373,7 +371,21 @@
             }
 
             function renderTable(tableData, path) {
+                console.log(`[DEBUG] ==> Entering renderTable for path: ${path}`, 'TableData received:', JSON.parse(JSON.stringify(tableData || {})));
+
                 const tableContainer = document.createElement('div');
+
+                // Guard against missing tableData or headers
+                if (!tableData || !Array.isArray(tableData.headers)) {
+                    console.error(`[ERROR] renderTable stopped for path: ${path}. Reason: tableData is missing or 'headers' is not an array.`, tableData);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.textContent = `Error: Could not render table for ${path}. Data is malformed.`;
+                    errorDiv.style.color = 'red';
+                    errorDiv.style.border = '2px solid red';
+                    errorDiv.style.padding = '10px';
+                    return errorDiv;
+                }
+                
                 const table = document.createElement('table');
                 const thead = table.createTHead();
                 const tbody = table.createTBody();
@@ -385,6 +397,7 @@
                     th.textContent = headerText;
                     headerRow.appendChild(th);
                 });
+
                 if (path.includes("anhang.abweichungen")) {
                     const actionHeader = headerRow.insertCell();
                     actionHeader.className = 'action-cell';
@@ -427,8 +440,8 @@
                 return tableContainer;
             }
 
-            // Special renderer for Chapter 5.5.2
             function renderBausteinPruefung(pruefungen, path) {
+                console.log(`[DEBUG] ==> Entering renderBausteinPruefung for path: ${path}`, 'Data:', JSON.parse(JSON.stringify(pruefungen || [])));
                 const container = document.createElement('div');
                 if (Array.isArray(pruefungen)) {
                     pruefungen.forEach((pruefung, pIndex) => {
@@ -463,8 +476,9 @@
                 }
                 return container;
             }
-             // Special renderer for Chapter 5.6.2
+
             function renderMassnahmenPruefung(pruefungen, path) {
+                console.log(`[DEBUG] ==> Entering renderMassnahmenPruefung for path: ${path}`, 'Data:', JSON.parse(JSON.stringify(pruefungen || [])));
                 const container = document.createElement('div');
                 const table = document.createElement('table');
                 table.innerHTML = `<thead><tr><th>Maßnahme</th><th>Zielobjekt</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
@@ -485,7 +499,7 @@
             }
 
             function handleAddRow(button) {
-                syncUiToData(); // Save current UI state to data model first
+                syncUiToData();
                 const path = button.dataset.path;
                 const headers = JSON.parse(button.dataset.headers);
                 const newRow = {};
@@ -499,7 +513,7 @@
             }
 
             function handleDeleteRow(button) {
-                syncUiToData(); // Save current UI state to data model first
+                syncUiToData();
                 const path = button.dataset.path;
                 const rowIndex = parseInt(button.dataset.rowIndex, 10);
 
@@ -511,7 +525,7 @@
             }
 
             function handleExport() {
-                syncUiToData(); // Ensure all latest changes are in the data model
+                syncUiToData();
                 if (!reportData) {
                     alert("No data loaded to export.");
                     return;
