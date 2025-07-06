@@ -87,7 +87,8 @@ class AiClient:
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
-                    logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
+                    if self.config.is_test_mode:
+                        logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
                     response = await self.generative_model.generate_content_async(
                         contents=[prompt],
                         generation_config=gen_config,
@@ -103,7 +104,8 @@ class AiClient:
                         continue
                     
                     response_json = json.loads(response.text)
-                    logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
+                    if self.config.is_test_mode:
+                        logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
                 except api_core_exceptions.GoogleAPICallError as e:

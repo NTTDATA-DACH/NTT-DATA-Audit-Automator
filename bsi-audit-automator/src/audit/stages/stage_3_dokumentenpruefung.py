@@ -213,7 +213,8 @@ class Chapter3Runner:
     async def _process_summary_subchapter(self, task: Dict[str, Any], previous_findings: str) -> Dict[str, Any]:
         """Generates a summary/verdict for a subchapter."""
         key = task["key"]
-        logging.info(f"Starting summary generation for subchapter: {key}")
+        if self.config.is_test_mode:
+            logging.info(f"Starting summary generation for subchapter: {key}")
 
         prompt_template_str = self._load_asset_text(task["prompt_path"])
         schema = self._load_asset_json(task["schema_path"])

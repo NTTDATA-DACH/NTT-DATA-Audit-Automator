@@ -16,8 +16,8 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
-SIMILARITY_THRESHOLD = 0.95
-NEIGHBOR_POOL_SIZE = 15
+SIMILARITY_THRESHOLD = 1.1
+NEIGHBOR_POOL_SIZE = 50
 
 
 class RagClient:
@@ -128,7 +128,7 @@ class RagClient:
                 return "Error: Could not generate embeddings for queries."
 
             if self.config.is_test_mode:
-                logging.info(f"TEST_MODE_LOG: Generated {len(query_vectors)} query embedding vectors.")
+                logging.info(f"TEST_MODE_LOG: Generated {len(query_vectors)} query embedding vectors with dimensions: {[len(v) for v in query_vectors]}.")
 
             # 2. Build the filter if categories are provided
             filter_restriction = None
@@ -147,11 +147,9 @@ class RagClient:
                         escaped   = os.path.basename(fname)                           # keep just the file name
                         
                         escaped    = json.dumps(escaped, ensure_ascii=True)[1:-1]     # \u-escape non-ASCII chars
-                        logging.warning(f"ESCAPED 1: {escaped}")
                         #escaped    = escaped.replace(r" ", "_")
                         escaped    = escaped.replace(r"\\\\", "\\")
                         escaped   = f"source_documents/{escaped}"                    # add the folder prefix
-                        logging.warning(f"ESCAPED 2: {escaped}")
                         filenames_string += f"'{escaped}',"
                         
                     filenames_string += "]"
@@ -174,7 +172,7 @@ class RagClient:
                     deployed_index_id="bsi_deployed_index_kunde_x",
                     queries=query_vectors,
                     num_neighbors=NEIGHBOR_POOL_SIZE,
-                    filter=[filter_restriction] if filter_restriction else []
+                #    filter=[filter_restriction] if filter_restriction else []
                 )
                 if self.config.is_test_mode and response:
                     logging.info(f"TEST_MODE_LOG: find_neighbors API call successful. Received results for {len(response)} queries.")
