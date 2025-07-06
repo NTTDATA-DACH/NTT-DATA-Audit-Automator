@@ -66,7 +66,7 @@ async def main_async():
     elif args.generate_report:
         logging.info("Starting final report assembly...")
         generator = ReportGenerator(config, gcs_client)
-        generator.assemble_report()
+        await generator.assemble_report()
 
     else:  # These are the async audit tasks
         rag_dependent_tasks = args.run_stage or args.run_all_stages

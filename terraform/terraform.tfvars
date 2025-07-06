@@ -12,4 +12,4 @@ vpc_network_name = "bsi-audit-vpc"
 service_account_id = "bsi-automator-sa"
 
 # project NUMBER
-project_number ="60392965036"
+project_number ="547781257801"

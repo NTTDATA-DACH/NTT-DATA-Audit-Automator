@@ -149,6 +149,13 @@ resource "google_vertex_ai_index" "bsi_audit_index" {
       }
     }
   }
+
+  # --- FIX: PREVENT COSTLY INDEX REBUILDS ---
+  # Ignore changes to the metadata block after initial creation.
+  # This prevents Terraform from triggering a time-consuming index rebuild on every apply.
+  lifecycle {
+    ignore_changes = [metadata, description, display_name]
+  }
 }
 
 resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
@@ -157,7 +164,12 @@ resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
   region       = var.region
   # --- FIX FOR PROJECT NUMBER ERROR ---
   # To make the endpoint accessible from cloud shell, we enable the public endpoint.
-  public_endpoint_enabled = true
+  # public_endpoint_enabled = true
+
+  # Ignore cosmetic changes to prevent unwanted updates.
+  lifecycle {
+    ignore_changes = [description, display_name]
+  }
 
   # --- FIX: USE A PROVISIONER TO DEPLOY THE INDEX ---
   # This runs the gcloud command on the local machine after the endpoint is created.
