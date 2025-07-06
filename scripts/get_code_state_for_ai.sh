@@ -7,12 +7,31 @@
 # the context file manageable.
 # USAGE:
 # 1. Place this script in the root of your project directory.
-# 2. Make it executable: chmod +x create_context.sh
-# 3. Run it: ./create_context.sh
+# 2. Make it executable: chmod +x get_code_state_for_ai.sh
+# 3. Run it with an optional filter:
+#    ./get_code_state_for_ai.sh             # All tracked text files
+#    ./get_code_state_for_ai.sh --code      # Only Python files (*.py)
+#    ./get_code_state_for_ai.sh --json      # Only JSON files (*.json)
+#    ./get_code_state_for_ai.sh --md        # Only Markdown files (*.md, *.markdown)
+#    ./get_code_state_for_ai.sh --text      # Only text files (*.txt)
+#    ./get_code_state_for_ai.sh --no-python # All files except Python files
 #
 # The output will be a file named 'project_context.txt'.
 
 OUTPUT_FILE="project_context.txt"
+FILTER_MSG="🔍 Finding all tracked text files"
+FILE_PATTERN=""
+
+# Simple argument parsing for different file types
+case "$1" in
+  --code)      FILTER_MSG="🐍 Finding Python files"; FILE_PATTERN="-- '*.py'";;
+  --json)      FILTER_MSG="📄 Finding JSON files"; FILE_PATTERN="-- '*.json'";;
+  --md)        FILTER_MSG="✍️  Finding Markdown files"; FILE_PATTERN="-- '*.md' '*.markdown'";;
+  --text)      FILTER_MSG="🔤 Finding text files"; FILE_PATTERN="-- '*.txt'";;
+  --no-python) FILTER_MSG="🚫🐍 Finding all files except Python"; FILE_PATTERN="-- . ':(exclude)*.py'";;
+  "")          ;; # No filter, use default behavior
+  *)           echo "Error: Unknown option '$1'. See usage in script comments." >&2; exit 1;;
+esac
 
 # Check for required commands
 if ! command -v git &> /dev/null; then
@@ -28,16 +47,17 @@ fi
 # Clear the output file to start fresh
 > "$OUTPUT_FILE"
 
-echo "🔍 Finding text files and generating context..."
+echo "$FILTER_MSG and generating context..."
 
 # Use 'git ls-files' to get a list of all files tracked by git,
 # respecting .gitignore. Pipe this list into a loop.
 # --cached: All files tracked in the index.
 # --others: All untracked files.
 # --exclude-standard: Respects .gitignore, .git/info/exclude, and global gitignore.
-git ls-files --cached --others --exclude-standard | while read -r filename; do
+eval "git ls-files --cached --others --exclude-standard $FILE_PATTERN" | while read -r filename; do
     # Check if the file is likely a text file by checking its MIME type.
     # This is more reliable than checking the file extension.
+    # For --code mode, this is a safety check against binary files with a .py extension.
     if [[ "$(file -br --mime-type "$filename")" == text/* ]]; then
         # Append a header with the filename
         echo "==== ${filename} ====" >> "$OUTPUT_FILE"

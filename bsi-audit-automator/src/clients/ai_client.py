@@ -9,6 +9,8 @@ from google.cloud import aiplatform
 from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig
+from vertexai.language_models import TextEmbeddingInput
+from google.cloud.aiplatform_v1.types import IndexDatapoint
 
 from src.config import AppConfig
 
@@ -31,51 +33,37 @@ class AiClient:
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
     def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
-        """
-        Generates vector embeddings for a list of text chunks using efficient,
-        synchronous batching with a robust retry mechanism.
-        """
         if not texts:
             return True, []
 
         all_embeddings = []
-        logging.info(f"Generating embeddings for {len(texts)} texts in batches of {EMBEDDING_BATCH_SIZE}...")
-        
-        for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
-            batch_texts = texts[i:i + EMBEDDING_BATCH_SIZE]
-            batch_num = (i // EMBEDDING_BATCH_SIZE) + 1
-            
+        is_gemini = EMBEDDING_MODEL_NAME.startswith("gemini-embedding")
+        task_type = "RETRIEVAL_DOCUMENT"
+
+        for idx, text in enumerate(texts, start=1):
             for attempt in range(MAX_RETRIES):
                 try:
-                    if self.config.is_test_mode:
-                        logging.info(f"TEST_MODE_LOG: Calling get_embeddings API for batch {batch_num} ({len(batch_texts)} texts)...")
-                    
-                    # The actual API call with the list of texts in the batch
-                    response = self.embedding_model.get_embeddings(batch_texts)
-                    
-                    embeddings_from_batch = [embedding.values for embedding in response]
-                    all_embeddings.extend(embeddings_from_batch)
+                    if is_gemini:
+                        text_input = TextEmbeddingInput(text, task_type)
+                        response = self.embedding_model.get_embeddings([text_input])
+                    else:
+                        # gecko & Co. können mehrere Texte
+                        batch_start = (idx - 1) // EMBEDDING_BATCH_SIZE * EMBEDDING_BATCH_SIZE
+                        batch_end   = batch_start + EMBEDDING_BATCH_SIZE
+                        batch_texts = texts[batch_start:batch_end]
+                        response = self.embedding_model.get_embeddings(batch_texts)
 
-                    if self.config.is_test_mode:
-                        logging.info(f"TEST_MODE_LOG: get_embeddings API call successful for batch {batch_num}.")
-                    
-                    break  # Success, break retry loop for this batch
-
+                    all_embeddings.extend([emb.values for emb in response])
+                    break  # success
                 except api_core_exceptions.GoogleAPICallError as e:
-                    wait_time = 2 ** attempt
-                    logging.warning(f"Embedding batch {batch_num} failed with API Error (Code: {e.code}). Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
+                    time.sleep(2 ** attempt)
                 except Exception as e:
-                    wait_time = 2 ** attempt
-                    logging.error(f"Embedding batch {batch_num} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
-                    time.sleep(wait_time)
+                    time.sleep(2 ** attempt)
+                    if attempt == MAX_RETRIES - 1:
+                        return False, all_embeddings
 
-                if attempt == MAX_RETRIES - 1:
-                    logging.critical(f"Embedding for batch {batch_num} failed after all retries.")
-                    return False, all_embeddings
-        
-        logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
         return True, all_embeddings
+
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
         """

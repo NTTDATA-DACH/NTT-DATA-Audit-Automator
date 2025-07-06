@@ -27,7 +27,34 @@ The audit process and resulting report must be based on two key documents:
     *   **Generative Model:** `gemini-2.5-pro`
     *   **Embedding Model:** `gemini-embedding-001` (for `3072` dimension vectors, as configured in Terraform).
 *   **Robustness:** All API calls use an asynchronous, parallel-limited (`Semaphore`), and robust error-handling wrapper with an exponential backoff retry loop.
-*   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. The `AiClient` handles this by iterating and making individual, robust requests.
+*   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. The `AiClient` handles this by iterating and making individual, robust requests. Imperative Example:
+```python
+from google.cloud import aiplatform
+from vertexai.language_models import TextEmbeddingModel
+from google.api_core import exceptions as api_core_exceptions
+from vertexai.generative_models import GenerativeModel, GenerationConfig
+from vertexai.language_models import TextEmbeddingInput
+from google.cloud.aiplatform_v1.types import IndexDatapoint
+
+...
+
+response = self.embedding_model.get_embeddings([text_input])
+...
+filter_restriction = Namespace(                # ✅ helper dataclass
+    name="source_document",                    # the metadata key you indexed
+    allow_tokens=allow_list_filenames,         # the values to keep
+    # deny_tokens=[]                           # optional
+)
+...
+response = self.index_endpoint.find_neighbors(
+    deployed_index_id="bsi_deployed_index_kunde_x",
+    queries=query_vectors,
+    num_neighbors=NEIGHBOR_POOL_SIZE,
+    filter=[filter_restriction] if filter_restriction else []
+)
+
+```
+
 
 **4. AI Collaboration & Development Protocol**
 
