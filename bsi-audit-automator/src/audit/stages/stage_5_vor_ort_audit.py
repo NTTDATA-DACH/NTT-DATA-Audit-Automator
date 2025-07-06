@@ -38,8 +38,11 @@ class Chapter5Runner:
             "auswahlBausteine2Ueberwachungsaudit"
         ]
         for section in baustein_sections:
-            if section in chapter_4_data:
-                 selected_bausteine.extend(chapter_4_data[section].get("rows", []))
+            # CORRECTED: Look for the rows inside the nested 'table' object
+            # to match the normalized structure from the previous fix.
+            section_data = chapter_4_data.get(section, {})
+            if isinstance(section_data, dict) and "table" in section_data:
+                 selected_bausteine.extend(section_data.get("table", {}).get("rows", []))
         
         if not selected_bausteine:
             logging.warning("No Bausteine found in Chapter 4 results. Checklist for 5.5.2 will be empty.")

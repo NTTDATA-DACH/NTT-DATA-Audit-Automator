@@ -16,9 +16,9 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
-SIMILARITY_THRESHOLD = 1.1
-NEIGHBOR_POOL_SIZE = 2000
-
+SIMILARITY_THRESHOLD = 1.1 # A high threshold to include most relevant results.
+NEIGHBOR_POOL_SIZE = 20 # Drastically reduced from 2000 to prevent prompt overflow.
+MAX_CONTEXT_CHAR_LENGTH = 150000 # Safety net to cap the context size.
 
 class RagClient:
     """Client for Retrieval-Augmented Generation using Vertex AI Vector Search."""
