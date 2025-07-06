@@ -30,15 +30,21 @@ class Chapter5Runner:
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Deterministically generating control checklist for {name} (5.5.2)...")
 
-        # 1. Get selected Bausteine from Chapter 4 results, handling different audit types.
-        ch4_plan_key = next(iter(chapter_4_data)) if chapter_4_data else None
-        selected_bausteine = chapter_4_data.get(ch4_plan_key, {}).get("rows", []) if ch4_plan_key else []
+        # Combine bausteine from all possible sections of chapter 4
+        selected_bausteine = []
+        baustein_sections = [
+            "auswahlBausteineErstRezertifizierung", 
+            "auswahlBausteine1Ueberwachungsaudit", 
+            "auswahlBausteine2Ueberwachungsaudit"
+        ]
+        for section in baustein_sections:
+            if section in chapter_4_data:
+                 selected_bausteine.extend(chapter_4_data[section].get("rows", []))
         
         if not selected_bausteine:
             logging.warning("No Bausteine found in Chapter 4 results. Checklist for 5.5.2 will be empty.")
-            return {name: {"bausteinPruefungen": []}}
+            return {name: {"einzelergebnisse": {"bausteinPruefungen": []}}}
 
-        # 2. For each Baustein, get its controls and build the structured checklist.
         baustein_pruefungen_list = []
         for baustein in selected_bausteine:
             baustein_id_full = baustein.get("Baustein", "")
@@ -53,9 +59,9 @@ class Chapter5Runner:
                 anforderungen_list.append({
                     "nummer": control.get("id", "N/A"),
                     "anforderung": control.get("title", "N/A"),
-                    "bewertung": "",  # Placeholder for the auditor's manual input
-                    "auditfeststellung": "",  # Placeholder for the auditor's manual input
-                    "abweichungen": ""  # Placeholder for the auditor's manual input
+                    "bewertung": "",
+                    "auditfeststellung": "",
+                    "abweichungen": ""
                 })
             
             baustein_pruefungen_list.append({
@@ -64,24 +70,35 @@ class Chapter5Runner:
                 "anforderungen": anforderungen_list
             })
 
-        logging.info(f"Successfully generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit.")
-        return {name: {"bausteinPruefungen": baustein_pruefungen_list}}
+        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit.")
+        return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
-    def _generate_risikoanalyse_checklist(self) -> Dict[str, Any]:
+    def _generate_risikoanalyse_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generates a placeholder checklist for the risk analysis measures (5.6.2).
-        The actual measures would need to be extracted from A.5/A.6 in a future feature.
+        Generates the checklist for risk analysis measures (5.6.2) based on
+        the measures selected in Chapter 4.1.5.
         """
-        name = "einzelergebnisseDerRisikoanalyse"
-        logging.info(f"Generating placeholder checklist for {name} (5.6.2)...")
-        # For now, this returns a placeholder structure.
-        # Future implementation would use RAG to read A.5/A.6 and populate this.
-        return {
-            name: {
-                "massnahmenPruefungen": []
-            }
-        }
+        name = "risikoanalyseA5"
+        logging.info(f"Deterministically generating checklist for {name} (5.6.2)...")
+        
+        selected_measures = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("table", {}).get("rows", [])
+        
+        if not selected_measures:
+            logging.warning("No measures from risk analysis found in Chapter 4 results. Checklist for 5.6.2 will be empty.")
+            return {name: {"einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": []}}}
 
+        massnahmen_pruefungen_list = []
+        for measure in selected_measures:
+            massnahmen_pruefungen_list.append({
+                "massnahme": measure.get("Maßnahme", "N/A"),
+                "zielobjekt": measure.get("Zielobjekt", "N/A"),
+                "bewertung": "",
+                "auditfeststellung": "",
+                "abweichungen": ""
+            })
+            
+        logging.info(f"Generated checklist with {len(massnahmen_pruefungen_list)} risk analysis measures.")
+        return {name: {"einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": massnahmen_pruefungen_list}}}
 
     async def run(self) -> dict:
         """
@@ -89,7 +106,6 @@ class Chapter5Runner:
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         
-        # This stage depends on the audit plan from Chapter 4.
         try:
             ch4_results_path = f"{self.config.output_prefix}results/Chapter-4.json"
             chapter_4_data = self.gcs_client.read_json(ch4_results_path)
@@ -98,13 +114,9 @@ class Chapter5Runner:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
         
-        # Generate the checklist for 5.5.2 (deterministic)
         checklist_result = self._generate_control_checklist(chapter_4_data)
+        risiko_result = self._generate_risikoanalyse_checklist(chapter_4_data)
         
-        # Generate the placeholder for 5.6.2 (deterministic placeholder)
-        risiko_result = self._generate_risikoanalyse_checklist()
-        
-        # Merge results
         final_result = {**checklist_result, **risiko_result}
             
         logging.info(f"Successfully prepared data for stage {self.STAGE_NAME}")

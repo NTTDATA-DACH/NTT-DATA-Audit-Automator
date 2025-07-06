@@ -17,7 +17,6 @@ class Chapter4Runner:
     def __init__(self, config: AppConfig, ai_client: AiClient):
         self.config = config
         self.ai_client = ai_client
-        # Definitions are now loaded dynamically based on audit type
         self.subchapter_definitions = self._load_subchapter_definitions()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
@@ -31,67 +30,80 @@ class Chapter4Runner:
 
     def _load_subchapter_definitions(self) -> Dict[str, Any]:
         """
-        Loads definitions for subchapters based on the configured audit type.
-        This implements conditional logic for different audit types.
+        Loads definitions for all Chapter 4 subchapters. The logic for which
+        Baustein selection to run is now based on the AUDIT_TYPE.
         """
         logging.info(f"Loading Chapter 4 definitions for audit type: {self.config.audit_type}")
         
+        definitions = {
+            # Placeholder for 4.1.4, currently deterministic
+            "auswahlStandorte": {
+                "key": "4.1.4",
+                "type": "deterministic",
+                "headers": ["Standort", "Erst- bzw. Rezertifizierung", "1. Überwachungsaudit", "2. Überwachungsaudit", "Begründung für die Auswahl"],
+                "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
+            },
+            # Placeholder for 4.1.5, currently deterministic
+            "auswahlMassnahmenAusRisikoanalyse": {
+                "key": "4.1.5",
+                "type": "deterministic",
+                "headers": ["Maßnahme", "Risikoanalyse", "Zielobjekt", "Begründung zur Auswahl"],
+                "rows": []
+            }
+        }
+
         if self.config.audit_type == "Zertifizierungsaudit":
-            return {
-                "auswahlBausteineErstRezertifizierung": {
-                    "key": "4.1.1",
-                    "prompt_path": "assets/prompts/stage_4_1_1_auswahl_bausteine_erst.txt",
-                    "schema_path": "assets/schemas/stage_4_1_1_auswahl_bausteine_erst_schema.json"
-                }
+            definitions["auswahlBausteineErstRezertifizierung"] = {
+                "key": "4.1.1",
+                "type": "ai_driven",
+                "prompt_path": "assets/prompts/stage_4_1_1_auswahl_bausteine_erst.txt",
+                "schema_path": "assets/schemas/stage_4_1_1_auswahl_bausteine_erst_schema.json"
             }
         elif self.config.audit_type == "Überwachungsaudit":
-            return {
-                "auswahlBausteineUeberwachung": {
-                    "key": "4.1.2",
-                    "prompt_path": "assets/prompts/stage_4_1_2_auswahl_bausteine_ueberwachung.txt",
-                    "schema_path": "assets/schemas/stage_4_1_2_auswahl_bausteine_ueberwachung_schema.json"
-                }
+            # In a real scenario, we might have different logic for 1st and 2nd surveillance audit
+            definitions["auswahlBausteine1Ueberwachungsaudit"] = {
+                "key": "4.1.2",
+                "type": "ai_driven",
+                "prompt_path": "assets/prompts/stage_4_1_2_auswahl_bausteine_ueberwachung.txt",
+                "schema_path": "assets/schemas/stage_4_1_2_auswahl_bausteine_ueberwachung_schema.json"
             }
         else:
-            logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Chapter 4 definitions loaded.")
-            return {}
+            logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
+            
+        return definitions
 
     async def _process_single_subchapter(self, name: str, definition: dict) -> Dict[str, Any]:
-        """Generates planning content for a single subchapter."""
+        """Generates planning content for a single subchapter, supporting AI and deterministic modes."""
         logging.info(f"Starting planning for subchapter: {definition['key']} ({name})")
         
+        if definition.get("type") == "deterministic":
+            logging.info(f"Processing '{name}' deterministically.")
+            # For deterministic sections, just return the predefined structure.
+            return {name: {"table": {"headers": definition["headers"], "rows": definition["rows"]}}}
+
+        # Default to AI-driven
         prompt_template = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
         
-        # BUGFIX: Removed format call for customer_id, as it's no longer a config parameter.
-        # The prompts have been updated to not require it.
-        prompt = prompt_template
-
         try:
-            generated_data = await self.ai_client.generate_json_response(prompt, schema)
+            generated_data = await self.ai_client.generate_json_response(prompt_template, schema)
             logging.info(f"Successfully generated plan for subchapter {definition['key']}")
             return {name: generated_data}
         except Exception as e:
             logging.error(f"Failed to generate plan for subchapter {definition['key']}: {e}", exc_info=True)
-            return {name: None}
+            return {name: {"rows": []}} # Return empty structure on failure
 
     async def run(self) -> dict:
         """
         Executes the planning logic for all of Chapter 4 in parallel.
-        
-        Returns:
-            A dictionary aggregating the results of all subchapter plans.
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
 
         if not self.subchapter_definitions:
-            logging.warning(f"No subchapter definitions found for audit type '{self.config.audit_type}'. Skipping Chapter 4.")
+            logging.warning(f"No subchapter definitions found. Skipping Chapter 4.")
             return {}
 
-        tasks = []
-        for name, definition in self.subchapter_definitions.items():
-            tasks.append(self._process_single_subchapter(name, definition))
-        
+        tasks = [self._process_single_subchapter(name, definition) for name, definition in self.subchapter_definitions.items()]
         results_list = await asyncio.gather(*tasks)
 
         aggregated_results = {}

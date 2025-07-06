@@ -38,9 +38,12 @@ class ReportGenerator:
         keys = path.split('.')
         current_level = report
         for i, key in enumerate(keys[:-1]):
-            if not isinstance(current_level, dict) or key not in current_level:
-                logging.warning(f"Template path '{path}' missing part '{key}'. Cannot set value.")
+            if not isinstance(current_level, dict):
+                logging.warning(f"Path part '{key}' is not a dict in path '{path}'. Cannot set value.")
                 return
+            if key not in current_level:
+                # Create missing dictionary keys if they don't exist
+                current_level[key] = {}
             current_level = current_level[key]
         
         if isinstance(current_level, dict):
@@ -59,9 +62,11 @@ class ReportGenerator:
         keys = path.split('.')
         current_level = report
         for key in keys:
-            if not isinstance(current_level, dict) or key not in current_level:
-                logging.warning(f"Template path '{path}' missing part '{key}'. Cannot ensure list path.")
+            if not isinstance(current_level, dict):
+                logging.warning(f"Path part is not a dict in path '{path}' at key '{key}'. Cannot ensure list path.")
                 return []
+            if key not in current_level:
+                current_level[key] = [] if key == keys[-1] else {}
             current_level = current_level[key]
 
         if not isinstance(current_level, list):
@@ -87,8 +92,6 @@ class ReportGenerator:
             with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
                 report = json.load(f)
             
-            # Pre-populate with basic info
-            self._set_value_by_path(report, 'bsiAuditReport.titlePage.auditedInstitution', "Audited Institution")
             self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', self.config.audit_type)
             
             await self.gcs_client.upload_from_string_async(
@@ -100,26 +103,16 @@ class ReportGenerator:
 
     def _populate_chapter_1(self, report: dict, stage_data: dict) -> None:
         """Populates the 'Allgemeines' (Chapter 1) of the report defensively."""
-        geltungsbereich_data = stage_data.get('geltungsbereichDerZertifizierung', {})
-        
-        # Populate Geltungsbereich (1.2)
-        final_text = geltungsbereich_data.get('description', '')
-        if isinstance(geltungsbereich_data.get('finding'), dict):
-            finding = geltungsbereich_data['finding']
-            if finding.get('category') != 'OK':
-                final_text += f"\n\nFeststellung: [{finding.get('category')}] {finding.get('description')}"
-        
-        geltungsbereich_list = self._ensure_list_path_exists(report, 'bsiAuditReport.allgemeines.geltungsbereichDerZertifizierung.content')
-        if geltungsbereich_list:
-            geltungsbereich_list[0]['text'] = final_text
+        # Populate 1.4 Informationsverbund
+        informationsverbund_data = stage_data.get('informationsverbund', {})
+        if informationsverbund_data:
+            path_prefix = 'bsiAuditReport.allgemeines.informationsverbund.content'
+            content_list = self._ensure_list_path_exists(report, path_prefix, min_length=2)
+            if content_list:
+                content_list[0]['text'] = informationsverbund_data.get('kurzbezeichnung', '')
+                content_list[1]['text'] = informationsverbund_data.get('kurzbeschreibung', '')
 
-        # Populate Informationsverbund (1.4)
-        info_list = self._ensure_list_path_exists(report, 'bsiAuditReport.allgemeines.informationsverbund.content', min_length=2)
-        if info_list:
-            info_list[0]['text'] = geltungsbereich_data.get('kurzbezeichnung', '')
-            info_list[1]['text'] = geltungsbereich_data.get('kurzbeschreibung', '')
-
-        # Populate Audittyp (1.5)
+        # Populate 1.5 Audittyp
         audittyp_content = stage_data.get('audittyp', {}).get('content', self.config.audit_type)
         self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', audittyp_content)
 
@@ -140,40 +133,37 @@ class ReportGenerator:
         if ag_table_rows is None or as_table_rows is None or e_table_rows is None: return
 
         ag_table_rows.clear(); as_table_rows.clear(); e_table_rows.clear()
-        ag_counter, as_counter, e_counter = 0, 0, 0
-
+        
         for finding in all_findings:
             category = finding.get('category')
+            row_data = {
+                "Nr.": finding.get('id', 'N/A'),
+                "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
+            }
             if category == 'AG':
-                ag_counter += 1
-                ag_table_rows.append({
-                    "Nr.": f"AG-{ag_counter}", "Beschreibung der Abweichung": finding.get('description', 'N/A'),
-                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "30 Tage nach Audit", "Status": "Offen"
-                })
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "30 Tage nach Audit"
+                row_data["Status"] = "Offen"
+                ag_table_rows.append(row_data)
             elif category == 'AS':
-                as_counter += 1
-                as_table_rows.append({
-                    "Nr.": f"AS-{as_counter}", "Beschreibung der Abweichung": finding.get('description', 'N/A'),
-                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "30 Tage nach Audit", "Status": "Offen"
-                })
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "30 Tage nach Audit"
+                row_data["Status"] = "Offen"
+                as_table_rows.append(row_data)
             elif category == 'E':
-                e_counter += 1
-                e_table_rows.append({
-                    "Nr.": f"E-{e_counter}", "Beschreibung der Empfehlung": finding.get('description', 'N/A'),
-                    "Quelle (Kapitel)": finding.get('source_chapter', 'N/A'), "Behebungsfrist": "N/A", "Status": "Zur Umsetzung empfohlen"
-                })
+                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "N/A"
+                row_data["Status"] = "Zur Umsetzung empfohlen"
+                e_table_rows.append(row_data)
         
         logging.info(f"Populated Chapter 7.2 with {len(all_findings)} total findings.")
 
     async def assemble_report(self) -> None:
         """
-        Main method to assemble the final report. It loads all stage results
-        and collected findings, populates a master template, and saves the final
-        output to GCS.
+        Main method to assemble the final report.
         """
         report = await self._initialize_report_on_gcs()
 
-        # Read all stage results concurrently for better performance
         stage_read_tasks = [self.gcs_client.read_json_async(f"{self.config.output_prefix}results/{s}.json") for s in self.STAGES_TO_AGGREGATE]
         stage_results = await asyncio.gather(*stage_read_tasks, return_exceptions=True)
         
@@ -181,7 +171,7 @@ class ReportGenerator:
         for i, result in enumerate(stage_results):
             stage_name = self.STAGES_TO_AGGREGATE[i]
             if isinstance(result, Exception):
-                logging.warning(f"Result for stage '{stage_name}' not found or failed to load. Skipping population. Error: {result}")
+                logging.warning(f"Result for stage '{stage_name}' not found or failed to load. Skipping. Error: {result}")
             else:
                 stage_data_map[stage_name] = result
 
@@ -190,13 +180,12 @@ class ReportGenerator:
         
         self._populate_chapter_7_findings(report)
 
-        # Validate the final report against the schema before saving
         try:
             validate(instance=report, schema=self.report_schema)
             logging.info("Final report successfully validated against the master schema.")
         except ValidationError as e:
             logging.error(f"CRITICAL: Final report failed schema validation. Report will not be saved. Error: {e.message}")
-            return # Do not save a corrupted report
+            return
 
         final_report_path = f"{self.config.output_prefix}final_audit_report.json"
         await self.gcs_client.upload_from_string_async(
@@ -205,7 +194,6 @@ class ReportGenerator:
         )
         logging.info(f"Final report assembled and saved to: gs://{self.config.bucket_name}/{final_report_path}")
         
-        # Optimized write: copy the final report to the working directory instead of a second upload
         await self.gcs_client.copy_blob_async(
             source_blob_name=final_report_path,
             destination_blob_name=self.gcs_report_path
@@ -216,7 +204,6 @@ class ReportGenerator:
         """Populates Chapter 3 (Dokumentenprüfung) content into the report."""
         base_path = "bsiAuditReport.dokumentenpruefung"
         key_to_path_map = {
-            # ... (Full map as defined in previous correct implementation)
             "aktualitaetDerReferenzdokumente": f"{base_path}.aktualitaetDerReferenzdokumente",
             "sicherheitsleitlinieUndRichtlinienInA0": f"{base_path}.sicherheitsleitlinieUndRichtlinienInA0",
             "definitionDesInformationsverbundes": f"{base_path}.strukturanalyseA1.definitionDesInformationsverbundes",
@@ -242,10 +229,8 @@ class ReportGenerator:
             "detailsZumItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.detailsZumItGrundschutzCheck",
             "benutzerdefinierteBausteine": f"{base_path}.itGrundschutzCheckA4.benutzerdefinierteBausteine",
             "ergebnisItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.ergebnisItGrundschutzCheck",
-            "risikoanalyseA5": f"{base_path}.risikoanalyseA5.risikoanalyse",
-            "ergebnisRisikoanalyse": f"{base_path}.risikoanalyseA5.ergebnisRisikoanalyse",
-            "realisierungsplanA6": f"{base_path}.realisierungsplanA6.realisierungsplan",
-            "ergebnisRealisierungsplan": f"{base_path}.realisierungsplanA6.ergebnisRealisierungsplan",
+            "risikoanalyse": f"{base_path}.risikoanalyseA5.risikoanalyse",
+            "realisierungsplan": f"{base_path}.realisierungsplanA6.realisierungsplan",
             "ergebnisDerDokumentenpruefung": f"{base_path}.ergebnisDerDokumentenpruefung",
         }
 
@@ -255,7 +240,6 @@ class ReportGenerator:
             target_path = key_to_path_map.get(subchapter_key)
             if not target_path: continue
 
-            # Populate finding text
             if 'finding' in result and isinstance(result.get('finding'), dict):
                 finding = result['finding']
                 finding_text = f"[{finding.get('category')}] {finding.get('description')}"
@@ -265,7 +249,6 @@ class ReportGenerator:
                         if item.get("type") == "finding":
                             item["findingText"] = finding_text; break
             
-            # Populate answers for questions or text for prose
             if "answers" in result:
                 answers = result.get("answers", [])
                 content_list = self._ensure_list_path_exists(report, f"{target_path}.content", len(answers))
@@ -281,33 +264,38 @@ class ReportGenerator:
                     for item in content_list:
                         if item.get("type") == "prose": item["text"] = result.get("votum", ""); break
             
-            # Populate table data
             if "table" in result and isinstance(result.get("table"), dict):
                 self._set_value_by_path(report, f"{target_path}.table.rows", result['table'].get('rows', []))
 
     def _populate_chapter_4(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 4 (Prüfplan) content into the report."""
-        ch4_plan_key = next(iter(stage_data)) if stage_data else None
-        if not ch4_plan_key: return
+        base_path = "bsiAuditReport.erstellungEinesPruefplans.auditplanung"
+        key_to_path_map = {
+            "auswahlBausteineErstRezertifizierung": f"{base_path}.auswahlBausteineErstRezertifizierung.rows",
+            "auswahlBausteine1Ueberwachungsaudit": f"{base_path}.auswahlBausteine1Ueberwachungsaudit.rows",
+            "auswahlBausteine2Ueberwachungsaudit": f"{base_path}.auswahlBausteine2Ueberwachungsaudit.rows",
+            "auswahlStandorte": f"{base_path}.auswahlStandorte.table.rows",
+            "auswahlMassnahmenAusRisikoanalyse": f"{base_path}.auswahlMassnahmenAusRisikoanalyse.table.rows"
+        }
+        for key, data in stage_data.items():
+            target_path = key_to_path_map.get(key)
+            if not target_path: continue
+            
+            rows = data.get('rows', []) if 'rows' in data else data.get('table', {}).get('rows', [])
+            self._set_value_by_path(report, target_path, rows)
 
-        result = stage_data.get(ch4_plan_key, {})
-        target_key_map = {"auswahlBausteineUeberwachung": "auswahlBausteineErstRezertifizierung"}
-        target_key = target_key_map.get(ch4_plan_key, ch4_plan_key)
-        
-        path = f"bsiAuditReport.erstellungEinesPruefplans.auditplanung.{target_key}.rows"
-        self._set_value_by_path(report, path, result.get('rows', []))
 
     def _populate_chapter_5(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 5 (Vor-Ort-Audit) content into the report."""
         if "verifikationDesITGrundschutzChecks" in stage_data:
             data = stage_data["verifikationDesITGrundschutzChecks"]
             path = "bsiAuditReport.vorOrtAudit.verifikationDesITGrundschutzChecks.einzelergebnisse.bausteinPruefungen"
-            self._set_value_by_path(report, path, data.get("bausteinPruefungen", []))
+            self._set_value_by_path(report, path, data.get("einzelergebnisse", {}).get("bausteinPruefungen", []))
 
-        if "einzelergebnisseDerRisikoanalyse" in stage_data:
-            data = stage_data["einzelergebnisseDerRisikoanalyse"]
+        if "risikoanalyseA5" in stage_data:
+            data = stage_data["risikoanalyseA5"]
             path = "bsiAuditReport.vorOrtAudit.risikoanalyseA5.einzelergebnisseDerRisikoanalyse.massnahmenPruefungen"
-            self._set_value_by_path(report, path, data.get("massnahmenPruefungen", []))
+            self._set_value_by_path(report, path, data.get("einzelergebnisseDerRisikoanalyse", {}).get("massnahmenPruefungen", []))
 
     def _populate_chapter_7(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 7 (Anhang) content into the report."""
