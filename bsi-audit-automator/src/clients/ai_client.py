@@ -80,7 +80,7 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=8192,
+            max_output_tokens=65536,
             temperature=0.2,
         )
 

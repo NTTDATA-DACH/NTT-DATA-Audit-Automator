@@ -17,7 +17,7 @@ from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
 SIMILARITY_THRESHOLD = 1.1
-NEIGHBOR_POOL_SIZE = 50
+NEIGHBOR_POOL_SIZE = 2000
 
 
 class RagClient:
