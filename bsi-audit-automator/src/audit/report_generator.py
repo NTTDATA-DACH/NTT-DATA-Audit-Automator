@@ -273,28 +273,21 @@ class ReportGenerator:
     def _populate_chapter_4(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 4 (Prüfplan) content into the report."""
         base_path = "bsiAuditReport.erstellungEinesPruefplans.auditplanung"
+        # This map now consistently points to the 'rows' property inside a 'table' object.
         key_to_path_map = {
-            "auswahlBausteineErstRezertifizierung": f"{base_path}.auswahlBausteineErstRezertifizierung.rows",
-            "auswahlBausteine1Ueberwachungsaudit": f"{base_path}.auswahlBausteine1Ueberwachungsaudit.rows",
-            "auswahlBausteine2Ueberwachungsaudit": f"{base_path}.auswahlBausteine2Ueberwachungsaudit.rows",
+            "auswahlBausteineErstRezertifizierung": f"{base_path}.auswahlBausteineErstRezertifizierung.table.rows",
+            "auswahlBausteine1Ueberwachungsaudit": f"{base_path}.auswahlBausteine1Ueberwachungsaudit.table.rows",
+            "auswahlBausteine2Ueberwachungsaudit": f"{base_path}.auswahlBausteine2Ueberwachungsaudit.table.rows",
             "auswahlStandorte": f"{base_path}.auswahlStandorte.table.rows",
             "auswahlMassnahmenAusRisikoanalyse": f"{base_path}.auswahlMassnahmenAusRisikoanalyse.table.rows"
         }
         for key, data in stage_data.items():
             target_path = key_to_path_map.get(key)
             if not target_path: continue
-
-            # Robustly get the 'rows' array, preventing a 'null' value which causes JS errors.
-            # AI-driven sections return a top-level 'rows' key.
-            # Deterministic sections return a nested 'table.rows'.
-            rows_data = data.get('rows')
-            if rows_data is None:
-                rows_data = data.get('table', {}).get('rows')
-
-            # Ensure the final value is an array, not None.
-            final_rows = rows_data if rows_data is not None else []
-
-            self._set_value_by_path(report, target_path, final_rows)
+            
+            # The generated data now always has a consistent structure: { "table": { "rows": [...] } }
+            rows_data = data.get('table', {}).get('rows', [])
+            self._set_value_by_path(report, target_path, rows_data)
 
 
     def _populate_chapter_5(self, report: dict, stage_data: dict) -> None:

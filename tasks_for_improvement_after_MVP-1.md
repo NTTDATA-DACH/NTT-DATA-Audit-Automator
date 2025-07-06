@@ -68,3 +68,8 @@ This document tracks completed enhancements and the prioritized backlog of featu
 *   **[ ] TODO 11: Improve Prompts and Schemas.**
     *   **Directory:** `assets/`
     *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
+
+*   **[ ] TODO 12: use filter for documents.**
+    *   **Directory:** `src/clients/rag_client.py`
+    *   **Action:** The code is there, but buggy, ehen filtered, no results whatsoever
+

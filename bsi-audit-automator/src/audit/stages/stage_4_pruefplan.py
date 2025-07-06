@@ -40,15 +40,17 @@ class Chapter4Runner:
             "auswahlStandorte": {
                 "key": "4.1.4",
                 "type": "deterministic",
-                "headers": ["Standort", "Erst- bzw. Rezertifizierung", "1. Überwachungsaudit", "2. Überwachungsaudit", "Begründung für die Auswahl"],
-                "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
+                "table": {
+                    "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
+                }
             },
             # Placeholder for 4.1.5, currently deterministic
             "auswahlMassnahmenAusRisikoanalyse": {
                 "key": "4.1.5",
                 "type": "deterministic",
-                "headers": ["Maßnahme", "Risikoanalyse", "Zielobjekt", "Begründung zur Auswahl"],
-                "rows": []
+                "table": {
+                    "rows": []
+                }
             }
         }
 
@@ -78,20 +80,20 @@ class Chapter4Runner:
         
         if definition.get("type") == "deterministic":
             logging.info(f"Processing '{name}' deterministically.")
-            # For deterministic sections, just return the predefined structure.
-            return {name: {"table": {"headers": definition["headers"], "rows": definition["rows"]}}}
+            # For deterministic sections, just return the predefined table rows.
+            return {name: {"table": definition["table"]}}
 
         # Default to AI-driven
         prompt_template = self._load_asset_text(definition["prompt_path"])
         schema = self._load_asset_json(definition["schema_path"])
         
         try:
-            generated_data = await self.ai_client.generate_json_response(prompt_template, schema)
+            generated_rows = await self.ai_client.generate_json_response(prompt_template, schema)
             logging.info(f"Successfully generated plan for subchapter {definition['key']}")
-            return {name: generated_data}
+            return {name: {"table": generated_rows}}
         except Exception as e:
             logging.error(f"Failed to generate plan for subchapter {definition['key']}: {e}", exc_info=True)
-            return {name: {"rows": []}} # Return empty structure on failure
+            return {name: {"table": {"rows": []}}} # Return empty structure on failure
 
     async def run(self) -> dict:
         """
