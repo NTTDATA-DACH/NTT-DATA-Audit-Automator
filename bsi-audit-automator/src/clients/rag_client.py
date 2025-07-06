@@ -112,14 +112,14 @@ class RagClient:
             logging.error(f"Failed to build chunk lookup map from batch files: {e}", exc_info=True)
             return {}
 
-    async def get_context_for_query(self, query: str, source_categories: List[str] = None) -> str:
+    def get_context_for_query(self, query: str, source_categories: List[str] = None) -> str:
         """
         Finds relevant document chunks for a query, with enhanced, specific error handling
         around the Vector Search API call.
         """
         try:
-            # 1. Embed the query
-            success, embeddings = await self.ai_client.get_embeddings([query])
+            # 1. Embed the query (now a synchronous call)
+            success, embeddings = self.ai_client.get_embeddings([query])
             if not success or not embeddings:
                 logging.error("Failed to generate embedding for the RAG query.")
                 return "Error: Could not generate embedding for query."
@@ -127,6 +127,7 @@ class RagClient:
             query_vector = embeddings[0]
             if self.config.is_test_mode:
                 logging.info(f"TEST_MODE_LOG: Generated query embedding vector with {len(query_vector)} dimensions.")
+
 
             # 2. Build the filter if categories are provided
             filter_restriction = None

@@ -2,6 +2,7 @@
 import logging
 import json
 import asyncio
+import time
 from typing import List, Dict, Any, Tuple
 
 from google.cloud import aiplatform
@@ -11,19 +12,15 @@ from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from src.config import AppConfig
 
-# Constants for the AI client, aligned with the project brief.
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
 EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 MAX_RETRIES = 5
-# The Gemini embedding model has a batch size limit.
-EMBEDDING_BATCH_SIZE = 250
 
 
 class AiClient:
     """A client for all Vertex AI model interactions, using the aiplatform SDK."""
 
     def __init__(self, config: AppConfig):
-        """Initializes the Vertex AI client and required models."""
         self.config = config
         aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
         self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
@@ -31,45 +28,44 @@ class AiClient:
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
-    async def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
+    def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
         """
-        Generates vector embeddings for a list of text chunks using efficient batching.
-        Includes a robust async retry mechanism.
+        Generates vector embeddings for a list of text chunks.
+        Reverted to a synchronous, one-by-one loop for stability.
         """
         if not texts:
             return True, []
 
         all_embeddings = []
-        async with self.semaphore:
-            for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
-                batch = texts[i:i + EMBEDDING_BATCH_SIZE]
-                for attempt in range(MAX_RETRIES):
-                    try:
-                        if self.config.is_test_mode:
-                            logging.info(f"TEST_MODE_LOG: Calling get_embeddings API for batch {i//EMBEDDING_BATCH_SIZE + 1} ({len(batch)} texts)...")
-                        
-                        response = await asyncio.to_thread(self.embedding_model.get_embeddings, batch)
-                        embeddings_from_batch = [embedding.values for embedding in response]
-                        all_embeddings.extend(embeddings_from_batch)
-                        
-                        if self.config.is_test_mode:
-                             logging.info(f"TEST_MODE_LOG: get_embeddings API call successful for batch {i//EMBEDDING_BATCH_SIZE + 1}.")
-                        break  # Success, exit retry loop for this batch
-                    
-                    except api_core_exceptions.GoogleAPICallError as e:
-                        wait_time = 2 ** attempt
-                        logging.warning(f"Embedding batch {i//EMBEDDING_BATCH_SIZE + 1} failed with API Error (Code: {e.code}). Retrying in {wait_time}s...")
-                        await asyncio.sleep(wait_time)
-                    except Exception as e:
-                        wait_time = 2 ** attempt
-                        logging.error(f"Embedding batch {i//EMBEDDING_BATCH_SIZE + 1} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
-                        await asyncio.sleep(wait_time)
+        logging.info(f"Generating embeddings for {len(texts)} chunks...")
+        
+        for i, text in enumerate(texts):
+            if not text:
+                logging.warning(f"Skipping empty text at index {i}.")
+                # Add a placeholder or handle as appropriate for your logic
+                continue
+                
+            for attempt in range(MAX_RETRIES):
+                try:
+                    response = self.embedding_model.get_embeddings([text])
+                    all_embeddings.append(response[0].values)
+                    # Client-side rate limiting to avoid overwhelming the API.
+                    time.sleep(0.05)
+                    break
+                except api_core_exceptions.GoogleAPICallError as e:
+                    wait_time = 2 ** attempt
+                    logging.warning(f"Embedding chunk {i+1} failed with API Error (Code: {e.code}). Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    wait_time = 2 ** attempt
+                    logging.error(f"Embedding chunk {i+1} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
+                    time.sleep(wait_time)
 
-                    if attempt == MAX_RETRIES - 1:
-                        logging.critical(f"Embedding for batch starting at index {i} failed after all retries.")
-                        return False, all_embeddings
-
-        logging.info(f"Successfully generated {len(all_embeddings)} embeddings for {len(texts)} texts.")
+                if attempt == MAX_RETRIES - 1:
+                    logging.critical(f"Embedding for chunk {i+1} failed after all retries.")
+                    return False, all_embeddings
+        
+        logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
         return True, all_embeddings
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
