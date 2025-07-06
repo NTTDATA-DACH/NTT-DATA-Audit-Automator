@@ -172,6 +172,9 @@ class ReportGenerator:
             stage_name = self.STAGES_TO_AGGREGATE[i]
             if isinstance(result, Exception):
                 logging.warning(f"Result for stage '{stage_name}' not found or failed to load. Skipping. Error: {result}")
+            # Add a check to ensure stage_data is a dictionary before processing.
+            elif not result or not isinstance(result, dict):
+                logging.warning(f"Result for stage '{stage_name}' is empty or not a dictionary. Skipping.")
             else:
                 stage_data_map[stage_name] = result
 
@@ -280,9 +283,18 @@ class ReportGenerator:
         for key, data in stage_data.items():
             target_path = key_to_path_map.get(key)
             if not target_path: continue
-            
-            rows = data.get('rows', []) if 'rows' in data else data.get('table', {}).get('rows', [])
-            self._set_value_by_path(report, target_path, rows)
+
+            # Robustly get the 'rows' array, preventing a 'null' value which causes JS errors.
+            # AI-driven sections return a top-level 'rows' key.
+            # Deterministic sections return a nested 'table.rows'.
+            rows_data = data.get('rows')
+            if rows_data is None:
+                rows_data = data.get('table', {}).get('rows')
+
+            # Ensure the final value is an array, not None.
+            final_rows = rows_data if rows_data is not None else []
+
+            self._set_value_by_path(report, target_path, final_rows)
 
 
     def _populate_chapter_5(self, report: dict, stage_data: dict) -> None:
