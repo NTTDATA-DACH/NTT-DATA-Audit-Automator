@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Informationsverbund Description",
+    "description": "Schema for the AI's analysis of the Informationsverbund scope (Chapter 1.4).",
+    "type": "object",
+    "properties": {
+      "kurzbezeichnung": {
+        "description": "The short, official name of the Informationsverbund.",
+        "type": "string"
+      },
+      "kurzbeschreibung": {
+        "description": "A concise summary of the audit scope (Geltungsbereich), including business processes, locations, and applications.",
+        "type": "string"
+      },
+      "finding": {
+        "description": "A structured finding regarding the quality and clarity of the scope definition.",
+        "type": "object",
+        "properties": {
+          "category": {
+            "description": "The category of the finding: 'OK' if no issue, 'AG' (Minor Deviation), 'AS' (Major Deviation), or 'E' (Recommendation).",
+            "type": "string",
+            "enum": ["OK", "AG", "AS", "E"]
+          },
+          "description": {
+            "description": "A detailed, evidence-based description of the finding. If category is 'OK', this should be a brief confirmation.",
+            "type": "string"
+          }
+        },
+        "required": ["category", "description"]
+      }
+    },
+    "required": ["kurzbezeichnung", "kurzbeschreibung", "finding"]
+  }
