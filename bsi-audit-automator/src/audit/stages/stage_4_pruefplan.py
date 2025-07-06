@@ -44,13 +44,12 @@ class Chapter4Runner:
                     "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
                 }
             },
-            # Placeholder for 4.1.5, currently deterministic
+            # This is now a fully functional AI-driven task.
             "auswahlMassnahmenAusRisikoanalyse": {
                 "key": "4.1.5",
-                "type": "deterministic",
-                "table": {
-                    "rows": []
-                }
+                "type": "ai_driven",
+                "prompt_path": "assets/prompts/stage_4_1_5_auswahl_massnahmen_risiko.txt",
+                "schema_path": "assets/schemas/stage_4_1_5_auswahl_massnahmen_risiko_schema.json"
             }
         }
 
