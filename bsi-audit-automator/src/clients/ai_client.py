@@ -15,6 +15,8 @@ from src.config import AppConfig
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
 EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 MAX_RETRIES = 5
+# The Gemini embedding model has a batch size limit.
+EMBEDDING_BATCH_SIZE = 250
 
 
 class AiClient:
@@ -30,39 +32,46 @@ class AiClient:
 
     def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
         """
-        Generates vector embeddings for a list of text chunks.
-        Reverted to a synchronous, one-by-one loop for stability.
+        Generates vector embeddings for a list of text chunks using efficient,
+        synchronous batching with a robust retry mechanism.
         """
         if not texts:
             return True, []
 
         all_embeddings = []
-        logging.info(f"Generating embeddings for {len(texts)} chunks...")
+        logging.info(f"Generating embeddings for {len(texts)} texts in batches of {EMBEDDING_BATCH_SIZE}...")
         
-        for i, text in enumerate(texts):
-            if not text:
-                logging.warning(f"Skipping empty text at index {i}.")
-                # Add a placeholder or handle as appropriate for your logic
-                continue
-                
+        for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            batch_texts = texts[i:i + EMBEDDING_BATCH_SIZE]
+            batch_num = (i // EMBEDDING_BATCH_SIZE) + 1
+            
             for attempt in range(MAX_RETRIES):
                 try:
-                    response = self.embedding_model.get_embeddings([text])
-                    all_embeddings.append(response[0].values)
-                    # Client-side rate limiting to avoid overwhelming the API.
-                    time.sleep(0.05)
-                    break
+                    if self.config.is_test_mode:
+                        logging.info(f"TEST_MODE_LOG: Calling get_embeddings API for batch {batch_num} ({len(batch_texts)} texts)...")
+                    
+                    # The actual API call with the list of texts in the batch
+                    response = self.embedding_model.get_embeddings(batch_texts)
+                    
+                    embeddings_from_batch = [embedding.values for embedding in response]
+                    all_embeddings.extend(embeddings_from_batch)
+
+                    if self.config.is_test_mode:
+                        logging.info(f"TEST_MODE_LOG: get_embeddings API call successful for batch {batch_num}.")
+                    
+                    break  # Success, break retry loop for this batch
+
                 except api_core_exceptions.GoogleAPICallError as e:
                     wait_time = 2 ** attempt
-                    logging.warning(f"Embedding chunk {i+1} failed with API Error (Code: {e.code}). Retrying in {wait_time}s...")
+                    logging.warning(f"Embedding batch {batch_num} failed with API Error (Code: {e.code}). Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 except Exception as e:
                     wait_time = 2 ** attempt
-                    logging.error(f"Embedding chunk {i+1} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
+                    logging.error(f"Embedding batch {batch_num} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
                     time.sleep(wait_time)
 
                 if attempt == MAX_RETRIES - 1:
-                    logging.critical(f"Embedding for chunk {i+1} failed after all retries.")
+                    logging.critical(f"Embedding for batch {batch_num} failed after all retries.")
                     return False, all_embeddings
         
         logging.info(f"Successfully generated {len(all_embeddings)} embeddings.")
