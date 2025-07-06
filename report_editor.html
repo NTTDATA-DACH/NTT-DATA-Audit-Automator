@@ -198,12 +198,14 @@
                 reader.onload = (e) => {
                     try {
                         reportData = JSON.parse(e.target.result);
+                        console.log('[DEBUG] Successfully parsed JSON file. Full data object:', reportData); // DEBUG LOG
                         initialMessage.style.display = 'none';
                         renderReport(reportData);
                         createFilterButtons(reportData);
                         exportButton.disabled = false;
                     } catch (error) {
                         alert('Error parsing JSON file: ' + error.message);
+                        console.error("JSON Parsing Error:", error); // DEBUG LOG
                     }
                 };
                 reader.readAsText(file);
@@ -293,6 +295,7 @@
                 
                 const handledKeys = ['title', 'description', 'subchapterNumber'];
 
+                console.log(`[DEBUG] Rendering section for path: ${path}. Checking 'content' property.`, sectionData.content); // DEBUG LOG
                 if (Array.isArray(sectionData.content)) {
                     sectionData.content.forEach((item, index) => {
                         const itemPath = `${path}.content[${index}]`;
@@ -316,10 +319,12 @@
                 }
                 
                 // --- SPECIAL CASE RENDERERS FOR CHAPTER 5 ---
+                console.log(`[DEBUG] Rendering section for path: ${path}. Checking 'bausteinPruefungen' property.`, sectionData.bausteinPruefungen); // DEBUG LOG
                 if (Array.isArray(sectionData.bausteinPruefungen)) {
                     sectionDiv.appendChild(renderBausteinPruefung(sectionData.bausteinPruefungen, `${path}.bausteinPruefungen`));
                     handledKeys.push('bausteinPruefungen');
                 }
+                console.log(`[DEBUG] Rendering section for path: ${path}. Checking 'massnahmenPruefungen' property.`, sectionData.massnahmenPruefungen); // DEBUG LOG
                  if (Array.isArray(sectionData.massnahmenPruefungen)) {
                     sectionDiv.appendChild(renderMassnahmenPruefung(sectionData.massnahmenPruefungen, `${path}.massnahmenPruefungen`));
                     handledKeys.push('massnahmenPruefungen');
@@ -388,7 +393,9 @@
                     headerRow.insertCell().className = 'action-cell';
                 }
 
-                if (tableData.rows) {
+                // Hardened check and added debug log
+                console.log(`[DEBUG] Rendering table for path: ${path}. Checking 'rows' property.`, tableData.rows);
+                if (Array.isArray(tableData.rows)) {
                     tableData.rows.forEach((rowData, rowIndex) => {
                         const row = tbody.insertRow();
                         const rowPath = `${path}.rows[${rowIndex}]`;
@@ -428,6 +435,7 @@
             // Special renderer for Chapter 5.5.2
             function renderBausteinPruefung(pruefungen, path) {
                 const container = document.createElement('div');
+                console.log(`[DEBUG] Rendering BausteinPruefung for path: ${path}. Checking data.`, pruefungen); // DEBUG LOG
                 pruefungen.forEach((pruefung, pIndex) => {
                     const pPath = `${path}[${pIndex}]`;
                     const fieldset = document.createElement('fieldset');
@@ -443,15 +451,18 @@
                     anforderungenTable.innerHTML = `<thead><tr><th>Nummer</th><th>Anforderung</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
                     const tbody = anforderungenTable.createTBody();
                     
-                    pruefung.anforderungen.forEach((anf, aIndex) => {
-                        const aPath = `${pPath}.anforderungen[${aIndex}]`;
-                        const row = tbody.insertRow();
-                        row.insertCell().appendChild(createInputField(null, anf.nummer, 'text', `${aPath}.nummer`));
-                        row.insertCell().appendChild(createInputField(null, anf.anforderung, 'text', `${aPath}.anforderung`));
-                        row.insertCell().appendChild(createInputField(null, anf.bewertung, 'text', `${aPath}.bewertung`));
-                        row.insertCell().appendChild(createInputField(null, anf.auditfeststellung, 'text', `${aPath}.auditfeststellung`));
-                        row.insertCell().appendChild(createInputField(null, anf.abweichungen, 'text', `${aPath}.abweichungen`));
-                    });
+                    console.log(`[DEBUG] Rendering BausteinPruefung anforderungen for path: ${pPath}. Checking 'anforderungen'.`, pruefung.anforderungen); // DEBUG LOG
+                    if (Array.isArray(pruefung.anforderungen)) {
+                        pruefung.anforderungen.forEach((anf, aIndex) => {
+                            const aPath = `${pPath}.anforderungen[${aIndex}]`;
+                            const row = tbody.insertRow();
+                            row.insertCell().appendChild(createInputField(null, anf.nummer, 'text', `${aPath}.nummer`));
+                            row.insertCell().appendChild(createInputField(null, anf.anforderung, 'text', `${aPath}.anforderung`));
+                            row.insertCell().appendChild(createInputField(null, anf.bewertung, 'text', `${aPath}.bewertung`));
+                            row.insertCell().appendChild(createInputField(null, anf.auditfeststellung, 'text', `${aPath}.auditfeststellung`));
+                            row.insertCell().appendChild(createInputField(null, anf.abweichungen, 'text', `${aPath}.abweichungen`));
+                        });
+                    }
                     fieldset.appendChild(anforderungenTable);
                     container.appendChild(fieldset);
                 });
@@ -463,6 +474,7 @@
                 const table = document.createElement('table');
                 table.innerHTML = `<thead><tr><th>Maßnahme</th><th>Zielobjekt</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
                 const tbody = table.createTBody();
+                console.log(`[DEBUG] Rendering MassnahmenPruefung for path: ${path}. Checking data.`, pruefungen); // DEBUG LOG
                  pruefungen.forEach((massnahme, mIndex) => {
                     const mPath = `${path}[${mIndex}]`;
                     const row = tbody.insertRow();
