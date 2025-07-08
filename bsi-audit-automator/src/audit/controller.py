@@ -116,24 +116,28 @@ class AuditController:
 
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
-        Runs all defined audit stages using a dependency-aware parallel execution flow.
-        Independent stages are run concurrently, and dependent stages run sequentially after.
+        Runs all defined audit stages in a dependency-aware order.
+        Chapter 4 is run first, followed by other parallelizable stages.
         """
-        # Define stages that can run in parallel (no inter-dependencies)
-        parallel_stages = ["Chapter-1", "Chapter-3", "Chapter-4"]
-        # Define stages that must run sequentially after the parallel group
-        sequential_stages = ["Chapter-5", "Chapter-7"]
+        # Step 1: Run Chapter 4 first, as it's a prerequisite for planning.
+        logging.info("Step 1: Running prerequisite stage Chapter-4...")
+        await self.run_single_stage("Chapter-4", force_overwrite=force_overwrite)
+        logging.info("Completed stage Chapter-4.")
 
-        logging.info(f"Starting parallel execution for independent stages: {parallel_stages}")
+        # Step 2: Run independent stages in parallel.
+        parallel_stages_after_4 = ["Chapter-1", "Chapter-3"]
+        logging.info(f"Step 2: Starting parallel execution for stages: {parallel_stages_after_4}")
         parallel_tasks = [
             self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-            for stage_name in parallel_stages
+            for stage_name in parallel_stages_after_4
         ]
         await asyncio.gather(*parallel_tasks)
         logging.info("Completed parallel execution of independent stages.")
 
-        logging.info(f"Starting sequential execution for dependent stages: {sequential_stages}")
-        for stage_name in sequential_stages:
+        # Step 3: Run remaining dependent stages sequentially.
+        final_sequential_stages = ["Chapter-5", "Chapter-7"]
+        logging.info(f"Step 3: Starting sequential execution for dependent stages: {final_sequential_stages}")
+        for stage_name in final_sequential_stages:
             await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
         logging.info("Completed sequential execution of dependent stages.")
         
