@@ -1,7 +1,8 @@
 # src/audit/stages/stage_5_vor_ort_audit.py
 import logging
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
+from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
@@ -11,9 +12,11 @@ from src.audit.stages.control_catalog import ControlCatalog
 class Chapter5Runner:
     """
     Handles generating content for Chapter 5 "Vor-Ort-Audit".
-    It deterministically prepares the control checklist for the manual audit.
+    It deterministically prepares the control checklist for the manual audit,
+    enriching it with data extracted in prior stages.
     """
     STAGE_NAME = "Chapter-5"
+    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check.json"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
@@ -22,13 +25,29 @@ class Chapter5Runner:
         self.control_catalog = ControlCatalog()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _load_extracted_check_data(self) -> Dict[str, Dict[str, Any]]:
+        """Loads the extracted Grundschutz-Check data and creates a lookup map."""
+        try:
+            data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
+            anforderungen_list = data.get("anforderungen", [])
+            # Create a map from requirement ID to the full object for easy lookup
+            lookup_map = {item['id']: item for item in anforderungen_list}
+            logging.info(f"Successfully loaded and mapped {len(lookup_map)} extracted requirements.")
+            return lookup_map
+        except NotFound:
+            logging.warning(f"Intermediate file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations.")
+            return {}
+        except Exception as e:
+            logging.error(f"Failed to load or parse intermediate check data: {e}", exc_info=True)
+            return {}
+
+    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Deterministically generates the control checklist for subchapter 5.5.2.
-        This list is for the human auditor to use during the on-site audit.
+        Deterministically generates the control checklist for subchapter 5.5.2,
+        enriching it with customer explanations from the extracted data.
         """
         name = "verifikationDesITGrundschutzChecks"
-        logging.info(f"Deterministically generating control checklist for {name} (5.5.2)...")
+        logging.info(f"Generating enriched control checklist for {name} (5.5.2)...")
 
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -38,8 +57,6 @@ class Chapter5Runner:
             "auswahlBausteine2Ueberwachungsaudit"
         ]
         for section in baustein_sections:
-            # CORRECTED: Look for the rows inside the nested 'table' object
-            # to match the normalized structure from the previous fix.
             section_data = chapter_4_data.get(section, {})
             if isinstance(section_data, dict) and "table" in section_data:
                  selected_bausteine.extend(section_data.get("table", {}).get("rows", []))
@@ -59,17 +76,26 @@ class Chapter5Runner:
 
             anforderungen_list = []
             for control in controls:
+                control_id = control.get("id", "N/A")
+                # Look up the customer's explanation from the extracted data
+                customer_explanation = extracted_data_map.get(control_id, {}).get("umsetzungserlaeuterung", "Keine Angabe im Grundschutz-Check gefunden.")
+
                 anforderungen_list.append({
-                    "nummer": control.get("id", "N/A"),
+                    "nummer": control_id,
                     "anforderung": control.get("title", "N/A"),
-                    "bewertung": "",
-                    "auditfeststellung": "",
-                    "abweichungen": ""
+                    "bewertung": "", # To be filled by auditor
+                    "dokuAntragsteller": customer_explanation,
+                    "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
+                    "auditfeststellung": "", # To be filled by auditor
+                    "abweichungen": "" # To be filled by auditor
                 })
             
             baustein_pruefungen_list.append({
                 "baustein": baustein_id_full,
-                "zielobjekt": baustein.get("Zielobjekt", ""),
+                "bezogenAufZielobjekt": baustein.get("Zielobjekt", ""),
+                "auditiertAm": "", # To be filled by auditor
+                "auditor": "", # To be filled by auditor
+                "befragtWurde": "", # To be filled by auditor
                 "anforderungen": anforderungen_list
             })
 
@@ -109,6 +135,7 @@ class Chapter5Runner:
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         
+        # Load all dependencies first
         try:
             ch4_results_path = f"{self.config.output_prefix}results/Chapter-4.json"
             chapter_4_data = self.gcs_client.read_json(ch4_results_path)
@@ -116,8 +143,11 @@ class Chapter5Runner:
         except Exception as e:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
+
+        # This will return a map or an empty dict if the file doesn't exist. The process can continue.
+        extracted_check_data_map = self._load_extracted_check_data()
         
-        checklist_result = self._generate_control_checklist(chapter_4_data)
+        checklist_result = self._generate_control_checklist(chapter_4_data, extracted_check_data_map)
         risiko_result = self._generate_risikoanalyse_checklist(chapter_4_data)
         
         final_result = {**checklist_result, **risiko_result}

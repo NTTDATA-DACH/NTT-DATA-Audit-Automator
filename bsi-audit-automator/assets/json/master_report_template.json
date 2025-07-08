@@ -564,7 +564,26 @@
         "einzelergebnisse": {
           "title": "Einzelergebnisse des IT-Grundschutz-Checks",
           "subchapterNumber": "5.5.2",
-          "bausteinPruefungen": []
+          "bausteinPruefungen": [
+            {
+              "baustein": "",
+              "bezogenAufZielobjekt": "",
+              "auditiertAm": "",
+              "auditor": "",
+              "befragtWurde": "",
+              "anforderungen": [
+                {
+                  "nummer": "",
+                  "anforderung": "",
+                  "bewertung": "",
+                  "dokuAntragsteller": "",
+                  "pruefmethode": { "D": false, "I": false, "C": false, "S": false, "A": false, "B": false },
+                  "auditfeststellung": "",
+                  "abweichungen": ""
+                }
+              ]
+            }
+          ]
         },
         "ergebnis": {
             "title": "Ergebnis Verifikation des IT-Grundschutz-Checks",
