@@ -17,6 +17,7 @@
             --button-hover-bg: #004a99;
             --danger-color: #d93025;
             --danger-hover-color: #a52714;
+            --sidebar-width: 320px;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -24,7 +25,80 @@
             color: var(--text-color);
             margin: 0;
             line-height: 1.6;
+            display: flex;
         }
+        .sidebar-nav {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        .sidebar-nav h2 {
+            font-size: 1.4em;
+            color: var(--primary-color);
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        #nav-search {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+        .sidebar-nav ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .sidebar-nav li a {
+            display: block;
+            text-decoration: none;
+            color: var(--secondary-color);
+            padding: 8px 10px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .sidebar-nav li a:hover {
+            background-color: #eef;
+        }
+        .sidebar-nav ul ul {
+            padding-left: 15px;
+        }
+        .sidebar-nav details {
+            margin-left: 5px;
+        }
+        .sidebar-nav summary {
+            cursor: pointer;
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+        }
+        .sidebar-nav summary:hover {
+            background-color: #f8f8f8;
+        }
+        .sidebar-nav summary a {
+            padding: 0;
+            display: inline;
+        }
+        .sidebar-nav li a.chapter-title {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        #main-content {
+            margin-left: var(--sidebar-width);
+            width: calc(100% - var(--sidebar-width));
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -60,10 +134,6 @@
         #controls button:hover, #controls input[type="file"]::file-selector-button:hover { background-color: var(--button-hover-bg); }
         #controls button:disabled { background-color: #999; cursor: not-allowed; }
         
-        #chapter-filter-buttons { margin-top: 10px; padding-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; }
-        #chapter-filter-buttons button { background-color: var(--secondary-color); }
-        #chapter-filter-buttons button:hover { background-color: var(--primary-color); }
-
         .chapter {
             background-color: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -195,34 +265,39 @@
             width: 1em;
         }
 
-
         #report-container { padding-top: 20px; }
         #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
     </style>
 </head>
 <body>
+    <nav id="sidebar-nav" class="sidebar-nav">
+        <h2>Navigation</h2>
+        <input type="text" id="nav-search" placeholder="Search sections...">
+        <ul id="nav-list"></ul>
+    </nav>
+    <main id="main-content">
+        <header>
+            <h1>BSI Audit Report Editor</h1>
+            <div id="controls">
+                <input type="file" id="json-file-input" accept=".json">
+                <button id="export-json-button" disabled>Export to JSON</button>
+            </div>
+        </header>
 
-    <header>
-        <h1>BSI Audit Report Editor</h1>
-        <div id="controls">
-            <input type="file" id="json-file-input" accept=".json">
-            <button id="export-json-button" disabled>Export to JSON</button>
+        <div class="container">
+            <div id="report-container">
+                <p id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</p>
+            </div>
         </div>
-    </header>
-
-    <div class="container">
-        <div id="chapter-filter-buttons"></div>
-        <div id="report-container">
-            <p id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</p>
-        </div>
-    </div>
+    </main>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const fileInput = document.getElementById('json-file-input');
             const exportButton = document.getElementById('export-json-button');
             const reportContainer = document.getElementById('report-container');
-            const filterContainer = document.getElementById('chapter-filter-buttons');
+            const navList = document.getElementById('nav-list');
+            const navSearch = document.getElementById('nav-search');
             const initialMessage = document.getElementById('initial-message');
 
             let reportData = null;
@@ -230,6 +305,7 @@
 
             fileInput.addEventListener('change', handleFileSelect);
             exportButton.addEventListener('click', handleExport);
+            navSearch.addEventListener('keyup', filterNav);
             
             reportContainer.addEventListener('click', (event) => {
                 if (event.target.classList.contains('add-row-btn')) {
@@ -240,13 +316,12 @@
                 }
             });
 
-            // Listen for input on finding textareas
             reportContainer.addEventListener('input', (event) => {
                 if (event.target.matches('[data-finding-source="true"]')) {
                     clearTimeout(findingInputTimeout);
                     findingInputTimeout = setTimeout(() => {
                         handleFindingInput(event.target);
-                    }, 2000); // Wait 2 seconds after user stops typing
+                    }, 2000); 
                 }
             });
 
@@ -258,14 +333,12 @@
                 reader.onload = (e) => {
                     try {
                         reportData = JSON.parse(e.target.result);
-                        console.log('[DEBUG] Successfully parsed JSON file. Full data object:', JSON.parse(JSON.stringify(reportData)));
                         initialMessage.style.display = 'none';
                         renderReport(reportData);
-                        createFilterButtons(reportData);
+                        createSidebarNav(reportData);
                         exportButton.disabled = false;
                     } catch (error) {
                         alert('Error parsing JSON file: ' + error.message);
-                        console.error("JSON Parsing Error:", error);
                     }
                 };
                 reader.readAsText(file);
@@ -289,34 +362,76 @@
                 });
             }
 
-            function createFilterButtons(data) {
-                filterContainer.innerHTML = '';
-                const chapters = data?.bsiAuditReport || {};
-                const allButton = document.createElement('button');
-                allButton.textContent = 'Show All';
-                allButton.onclick = () => filterView('all');
-                filterContainer.appendChild(allButton);
+            function createSidebarNav(data) {
+                navList.innerHTML = '';
+                const report = data.bsiAuditReport || {};
+                
+                function buildNavRecursive(currentObject, parentUl) {
+                    Object.keys(currentObject).forEach(key => {
+                        const child = currentObject[key];
+                        if (typeof child === 'object' && child !== null && child.title) {
+                            const newPath = `${parentUl.dataset.path || 'bsiAuditReport'}.${key}`;
+                            const navId = `nav-${newPath.replace(/[.\[\]]/g, '-')}`;
 
-                Object.keys(chapters).forEach(key => {
-                    if (typeof chapters[key] === 'object' && chapters[key]?.title) {
-                        const button = document.createElement('button');
-                        button.textContent = `${chapters[key].chapterNumber || ''} ${chapters[key].title}`;
-                        button.onclick = () => filterView(key);
-                        filterContainer.appendChild(button);
+                            const li = document.createElement('li');
+                            
+                            const childKeys = Object.keys(child).filter(k => typeof child[k] === 'object' && child[k] !== null && child[k].title);
+                            
+                            if (childKeys.length > 0) {
+                                const details = document.createElement('details');
+                                const summary = document.createElement('summary');
+                                const a = document.createElement('a');
+                                a.href = `#${navId}`;
+                                a.textContent = `${child.subchapterNumber || child.chapterNumber || ''} ${child.title}`;
+                                if (!child.subchapterNumber) a.className = 'chapter-title';
+                                summary.appendChild(a);
+                                details.appendChild(summary);
+                                
+                                const nestedUl = document.createElement('ul');
+                                nestedUl.dataset.path = newPath;
+                                buildNavRecursive(child, nestedUl);
+                                details.appendChild(nestedUl);
+                                li.appendChild(details);
+                            } else {
+                                const a = document.createElement('a');
+                                a.href = `#${navId}`;
+                                a.textContent = `${child.subchapterNumber || child.chapterNumber || ''} ${child.title}`;
+                                if (!child.subchapterNumber) a.className = 'chapter-title';
+                                li.appendChild(a);
+                            }
+                            parentUl.appendChild(li);
+                        }
+                    });
+                }
+                
+                navList.dataset.path = 'bsiAuditReport';
+                buildNavRecursive(report, navList);
+            }
+
+            function filterNav() {
+                const searchTerm = navSearch.value.toLowerCase();
+                const allLi = navList.querySelectorAll('li');
+                
+                allLi.forEach(li => {
+                    const text = li.textContent.toLowerCase();
+                    const matches = text.includes(searchTerm);
+                    li.style.display = matches ? '' : 'none';
+                    if (matches && searchTerm) {
+                        // Ensure parents are visible and open
+                        let current = li;
+                        while(current && current.tagName === 'LI') {
+                            const parentDetails = current.closest('details');
+                            if(parentDetails) {
+                                parentDetails.open = true;
+                                current = parentDetails.parentElement;
+                            } else {
+                                current = null; // stop traversing
+                            }
+                        }
                     }
                 });
             }
 
-            function filterView(chapterKey) {
-                const allChapters = reportContainer.querySelectorAll('.chapter');
-                allChapters.forEach(chapter => {
-                    if (chapterKey === 'all' || chapter.dataset.chapterKey === chapterKey) {
-                        chapter.style.display = 'block';
-                    } else {
-                        chapter.style.display = 'none';
-                    }
-                });
-            }
 
             function renderReport(data) {
                 const currentScroll = window.scrollY;
@@ -338,8 +453,8 @@
                 chapterDiv.className = 'chapter';
                 chapterDiv.dataset.chapterKey = key;
                 
-                const anchorId = (key === 'anhang') ? 'id="chapter-7-anchor"' : '';
-                if(chapterData.title) chapterDiv.innerHTML += `<h2 ${anchorId}>${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
+                const navId = `nav-${path.replace(/[.\[\]]/g, '-')}`;
+                if(chapterData.title) chapterDiv.innerHTML += `<h2 id="${navId}">${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
                 for (const subKey in chapterData) {
@@ -353,8 +468,9 @@
             function renderSection(key, sectionData, path) {
                 const sectionDiv = document.createElement('div');
                 sectionDiv.className = 'subchapter';
-
-                if (sectionData.title) sectionDiv.innerHTML += `<h3>${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
+                
+                const navId = `nav-${path.replace(/[.\[\]]/g, '-')}`;
+                if (sectionData.title) sectionDiv.innerHTML += `<h3 id="${navId}">${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
                 if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
                 
                 const handledKeys = ['title', 'description', 'subchapterNumber'];
@@ -454,6 +570,17 @@
             }
 
             function renderTable(tableData, path) {
+                 const editableTablePaths = [
+                    'allgemeines.versionshistorie', 'allgemeines.auditierteInstitution',
+                    'allgemeines.auditteam.auditteamleiter', 'allgemeines.auditteam.auditor',
+                    'allgemeines.auditteam.fachexperte', 'allgemeines.auditteam.berater',
+                    'allgemeines.absprachen', 'allgemeines.formaleGrundlagen',
+                    'anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen',
+                    'anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen',
+                    'anhang.abweichungenUndEmpfehlungen.empfehlungen'
+                ];
+                const isEditable = editableTablePaths.some(p => path.includes(p));
+
                 const tableContainer = document.createElement('div');
                 if (!tableData || !Array.isArray(tableData.headers)) {
                     const errorDiv = document.createElement('div');
@@ -470,7 +597,7 @@
                     th.textContent = headerText;
                     headerRow.appendChild(th);
                 });
-                if (path.includes("anhang.abweichungen")) {
+                if (isEditable) {
                     headerRow.insertCell().className = 'action-cell';
                 }
                 if (Array.isArray(tableData.rows)) {
@@ -480,12 +607,16 @@
                         tableData.headers.forEach(header => {
                             const cell = row.insertCell();
                             const cellPath = `${rowPath}.${header}`;
-                            const input = document.createElement('textarea');
-                            input.dataset.path = cellPath;
-                            input.value = getValueByPath(reportData, cellPath) || '';
-                            cell.appendChild(input);
+                            if (header === 'Nr.') {
+                                cell.textContent = getValueByPath(reportData, cellPath) || '';
+                            } else {
+                                const input = document.createElement('textarea');
+                                input.dataset.path = cellPath;
+                                input.value = getValueByPath(reportData, cellPath) || '';
+                                cell.appendChild(input);
+                            }
                         });
-                        if (path.includes("anhang.abweichungen")) {
+                        if (isEditable) {
                             const actionCell = row.insertCell();
                             actionCell.className = 'action-cell';
                             const deleteBtn = document.createElement('button');
@@ -497,10 +628,10 @@
                         }
                     });
                 }
-                if (path.includes("anhang.abweichungen")) {
+                if (isEditable) {
                     const footerRow = tfoot.insertRow();
                     const addCell = footerRow.insertCell();
-                    addCell.colSpan = tableData.headers.length + 1;
+                    addCell.colSpan = tableData.headers.length + (isEditable ? 1 : 0);
                     const addBtn = document.createElement('button');
                     addBtn.textContent = '+ Add Row';
                     addBtn.className = 'add-row-btn';
@@ -535,13 +666,11 @@
                                 const anfBlock = document.createElement('div');
                                 anfBlock.className = 'anforderung-block';
 
-                                // Read-only fields
                                 anfBlock.appendChild(createReadOnlyField('Nummer', anf.nummer));
                                 anfBlock.appendChild(createReadOnlyField('Anforderung', anf.anforderung));
                                 anfBlock.appendChild(createReadOnlyField('Bewertung der Anforderung', anf.bewertung));
                                 anfBlock.appendChild(createReadOnlyField('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
 
-                                // Prüfmethode Checkboxes
                                 const pmGroup = document.createElement('div');
                                 pmGroup.className = 'pruefmethode-group';
                                 pmGroup.innerHTML = '<label>Prüfmethode:</label>';
@@ -563,13 +692,12 @@
                                 });
                                 anfBlock.appendChild(pmGroup);
 
-                                // Editable fields
                                 anfBlock.appendChild(createTextArea('Auditfeststellung im Detail mit Nachweisen', anf.auditfeststellung, `${aPath}.auditfeststellung`));
                                 anfBlock.appendChild(createTextArea(
                                     'Es wurden folgende Abweichungen und Empfehlungen identifiziert', 
                                     anf.abweichungen, 
                                     `${aPath}.abweichungen`,
-                                    true, // isFindingSource = true
+                                    true,
                                     { baustein: pruefung.baustein, anforderungId: anf.nummer }
                                 ));
                                 
@@ -588,15 +716,13 @@
                     pruefungen.forEach((massnahme, index) => {
                         const mPath = `${path}[${index}]`;
                         const mBlock = document.createElement('div');
-                        mBlock.className = 'anforderung-block'; // Reuse the same styling
+                        mBlock.className = 'anforderung-block';
 
                         mBlock.appendChild(createReadOnlyField('Maßnahme', massnahme.massnahme));
                         mBlock.appendChild(createReadOnlyField('Zielobjekt', massnahme.zielobjekt));
                         
-                        // Editable Bewertung for risk measures
                         mBlock.appendChild(createInputField('Bewertung', massnahme.bewertung, 'text', `${mPath}.bewertung`));
 
-                        // Prüfmethode Checkboxes
                         const pmGroup = document.createElement('div');
                         pmGroup.className = 'pruefmethode-group';
                         pmGroup.innerHTML = '<label>Prüfmethode:</label>';
@@ -707,8 +833,11 @@
                     alert(`Feststellung '${newId}' wurde zur Tabelle '${category}' im Anhang hinzugefügt.`);
                     renderReport(reportData);
                     setTimeout(() => {
-                        const anchor = document.getElementById('chapter-7-anchor');
-                        if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
+                        const anchor = document.getElementById('nav-bsiAuditReport-anhang');
+                        if (anchor) {
+                            const targetElement = document.getElementById(anchor.id);
+                            if(targetElement) targetElement.scrollIntoView({ behavior: 'smooth' });
+                        }
                     }, 100); 
                 }
             }
@@ -758,7 +887,6 @@
                 downloadAnchorNode.click();
                 downloadAnchorNode.remove();
             }
-
         });
     </script>
 </body>
