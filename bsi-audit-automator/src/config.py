@@ -16,15 +16,9 @@ class AppConfig:
     etl_status_prefix: str
     audit_type: str
     vertex_ai_region: str
-    index_endpoint_id: str
     max_concurrent_ai_requests: int
     is_test_mode: bool
-    # This will be populated by the GCS Client after Terraform runs
     bucket_name: Optional[str] = None 
-    # Optional because it's not needed for the ETL step
-    project_number: Optional[str] = None
-    # Optional: for local dev against a public endpoint
-    index_endpoint_public_domain: Optional[str] = None
 
 def load_config_from_env() -> AppConfig:
     """
@@ -43,7 +37,7 @@ def load_config_from_env() -> AppConfig:
 
     required_vars = [
         "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "ETL_STATUS_PREFIX",
-        "AUDIT_TYPE", "VERTEX_AI_REGION", "INDEX_ENDPOINT_ID"
+        "AUDIT_TYPE", "VERTEX_AI_REGION"
     ]
     
     config_values = {}
@@ -54,11 +48,9 @@ def load_config_from_env() -> AppConfig:
         # Convert to lowercase to match dataclass fields
         config_values[var.lower()] = value
 
-    # Handle optional and boolean variables
-    config_values["project_number"] = os.getenv("GCP_PROJECT_NUMBER")
+    # Handle special case and boolean variables
     config_values["is_test_mode"] = os.getenv("TEST", "false").lower() == "true"
     config_values["bucket_name"] = os.getenv("BUCKET_NAME")
-    config_values["index_endpoint_public_domain"] = os.getenv("INDEX_ENDPOINT_PUBLIC_DOMAIN")
     
     # Load the new concurrency limit, defaulting to 5 if not set or invalid
     max_reqs_str = os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")

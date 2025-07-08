@@ -33,6 +33,7 @@ class AuditController:
             "Chapter-5": Chapter5Runner,
             "Chapter-7": Chapter7Runner,
         }
+        # Chapter 4 no longer needs rag_client
         self.runner_dependencies = {
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.ai_client, self.rag_client),

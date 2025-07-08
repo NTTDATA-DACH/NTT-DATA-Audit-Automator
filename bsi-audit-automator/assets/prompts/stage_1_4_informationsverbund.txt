@@ -5,15 +5,10 @@ Your task is to analyze the provided context, which describes the scope of an in
 2.  **kurzbeschreibung**: A concise paragraph summarizing the scope, including key business processes, applications, and physical locations. This should also serve as the main description for the 'Geltungsbereich'.
 
 Rules:
-1.  Imperative: Base your answers *only* on the following context retrieved from the customer's documentation.
-2.  Imperative: If the provided context is insufficient or empty, state that the scope could not be fully determined from the documents and must be clarified manually.
-3.  While analyzing, check if the context contains deviations from BSI Grundschutz regarding the definition of the scope (e.g., is it unclear, fragmented across many documents, incomplete?).
+1.  Imperative: Base your answers *only* on the attached customer documentation files.
+2.  Imperative: If the attached documents are insufficient or empty, state that the scope could not be fully determined from the documents and must be clarified manually.
+3.  While analyzing, check if the documents contain deviations from BSI Grundschutz regarding the definition of the scope (e.g., is it unclear, fragmented, incomplete?).
 4.  If you find a deviation, generate a structured finding. Categorize it as 'AG' (Minor Deviation), 'AS' (Major Deviation), or 'E' (Recommendation).
-5.  Provide evidence from the context and a reference to the document that caused the finding in the `finding.description` field.
-
-**Provided Context:**
----
-{context}
----
+5.  Provide evidence and a reference to the document that caused the finding in the `finding.description` field.
 
 Your response MUST be a single JSON object that strictly adheres to the provided JSON schema.

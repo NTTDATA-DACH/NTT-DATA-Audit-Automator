@@ -1,220 +1,154 @@
 # src/clients/rag_client.py
 import logging
 import json
-import os
-from typing import List, Dict, Any
+import asyncio
+from typing import List, Dict, Any, Optional
 
-from google.cloud import aiplatform
-from google.cloud.aiplatform.matching_engine import MatchingEngineIndexEndpoint
-from google.cloud.aiplatform.matching_engine.matching_engine_index_endpoint import (Namespace,)
-from google.cloud.aiplatform_v1.types import IndexDatapoint
 from google.cloud.exceptions import NotFound
-from google.api_core import exceptions as api_core_exceptions
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
-SIMILARITY_THRESHOLD = 1.1 # A high threshold to include most relevant results.
-NEIGHBOR_POOL_SIZE = 20 # Drastically reduced from 2000 to prevent prompt overflow.
-MAX_CONTEXT_CHAR_LENGTH = 150000 # Safety net to cap the context size.
+MAX_FILES_TEST_MODE = 3
 
 class RagClient:
-    """Client for Retrieval-Augmented Generation using Vertex AI Vector Search."""
+    """
+    Client to find relevant documents for audit tasks. It manages a map of
+    document filenames to BSI categories, creating this map on-demand if it
+    doesn't exist. This client is the replacement for the Vector Search RAG pipeline.
+    Its name is kept for consistency in the project structure.
+    """
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
+        self._document_category_map: Optional[Dict[str, List[str]]] = None
+        self._all_source_files: List[str] = []
 
-        aiplatform.init(
-            project=config.gcp_project_id,
-            location=config.vertex_ai_region
+    @classmethod
+    async def create(cls, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
+        """Asynchronous factory to create and initialize the client."""
+        instance = cls(config, gcs_client, ai_client)
+        await instance._initialize()
+        return instance
+
+    async def _initialize(self):
+        """Initializes the client by ensuring the document map is ready."""
+        logging.info("Initializing Document Finder (RagClient)...")
+        self._all_source_files = [blob.name for blob in self.gcs_client.list_files()]
+        await self._ensure_document_map_exists()
+
+    def _load_asset_text(self, path: str) -> str:
+        with open(path, 'r', encoding='utf-8') as f: return f.read()
+
+    def _load_asset_json(self, path: str) -> dict:
+        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+
+    async def _create_document_map(self) -> None:
+        """
+        Uses an AI model to classify source documents into predefined BSI categories
+        based on their filenames. Saves the result to a map file in GCS.
+        Falls back to classifying all documents as 'Sonstiges' on failure.
+        """
+        logging.info("Document map not found. Starting AI-driven document classification...")
+        
+        filenames = [blob_name.split('/')[-1] for blob_name in self._all_source_files]
+        if not filenames:
+            logging.warning("No source files found to classify.")
+            # Create an empty map to prevent repeated attempts
+            self.gcs_client.upload_from_string("{}", DOC_MAP_PATH)
+            return
+
+        prompt_template = self._load_asset_text("assets/prompts/etl_classify_documents.txt")
+        schema = self._load_asset_json("assets/schemas/etl_classify_documents_schema.json")
+        
+        filenames_json = json.dumps(filenames, indent=2)
+        prompt = prompt_template.format(filenames_json=filenames_json)
+
+        try:
+            classification_result = await self.ai_client.generate_json_response(prompt, schema)
+            content_to_upload = json.dumps(classification_result, indent=2, ensure_ascii=False)
+            logging.info("Successfully created document map via AI.")
+        except Exception as e:
+            logging.critical(
+                f"AI-driven document classification failed: {e}. "
+                f"Creating a fallback map with all documents as 'Sonstiges'. "
+                "Document selection will be impaired.",
+                exc_info=True
+            )
+            # Match the filenames to their full GCS paths for the fallback map
+            full_path_map = {name.split('/')[-1]: name for name in self._all_source_files}
+            fallback_map = {"document_map": [{"filename": full_path_map[fname], "category": "Sonstiges"} for fname in filenames]}
+            content_to_upload = json.dumps(fallback_map, indent=2, ensure_ascii=False)
+        
+        self.gcs_client.upload_from_string(
+            content=content_to_upload,
+            destination_blob_name=DOC_MAP_PATH
         )
+        logging.info(f"Saved document map to '{DOC_MAP_PATH}'.")
 
-        if config.index_endpoint_public_domain:
-            logging.info(f"Connecting to PUBLIC Vector Search Endpoint: {config.index_endpoint_public_domain}")
-            self.index_endpoint = MatchingEngineIndexEndpoint.from_public_endpoint(
-                project_id=config.gcp_project_id,
-                region=config.vertex_ai_region,
-                public_endpoint_domain_name=config.index_endpoint_public_domain
-            )
-        else:
-            logging.info(f"Connecting to PRIVATE Vector Search Endpoint: {config.index_endpoint_id}")
-            self.index_endpoint = MatchingEngineIndexEndpoint(
-                index_endpoint_name=self.config.index_endpoint_id,
-            )
-
-        self._chunk_lookup_map = self._load_chunk_lookup_map()
-        self._document_category_map = self._load_document_category_map()
-
-    def _load_document_category_map(self) -> Dict[str, str]:
+    async def _ensure_document_map_exists(self) -> None:
         """
-        Loads the document classification map from GCS. The map provides a
-        lookup from document category to a list of filenames.
+        Loads the document classification map from GCS. If it doesn't exist,
+        it triggers the creation process.
         """
-        logging.info(f"Loading document category map from '{DOC_MAP_PATH}'...")
-        category_map = {}
         try:
             map_data = self.gcs_client.read_json(DOC_MAP_PATH)
-            doc_map_list = map_data.get("document_map", [])
-            for item in doc_map_list:
-                category = item.get("category")
-                filename = item.get("filename")
-                if category and filename:
-                    if category not in category_map:
-                        category_map[category] = []
-                    category_map[category].append(filename)
-            
-            logging.info(f"Successfully built document category map with {len(category_map)} categories.")
-            return category_map
+            logging.info(f"Successfully loaded document map from '{DOC_MAP_PATH}'.")
         except NotFound:
-            logging.error(f"CRITICAL: Document map file not found at '{DOC_MAP_PATH}'. The ETL process must be run first.")
-            raise
-        except Exception as e:
-            logging.error(f"Failed to build document category map: {e}", exc_info=True)
-            return {}
+            logging.warning(f"Document map not found at '{DOC_MAP_PATH}'. Triggering creation.")
+            await self._create_document_map()
+            map_data = self.gcs_client.read_json(DOC_MAP_PATH) # Re-read after creation
 
-    def _load_chunk_lookup_map(self) -> Dict[str, Dict[str, str]]:
+        category_map = {}
+        doc_map_list = map_data.get("document_map", [])
+        for item in doc_map_list:
+            category = item.get("category")
+            # The map now stores the full GCS path, not just the basename
+            filename = item.get("filename")
+            if category and filename:
+                if category not in category_map:
+                    category_map[category] = []
+                category_map[category].append(filename)
+        
+        self._document_category_map = category_map
+        logging.info(f"Successfully built document category map with {len(category_map)} categories.")
+
+    def get_gcs_uris_for_categories(self, source_categories: List[str] = None) -> List[str]:
         """
-        Downloads all embedding batch files from GCS and creates a mapping from
-        chunk ID to its text content and source document for fast lookups.
+        Finds the GCS URIs for documents belonging to the specified categories.
+
+        Args:
+            source_categories: A list of BSI categories (e.g., 'Strukturanalyse').
+                               If None, all source document URIs are returned.
+
+        Returns:
+            A list of 'gs://...' URIs for the model to use as context.
         """
-        lookup_map: Dict[str, Dict[str, str]] = {}
-        logging.info("Building chunk ID to text lookup map from all batch files...")
-
-        try:
-            embedding_blobs = self.gcs_client.list_files(prefix="vector_index_data/")
-
-            for blob in embedding_blobs:
-                if "placeholder.json" in blob.name:
-                    continue
-
-                jsonl_content = self.gcs_client.read_text_file(blob.name)
-                
-                for line in jsonl_content.strip().split('\n'):
-                    try:
-                        data = json.loads(line)
-                        chunk_id = data.get("id")
-                        chunk_text = data.get("text_content")
-                        source_doc = data.get("source_document")
-                        if chunk_id and chunk_text and source_doc:
-                            lookup_map[chunk_id] = {
-                                "text_content": chunk_text,
-                                "source_document": source_doc
-                            }
-                    except json.JSONDecodeError:
-                        logging.warning(f"Skipping invalid JSON line in {blob.name}: '{line}'")
-                        continue
+        if self._document_category_map is None:
+            # This should not happen due to the async initializer, but as a safeguard:
+            raise RuntimeError("Document map has not been initialized. Call `await RagClient.create()`.")
             
-            logging.info(f"Successfully built lookup map with {len(lookup_map)} entries.")
-            return lookup_map
-        except Exception as e:
-            logging.error(f"Failed to build chunk lookup map from batch files: {e}", exc_info=True)
-            return {}
+        selected_filenames = set()
+        
+        if source_categories:
+            for category in source_categories:
+                filenames = self._document_category_map.get(category, [])
+                selected_filenames.update(filenames)
+            if not selected_filenames:
+                 logging.warning(f"No documents found for categories: {source_categories}. Returning all documents as a fallback.")
+                 selected_filenames.update(self._all_source_files)
+        else:
+            # If no categories are specified, use all source files
+            selected_filenames.update(self._all_source_files)
 
-    def get_context_for_query(self, queries: List[str], source_categories: List[str] = None) -> str:
-        """
-        Finds relevant document chunks for a list of queries. It queries for each,
-        filters by similarity, de-duplicates the results, and returns a single
-        consolidated context string.
-        """
-        try:
-            # 1. Embed all queries in a single batch call.
-            success, query_vectors = self.ai_client.get_embeddings(queries)
-            if not success or not query_vectors:
-                logging.error("Failed to generate embeddings for the RAG queries.")
-                return "Error: Could not generate embeddings for queries."
-
-            if self.config.is_test_mode:
-                logging.info(f"TEST_MODE_LOG: Generated {len(query_vectors)} query embedding vectors with dimensions: {[len(v) for v in query_vectors]}.")
-
-            # 2. Build the filter if categories are provided
-            filter_restriction = None
-            if source_categories and self._document_category_map:
-                allow_list_filenames = [
-                    filename
-                    for category in source_categories
-                    for filename in self._document_category_map.get(category, [])
-                ]
-                
-                if allow_list_filenames:
-                    # when embedding, the filenames are transformed in a funny way, for the filter to work,
-                    # we need to have a string EXACTLY like them!
-                    filenames_string = "["
-                    for i, fname in enumerate(allow_list_filenames):
-                        escaped   = os.path.basename(fname)                           # keep just the file name
-                        
-                        escaped    = json.dumps(escaped, ensure_ascii=True)[1:-1]     # \u-escape non-ASCII chars
-                        #escaped    = escaped.replace(r" ", "_")
-                        escaped    = escaped.replace(r"\\\\", "\\")
-                        escaped   = f"source_documents/{escaped}"                    # add the folder prefix
-                        filenames_string += f"'{escaped}',"
-                        
-                    filenames_string += "]"
-                    
-                    if self.config.is_test_mode:
-                        logging.info(f"TEST_MODE_LOG: Filtering search to the following files: {filenames_string}")
-                    
-                    filter_restriction = Namespace(                # ✅ helper dataclass
-                        name="source_document",                    # the metadata key you indexed
-                        allow_tokens=filenames_string,         # the values to keep
-                        # deny_tokens=[]                           # optional
-                    )
-                else:
-                    logging.warning(f"No documents found for categories: {source_categories}. Searching all documents.")
-
-            # 3. Perform the search for all queries at once
-            response = None
-            try:
-                response = self.index_endpoint.find_neighbors(
-                    deployed_index_id="bsi_deployed_index_kunde_x",
-                    queries=query_vectors,
-                    num_neighbors=NEIGHBOR_POOL_SIZE,
-                #    filter=[filter_restriction] if filter_restriction else []
-                )
-                if self.config.is_test_mode and response:
-                    logging.info(f"TEST_MODE_LOG: find_neighbors API call successful. Received results for {len(response)} queries.")
-            except api_core_exceptions.GoogleAPICallError as e:
-                logging.error(f"Vector search API call failed with code {e.code}: {e.message}", exc_info=self.config.is_test_mode)
-                return f"Error: Vector search API call failed. See logs for details."
-            except Exception as e:
-                logging.error(f"An unexpected error occurred during vector search: {e}", exc_info=True)
-                return "Error: Unexpected error during vector search."
-
-            # 4. Process and aggregate the response from all queries
-            if not response:
-                logging.warning("Vector DB query returned no response object.")
-                return "No relevant context found in the documents."
-
-            unique_neighbors: Dict[str, Any] = {}
-            for neighbor_list_for_query in response:
-                if not neighbor_list_for_query: continue
-                quality_neighbors = [n for n in neighbor_list_for_query if n.distance <= SIMILARITY_THRESHOLD]
-                for neighbor in quality_neighbors:
-                    if neighbor.id not in unique_neighbors:
-                        unique_neighbors[neighbor.id] = neighbor
+        uris = [f"gs://{self.config.bucket_name}/{fname}" for fname in sorted(list(selected_filenames))]
+        
+        if self.config.is_test_mode and len(uris) > MAX_FILES_TEST_MODE:
+            logging.warning(f"TEST MODE: Limiting context files from {len(uris)} to {MAX_FILES_TEST_MODE}.")
+            return uris[:MAX_FILES_TEST_MODE]
             
-            if not unique_neighbors:
-                logging.warning(f"No neighbors met the similarity threshold of {SIMILARITY_THRESHOLD}. Consider adjusting the query or the threshold.")
-                return "No highly relevant context found in the documents."
-            
-            logging.info(f"Aggregated {len(unique_neighbors)} unique, high-quality neighbors across all queries.")
-
-            context_str = ""
-            sorted_neighbors = sorted(list(unique_neighbors.values()), key=lambda n: n.distance)
-            for neighbor in sorted_neighbors:
-                chunk_id = neighbor.id
-                context_info = self._chunk_lookup_map.get(chunk_id)
-                if context_info:
-                    context_str += f"-- CONTEXT FROM DOCUMENT: {os.path.basename(context_info['source_document'])} (Similarity: {1-neighbor.distance:.2%}) --\n"
-                    context_str += f"{context_info['text_content']}\n\n"
-                else:
-                    logging.warning(f"Could not find text for chunk ID: {chunk_id}")
-            
-            return context_str.strip()
-
-        except Exception as e:
-            logging.error(f"A general error occurred in get_context_for_query: {e}", exc_info=True)
-            return "Error retrieving context from Vector DB."
+        return uris

@@ -25,34 +25,28 @@ class Chapter1Runner:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _process_informationsverbund(self) -> Dict[str, Any]:
-        """Handles 1.4 Informationsverbund using a filtered RAG query."""
+        """Handles 1.4 Informationsverbund using a filtered document query."""
         logging.info("Processing 1.4 Informationsverbund...")
         
-        # This one query now populates both Kurzbezeichnung and Kurzbeschreibung
-        queries = ["Beschreibe den Namen, Umfang, Geltungsbereich und die Abgrenzung des Informationsverbunds, inklusive der betroffenen Geschäftsprozesse, Standorte und Anwendungen."]
+        source_categories = ['Informationsverbund', 'Strukturanalyse']
+        gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
         
-        context = self.rag_client.get_context_for_query(
-            queries,
-            source_categories=['Informationsverbund', 'Strukturanalyse']
-        )
-        
-        if "No relevant context found" in context:
-            logging.warning("No RAG context found for Informationsverbund. Generating deterministic response.")
+        if not gcs_uris:
+            logging.warning(f"No documents found for categories {source_categories}. Generating deterministic response.")
             return {
                 "kurzbezeichnung": "Nicht ermittelt",
                 "kurzbeschreibung": "Der Geltungsbereich des Informationsverbunds konnte aus den bereitgestellten Dokumenten nicht eindeutig ermittelt werden. Dies muss manuell geklärt und dokumentiert werden.",
                 "finding": {
                     "category": "AS",
-                    "description": "Die Abgrenzung des Geltungsbereichs ist unklar, da keine Dokumente gefunden wurden, die diesen beschreiben. Dies ist eine schwerwiegende Abweichung, die vor dem Audit geklärt werden muss."
+                    "description": "Die Abgrenzung des Geltungsbereichs ist unklar, da keine Dokumente der Kategorien 'Informationsverbund' oder 'Strukturanalyse' gefunden wurden. Dies ist eine schwerwiegende Abweichung."
                 }
             }
             
-        # This uses a new combined prompt/schema for 1.4
         prompt_template = self._load_asset_text("assets/prompts/stage_1_4_informationsverbund.txt")
         schema = self._load_asset_json("assets/schemas/stage_1_4_informationsverbund_schema.json")
         
-        prompt = prompt_template.format(context=context)
-        return await self.ai_client.generate_json_response(prompt, schema)
+        # The prompt no longer needs context formatted in, as the files are attached directly.
+        return await self.ai_client.generate_json_response(prompt_template, schema, gcs_uris)
 
     async def run(self) -> dict:
         """Executes the generation logic for Chapter 1."""

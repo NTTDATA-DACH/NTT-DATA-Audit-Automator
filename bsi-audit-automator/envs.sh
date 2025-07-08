@@ -68,9 +68,6 @@ set +e
 echo "✅ Environment variables configured successfully'."
 echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
 echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
-if [ -n "$INDEX_ENDPOINT_PUBLIC_DOMAIN" ]; then
-    echo "   - PUBLIC_ENDPOINT: ${INDEX_ENDPOINT_PUBLIC_DOMAIN}"
-fi
 echo "   - TEST mode:      ${TEST}"
 echo ""
 echo "👉 A new command 'bsi-auditor' is now available in your shell."

@@ -4,9 +4,4 @@ google-cloud-aiplatform
 
 # For local development, to load .env files
 python-dotenv
-
-# For data processing and validation
-PyMuPDF # A lightweight, fast library for PDF processing with no system dependencies
-langchain # For document chunking logic
-langchain-community # Required for UnstructuredFileLoader
 jsonschema # For validating AI model outputs

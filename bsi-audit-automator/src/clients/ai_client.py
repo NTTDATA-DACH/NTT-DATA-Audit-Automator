@@ -3,22 +3,16 @@ import logging
 import json
 import asyncio
 import time
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 from google.cloud import aiplatform
-from vertexai.language_models import TextEmbeddingModel
 from google.api_core import exceptions as api_core_exceptions
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from vertexai.language_models import TextEmbeddingInput
-from google.cloud.aiplatform_v1.types import IndexDatapoint
+from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 
 from src.config import AppConfig
 
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
-EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 MAX_RETRIES = 5
-# The Gemini embedding model has a batch size limit.
-EMBEDDING_BATCH_SIZE = 250
 
 
 class AiClient:
@@ -28,47 +22,22 @@ class AiClient:
         self.config = config
         aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
         self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
-        self.embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
-    def get_embeddings(self, texts: List[str]) -> Tuple[bool, List[List[float]]]:
-        if not texts:
-            return True, []
-
-        all_embeddings = []
-        is_gemini = EMBEDDING_MODEL_NAME.startswith("gemini-embedding")
-        task_type = "RETRIEVAL_DOCUMENT"
-
-        for idx, text in enumerate(texts, start=1):
-            for attempt in range(MAX_RETRIES):
-                try:
-                    if is_gemini:
-                        text_input = TextEmbeddingInput(text, task_type)
-                        response = self.embedding_model.get_embeddings([text_input])
-                    else:
-                        # gecko & Co. können mehrere Texte
-                        batch_start = (idx - 1) // EMBEDDING_BATCH_SIZE * EMBEDDING_BATCH_SIZE
-                        batch_end   = batch_start + EMBEDDING_BATCH_SIZE
-                        batch_texts = texts[batch_start:batch_end]
-                        response = self.embedding_model.get_embeddings(batch_texts)
-
-                    all_embeddings.extend([emb.values for emb in response])
-                    break  # success
-                except api_core_exceptions.GoogleAPICallError as e:
-                    time.sleep(2 ** attempt)
-                except Exception as e:
-                    time.sleep(2 ** attempt)
-                    if attempt == MAX_RETRIES - 1:
-                        return False, all_embeddings
-
-        return True, all_embeddings
-
-
-    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None) -> Dict[str, Any]:
         """
-        Generates a JSON response from the AI model, enforcing a specific schema.
-        Implements an async retry loop with exponential backoff and connection limiting.
+        Generates a JSON response from the AI model, enforcing a specific schema and
+        optionally providing GCS files as context. Implements an async retry loop
+        with exponential backoff and connection limiting.
+
+        Args:
+            prompt: The text prompt for the model.
+            json_schema: The JSON schema to enforce on the model's output.
+            gcs_uris: A list of 'gs://...' URIs pointing to PDF files for context.
+
+        Returns:
+            The parsed JSON response from the model.
         """
         try:
             schema_for_api = json.loads(json.dumps(json_schema))
@@ -84,13 +53,22 @@ class AiClient:
             temperature=0.2,
         )
 
+        # Build the content list for the API call
+        contents = [prompt]
+        if gcs_uris:
+            for uri in gcs_uris:
+                # Assuming all provided documents are PDFs
+                contents.append(Part.from_uri(uri, mime_type="application/pdf"))
+            if self.config.is_test_mode:
+                logging.info(f"Attaching {len(gcs_uris)} GCS files to the prompt.")
+
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
                     if self.config.is_test_mode:
                         logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
                     response = await self.generative_model.generate_content_async(
-                        contents=[prompt],
+                        contents=contents,
                         generation_config=gen_config,
                     )
                     
