@@ -49,6 +49,7 @@ class Chapter3Runner:
 
     def __init__(self, config: AppConfig, ai_client: AiClient, rag_client: RagClient):
         self.config = config
+        self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
