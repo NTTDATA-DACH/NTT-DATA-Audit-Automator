@@ -71,32 +71,35 @@ class AiClient:
                         contents=contents,
                         generation_config=gen_config,
                     )
-                    
+
                     if not response.candidates:
                         raise ValueError("The model response contained no candidates.")
-                    
+
                     finish_reason = response.candidates[0].finish_reason.name
                     if finish_reason not in ["STOP", "MAX_TOKENS"]:
-                        logging.warning(f"Attempt {attempt+1} finished with non-OK reason: '{finish_reason}'. Retrying...")
-                        await asyncio.sleep(2 ** attempt)
-                        continue
-                    
+                        # Raise an exception to be caught by the generic handler below,
+                        # which will trigger the retry-with-backoff logic.
+                        raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
+
                     response_json = json.loads(response.text)
                     if self.config.is_test_mode:
                         logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
-                except api_core_exceptions.GoogleAPICallError as e:
+                except (api_core_exceptions.GoogleAPICallError, Exception) as e:
                     wait_time = 2 ** attempt
-                    logging.warning(f"Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}). Retrying in {wait_time}s...")
-                except Exception as e:
-                    wait_time = 2 ** attempt
-                    logging.error(f"Generation attempt {attempt + 1} failed with a non-API exception. Retrying in {wait_time}s...", exc_info=True)
-                
-                if attempt == MAX_RETRIES - 1:
-                    logging.critical("AI generation failed after all retries.", exc_info=True)
-                    raise
-                
-                await asyncio.sleep(2 ** attempt)
-        
-        raise RuntimeError("AI generation failed after all retries without raising a final exception.")
+                    # If this was the last attempt, log critical error and re-raise the exception.
+                    if attempt == MAX_RETRIES - 1:
+                        logging.critical(f"AI generation failed after all {MAX_RETRIES} retries.", exc_info=True)
+                        raise # This is now inside the except block and will correctly re-raise 'e'.
+
+                    # Log the appropriate warning for the current attempt.
+                    if isinstance(e, api_core_exceptions.GoogleAPICallError):
+                        logging.warning(f"Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}). Retrying in {wait_time}s...")
+                    else:
+                        logging.warning(f"Generation attempt {attempt + 1} failed with an exception: {e}. Retrying in {wait_time}s...")
+
+                    await asyncio.sleep(wait_time)
+
+        # This line should not be reachable if the loop logic is correct, but serves as a fallback.
+        raise RuntimeError("AI generation failed unexpectedly after exhausting all retries.")
