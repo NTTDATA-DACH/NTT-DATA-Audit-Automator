@@ -610,7 +610,15 @@
         "einzelergebnisseDerRisikoanalyse": {
             "title": "Einzelergebnisse der Risikoanalyse",
             "subchapterNumber": "5.6.2",
-            "massnahmenPruefungen": []
+            "massnahmenPruefungen": [
+              {
+                "massnahme": "",
+                "zielobjekt": "",
+                "bewertung": "",
+                "pruefmethode": { "D": false, "I": false, "C": false, "S": false, "A": false, "B": false },
+                "auditfeststellung": ""
+              }
+            ]
         },
         "ergebnisDerRisikoanalyse": {
             "title": "Ergebnis Risikoanalyse",

@@ -123,8 +123,9 @@ class Chapter5Runner:
                 "massnahme": measure.get("Maßnahme", "N/A"),
                 "zielobjekt": measure.get("Zielobjekt", "N/A"),
                 "bewertung": "",
-                "auditfeststellung": "",
-                "abweichungen": ""
+                "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
+                "auditfeststellung": "", # To be filled by auditor
+                "abweichungen": "" # To be filled by auditor
             })
             
         logging.info(f"Generated checklist with {len(massnahmen_pruefungen_list)} risk analysis measures.")

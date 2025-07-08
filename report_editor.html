@@ -338,7 +338,8 @@
                 chapterDiv.className = 'chapter';
                 chapterDiv.dataset.chapterKey = key;
                 
-                if(chapterData.title) chapterDiv.innerHTML += `<h2>${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
+                const anchorId = (key === 'anhang') ? 'id="chapter-7-anchor"' : '';
+                if(chapterData.title) chapterDiv.innerHTML += `<h2 ${anchorId}>${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
                 for (const subKey in chapterData) {
@@ -478,8 +479,11 @@
                         const rowPath = `${path}.rows[${rowIndex}]`;
                         tableData.headers.forEach(header => {
                             const cell = row.insertCell();
-                            const input = createInputField(null, rowData[header] || '', 'text', `${rowPath}.${header}`);
-                            cell.appendChild(input.querySelector('input')); // append only the input
+                            const cellPath = `${rowPath}.${header}`;
+                            const input = document.createElement('textarea');
+                            input.dataset.path = cellPath;
+                            input.value = getValueByPath(reportData, cellPath) || '';
+                            cell.appendChild(input);
                         });
                         if (path.includes("anhang.abweichungen")) {
                             const actionCell = row.insertCell();
@@ -578,26 +582,51 @@
                 return container;
             }
 
-
             function renderMassnahmenPruefung(pruefungen, path) {
                 const container = document.createElement('div');
-                const table = document.createElement('table');
-                table.innerHTML = `<thead><tr><th>Maßnahme</th><th>Zielobjekt</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
-                const tbody = table.createTBody();
                 if (Array.isArray(pruefungen)) {
-                    pruefungen.forEach((massnahme, mIndex) => {
-                        const mPath = `${path}[${mIndex}]`;
-                        const row = tbody.insertRow();
-                        row.insertCell().appendChild(createInputField(null, massnahme.massnahme, 'text', `${mPath}.massnahme`));
-                        row.insertCell().appendChild(createInputField(null, massnahme.zielobjekt, 'text', `${mPath}.zielobjekt`));
-                        row.insertCell().appendChild(createInputField(null, massnahme.bewertung, 'text', `${mPath}.bewertung`));
-                        row.insertCell().appendChild(createInputField(null, massnahme.auditfeststellung, 'text', `${mPath}.auditfeststellung`));
-                        row.insertCell().appendChild(createInputField(null, massnahme.abweichungen, 'text', `${mPath}.abweichungen`));
+                    pruefungen.forEach((massnahme, index) => {
+                        const mPath = `${path}[${index}]`;
+                        const mBlock = document.createElement('div');
+                        mBlock.className = 'anforderung-block'; // Reuse the same styling
+
+                        mBlock.appendChild(createReadOnlyField('Maßnahme', massnahme.massnahme));
+                        mBlock.appendChild(createReadOnlyField('Zielobjekt', massnahme.zielobjekt));
+                        
+                        // Editable Bewertung for risk measures
+                        mBlock.appendChild(createInputField('Bewertung', massnahme.bewertung, 'text', `${mPath}.bewertung`));
+
+                        // Prüfmethode Checkboxes
+                        const pmGroup = document.createElement('div');
+                        pmGroup.className = 'pruefmethode-group';
+                        pmGroup.innerHTML = '<label>Prüfmethode:</label>';
+                        const pruefmethoden = massnahme.pruefmethode || {};
+                        ['D', 'I', 'C', 'S', 'A', 'B'].forEach(method => {
+                            const checkWrapper = document.createElement('div');
+                            checkWrapper.className = 'form-check-inline';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'form-check-input';
+                            checkbox.checked = !!pruefmethoden[method];
+                            checkbox.dataset.path = `${mPath}.pruefmethode.${method}`;
+                            const checkLabel = document.createElement('label');
+                            checkLabel.className = 'form-check-label';
+                            checkLabel.textContent = method;
+                            checkWrapper.appendChild(checkbox);
+                            checkWrapper.appendChild(checkLabel);
+                            pmGroup.appendChild(checkWrapper);
+                        });
+                        mBlock.appendChild(pmGroup);
+
+                        mBlock.appendChild(createTextArea('Auditfeststellung im Detail', massnahme.auditfeststellung, `${mPath}.auditfeststellung`));
+                        mBlock.appendChild(createTextArea('Abweichungen und Empfehlungen', massnahme.abweichungen, `${mPath}.abweichungen`, true, { anforderungId: massnahme.massnahme, baustein: 'Risikoanalyse' }));
+                        
+                        container.appendChild(mBlock);
                     });
                 }
-                container.appendChild(table);
                 return container;
             }
+
 
             function handleAddRow(button) {
                 syncUiToData();
@@ -637,35 +666,50 @@
                     alert("Ungültige Kategorie. Bitte geben Sie AG, AS oder E ein.");
                     return;
                 }
+                
+                let targetArray, idPrefix, descriptionKey;
 
-                const newFinding = {
-                    "Nr.": `Manual-${Date.now()}`,
-                    "Beschreibung der Abweichung": `[${context.anforderungId}] ${findingText}`,
-                    "Quelle (Kapitel)": `5.5.2 (${context.baustein})`,
-                    "Behebungsfrist": "30 Tage nach Audit",
-                    "Status": "Offen"
-                };
-
-                let targetArray;
                 if (category === 'AG') {
                     targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows');
+                    idPrefix = 'AG';
+                    descriptionKey = "Beschreibung der Abweichung";
                 } else if (category === 'AS') {
                     targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows');
+                    idPrefix = 'AS';
+                    descriptionKey = "Beschreibung der Abweichung";
                 } else { // 'E'
-                    newFinding["Beschreibung der Empfehlung"] = newFinding["Beschreibung der Abweichung"];
-                    delete newFinding["Beschreibung der Abweichung"];
-                    newFinding["Status"] = "Zur Umsetzung empfohlen";
                     targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows');
+                    idPrefix = 'E';
+                    descriptionKey = "Beschreibung der Empfehlung";
                 }
                 
                 if (Array.isArray(targetArray)) {
+                    const existingNumbers = targetArray.map(item => {
+                        const nr = item['Nr.'] || '';
+                        const match = nr.match(new RegExp(`^${idPrefix}-(\\d+)$`));
+                        return match ? parseInt(match[1], 10) : 0;
+                    });
+                    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+                    const nextIdNumber = maxNumber + 1;
+                    const newId = `${idPrefix}-${nextIdNumber}`;
+
+                    const newFinding = {
+                        "Nr.": newId,
+                        [descriptionKey]: `[${context.anforderungId}] ${findingText}`,
+                        "Quelle (Kapitel)": `5.x (${context.baustein})`,
+                        "Behebungsfrist": category !== 'E' ? "30 Tage nach Audit" : "N/A",
+                        "Status": category !== 'E' ? "Offen" : "Zur Umsetzung empfohlen"
+                    };
+
                     targetArray.push(newFinding);
-                    textarea.value = ''; // Clear the textarea
-                    setValueByPath(reportData, textarea.dataset.path, ''); // Update data model
-                    alert(`Feststellung wurde zur Tabelle '${category}' im Anhang hinzugefügt.`);
-                    renderReport(reportData); // Re-render the whole report
-                    // Jump to chapter 7
-                    setTimeout(() => window.location.hash = "chapter-7-anchor", 100); 
+                    textarea.value = '';
+                    setValueByPath(reportData, textarea.dataset.path, '');
+                    alert(`Feststellung '${newId}' wurde zur Tabelle '${category}' im Anhang hinzugefügt.`);
+                    renderReport(reportData);
+                    setTimeout(() => {
+                        const anchor = document.getElementById('chapter-7-anchor');
+                        if (anchor) anchor.scrollIntoView({ behavior: 'smooth' });
+                    }, 100); 
                 }
             }
 
@@ -693,9 +737,8 @@
                 const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
                 let current = obj;
                 for (let i = 0; i < keys.length - 1; i++) {
-                    const key = keys[i];
+                     const key = keys[i];
                     if (current[key] === undefined || typeof current[key] !== 'object' || current[key] === null) {
-                         // Look ahead to see if the next key is a number, to create an array if needed
                         const nextKey = keys[i+1];
                         current[key] = /^\d+$/.test(nextKey) ? [] : {};
                     }
@@ -714,13 +757,6 @@
                 document.body.appendChild(downloadAnchorNode);
                 downloadAnchorNode.click();
                 downloadAnchorNode.remove();
-            }
-
-            // Add an ID to Chapter 7 for jump-to functionality
-            function renderChapter7(data) { // This is a helper, but we need to ensure the main render uses it.
-                 let html = `<h2 id="chapter-7-anchor">7. Anhang</h2>`; // Add anchor ID
-                 // ... rest of the rendering logic
-                 return html;
             }
 
         });
