@@ -1,359 +1,729 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSI Audit Report Editor</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; }
-        h1, h2, h3, h4, h5 { color: #003366; }
-        h1 { text-align: center; margin-bottom: 2rem; }
-        h2 { border-bottom: 2px solid #003366; padding-bottom: 10px; margin-top: 2rem; }
-        h3 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 1.5rem; }
-        .container { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 1rem; }
-        label { display: block; font-weight: bold; margin-bottom: .5rem; color: #555; }
-        input[type="text"], input[type="date"], textarea, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        textarea { min-height: 100px; resize: vertical; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #e9ecef; }
-        .button-group { text-align: center; margin: 2rem 0; }
-        button { background-color: #003366; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; margin: 0 10px; }
-        button:hover { background-color: #0055a4; }
-        #file-input { display: none; }
-        .file-label { display: inline-block; background-color: #6c757d; color: white; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
-        .file-label:hover { background-color: #5a6268; }
-        .chapter-nav { text-align: center; margin-bottom: 2rem; padding: 1rem; background-color: #e9ecef; border-radius: 4px; }
-        .chapter-nav a { margin: 0 15px; text-decoration: none; color: #003366; font-weight: bold; }
-        .chapter-nav a:hover { text-decoration: underline; }
-        .question-block { border-left: 4px solid #0055a4; padding-left: 15px; margin-top: 1rem; background-color: #f4f8ff; padding: 1rem; border-radius: 4px;}
-        .finding-block { border-left: 4px solid #ffc107; padding-left: 15px; margin-top: 1rem; background-color: #fffaf0; padding: 1rem; border-radius: 4px;}
-        .baustein-block { border: 2px solid #003366; border-radius: 8px; padding: 1.5rem; margin-top: 2rem; background-color: #fff; }
-        .anforderung-block { border: 1px solid #ccc; border-radius: 4px; padding: 1rem; margin-top: 1.5rem; background-color: #f8f9fa; }
-        .pruefmethode-group { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-        .pruefmethode-group .form-check-inline { display: flex; align-items: center; gap: 5px; }
-        .form-check-input { width: auto; }
+        :root {
+            --primary-color: #003359;
+            --secondary-color: #0073e6;
+            --background-color: #f4f7fa;
+            --text-color: #333;
+            --border-color: #d1d9e6;
+            --header-bg: #fff;
+            --card-bg: #fff;
+            --button-bg: #005cbf;
+            --button-hover-bg: #004a99;
+            --danger-color: #d93025;
+            --danger-hover-color: #a52714;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--header-bg);
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--primary-color);
+            font-size: 1.8em;
+        }
+        #controls { display: flex; align-items: center; gap: 15px; }
+        #controls button, #controls input[type="file"]::file-selector-button {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        #controls button:hover, #controls input[type="file"]::file-selector-button:hover { background-color: var(--button-hover-bg); }
+        #controls button:disabled { background-color: #999; cursor: not-allowed; }
+        
+        #chapter-filter-buttons { margin-top: 10px; padding-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; }
+        #chapter-filter-buttons button { background-color: var(--secondary-color); }
+        #chapter-filter-buttons button:hover { background-color: var(--primary-color); }
+
+        .chapter {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-top: 25px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .chapter h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .subchapter {
+            margin-top: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #eef;
+        }
+        h3 { color: var(--primary-color); font-weight: 600; }
+        h4 { color: #555; }
+        p.description { color: #555; font-style: italic; }
+        
+        .content-item, .prose-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #f0f0f0;
+            border-radius: 4px;
+        }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; }
+        input[type="text"], input[type="date"], select, textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 1em;
+        }
+        textarea { min-height: 80px; resize: vertical; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        td input, td select { padding: 4px; width: 100%; box-sizing: border-box;}
+        .action-cell { width: 80px; text-align: center; }
+        .delete-row-btn, .add-row-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .delete-row-btn:hover { background-color: var(--danger-hover-color); }
+        .add-row-btn {
+            background-color: var(--button-bg);
+            margin-top: 10px;
+        }
+        .add-row-btn:hover { background-color: var(--button-hover-bg); }
+
+        fieldset.baustein-pruefung {
+            border: 1px solid var(--secondary-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        fieldset.baustein-pruefung legend {
+            font-weight: bold;
+            color: var(--primary-color);
+            padding: 0 10px;
+        }
+
+        /* STYLES FOR CHAPTER 5.5.2 and read-only fields */
+        .anforderung-block {
+            border: 1px solid #e0e0e0;
+            background-color: #fdfdfd;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        .read-only-field {
+            background-color: #e9ecef;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            min-height: 1.5em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .pruefmethode-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+        .pruefmethode-group label:first-child {
+            font-weight: bold;
+            margin-bottom: 0;
+        }
+        .form-check-inline {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .form-check-inline label {
+            font-weight: normal; 
+            margin-bottom: 0;
+        }
+        .form-check-inline input[type="checkbox"] {
+            width: auto;
+            height: 1em;
+            width: 1em;
+        }
+
+
+        #report-container { padding-top: 20px; }
+        #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>BSI Grundschutz Auditbericht Editor</h1>
-
-        <div class="button-group">
-            <label for="file-input" class="file-label">Laden Sie die JSON-Datei</label>
-            <input type="file" id="file-input" accept=".json">
-            <button id="save-button">Speichern Sie die JSON-Datei</button>
+    <header>
+        <h1>BSI Audit Report Editor</h1>
+        <div id="controls">
+            <input type="file" id="json-file-input" accept=".json">
+            <button id="export-json-button" disabled>Export to JSON</button>
         </div>
-        <p id="file-name" style="text-align:center;"></p>
+    </header>
 
-        <nav id="chapter-nav" class="chapter-nav" style="display:none;"></nav>
-
-        <form id="report-form">
-            <!-- Content will be injected here -->
-        </form>
+    <div class="container">
+        <div id="chapter-filter-buttons"></div>
+        <div id="report-container">
+            <p id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</p>
+        </div>
     </div>
 
     <script>
-        let jsonData = {};
-        const form = document.getElementById('report-form');
-        const fileInput = document.getElementById('file-input');
-        const saveButton = document.getElementById('save-button');
-        const fileNameDisplay = document.getElementById('file-name');
-        const chapterNav = document.getElementById('chapter-nav');
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('json-file-input');
+            const exportButton = document.getElementById('export-json-button');
+            const reportContainer = document.getElementById('report-container');
+            const filterContainer = document.getElementById('chapter-filter-buttons');
+            const initialMessage = document.getElementById('initial-message');
 
-        // Helper function to get nested properties
-        function get(obj, path, defaultValue = undefined) {
-            const keys = Array.isArray(path) ? path : path.split('.');
-            let result = obj;
-            for (const key of keys) {
-                if (result === null || result === undefined) return defaultValue;
-                result = result[key];
-            }
-            return result === undefined ? defaultValue : result;
-        }
+            let reportData = null;
+            let findingInputTimeout = null;
 
-        // Helper function to set nested properties
-        function set(obj, path, value) {
-            const keys = Array.isArray(path) ? path : path.split('.');
-            let current = obj;
-            for (let i = 0; i < keys.length - 1; i++) {
-                const key = keys[i];
-                if (current[key] === undefined || typeof current[key] !== 'object' || current[key] === null) {
-                    current[key] = {};
+            fileInput.addEventListener('change', handleFileSelect);
+            exportButton.addEventListener('click', handleExport);
+            
+            reportContainer.addEventListener('click', (event) => {
+                if (event.target.classList.contains('add-row-btn')) {
+                    handleAddRow(event.target);
                 }
-                current = current[key];
-            }
-            current[keys[keys.length - 1]] = value;
-        }
+                if (event.target.classList.contains('delete-row-btn')) {
+                    handleDeleteRow(event.target);
+                }
+            });
 
-        fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
+            // Listen for input on finding textareas
+            reportContainer.addEventListener('input', (event) => {
+                if (event.target.matches('[data-finding-source="true"]')) {
+                    clearTimeout(findingInputTimeout);
+                    findingInputTimeout = setTimeout(() => {
+                        handleFindingInput(event.target);
+                    }, 2000); // Wait 2 seconds after user stops typing
+                }
+            });
+
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
-                        jsonData = JSON.parse(e.target.result);
-                        fileNameDisplay.textContent = `Geladen: ${file.name}`;
-                        renderForm();
+                        reportData = JSON.parse(e.target.result);
+                        console.log('[DEBUG] Successfully parsed JSON file. Full data object:', JSON.parse(JSON.stringify(reportData)));
+                        initialMessage.style.display = 'none';
+                        renderReport(reportData);
+                        createFilterButtons(reportData);
+                        exportButton.disabled = false;
                     } catch (error) {
-                        alert('Fehler beim Parsen der JSON-Datei: ' + error);
+                        alert('Error parsing JSON file: ' + error.message);
+                        console.error("JSON Parsing Error:", error);
                     }
                 };
                 reader.readAsText(file);
             }
-        });
-
-        saveButton.addEventListener('click', () => {
-            updateJson();
-            const dataStr = JSON.stringify(jsonData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'final_audit_report_edited.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        });
-
-        function updateJson() {
-            const elements = form.querySelectorAll('[data-path]');
-            elements.forEach(element => {
-                let value;
-                if (element.type === 'checkbox') {
-                    value = element.checked;
-                } else if (element.tagName === 'SELECT') {
-                    value = element.value === "true" ? true : (element.value === "false" ? false : element.value);
-                } else {
-                    value = element.value;
-                }
-                set(jsonData, element.dataset.path, value);
-            });
-        }
-        
-        form.addEventListener('change', updateJson);
-
-        function renderForm() {
-            if (!jsonData.bsiAuditReport) {
-                form.innerHTML = '<p>Ungültige JSON-Struktur. "bsiAuditReport"-Schlüssel nicht gefunden.</p>';
-                return;
-            }
-            const chapters = {
-                '1': 'Allgemeines',
-                '2': 'Voraudit',
-                '3': 'Dokumentenprüfung',
-                '4': 'Erstellung eines Prüfplans',
-                '5': 'Vor-Ort-Audit',
-                '6': 'Gesamtvotum',
-                '7': 'Anhang'
-            };
-            chapterNav.innerHTML = '';
-            Object.entries(chapters).forEach(([num, title]) => {
-                chapterNav.innerHTML += `<a href="#chapter-${num}">${num}. ${title}</a>`;
-            });
-            chapterNav.style.display = 'block';
-
-            let html = '';
-            html += renderChapter1(get(jsonData, 'bsiAuditReport.allgemeines', {}));
-            html += renderChapter3(get(jsonData, 'bsiAuditReport.dokumentenpruefung', {}));
-            html += renderChapter4(get(jsonData, 'bsiAuditReport.erstellungEinesPruefplans', {}));
-            html += renderChapter5(get(jsonData, 'bsiAuditReport.vorOrtAudit', {}));
-            html += renderChapter7(get(jsonData, 'bsiAuditReport.anhang', {}));
-            form.innerHTML = html;
-        }
-        
-        function createTextInput(label, path, value) {
-            return `
-                <div class="form-group">
-                    <label for="${path}">${label}</label>
-                    <input type="text" id="${path}" data-path="${path}" value="${value || ''}">
-                </div>`;
-        }
-        
-        function createTextArea(label, path, value) {
-            return `
-                <div class="form-group">
-                    <label for="${path}">${label}</label>
-                    <textarea id="${path}" data-path="${path}">${value || ''}</textarea>
-                </div>`;
-        }
-
-        function createTable(tableData, basePath) {
-            if (!tableData || !tableData.headers || !tableData.rows) return '<p>Keine Tabellendaten verfügbar.</p>';
-            let tableHtml = '<table><thead><tr>';
-            tableData.headers.forEach(header => {
-                tableHtml += `<th>${header}</th>`;
-            });
-            tableHtml += '</tr></thead><tbody>';
-
-            tableData.rows.forEach((row, rowIndex) => {
-                tableHtml += '<tr>';
-                tableData.headers.forEach(header => {
-                    const cellPath = `${basePath}.rows[${rowIndex}].${header.replace(/\s+/g, '')}`;
-                    // Special handling for checkboxes or specific inputs can be added here
-                    tableHtml += `<td><textarea data-path="${cellPath}">${row[header] || ''}</textarea></td>`;
-                });
-                tableHtml += '</tr>';
-            });
-            tableHtml += '</tbody></table>';
-            return tableHtml;
-        }
-
-        function createQuestionBlock(questions, basePath) {
-             let html = '';
-             questions.forEach((q, index) => {
-                if (q.type === 'question') {
-                    html += `<div class="question-block">
-                        <p><strong>Frage:</strong> ${q.questionText}</p>`;
-                    
-                    const answerPath = `${basePath}.content[${index}].answer`;
-                    const answerValue = get(jsonData, answerPath);
-
-                    if (typeof answerValue === 'boolean' || answerValue === null) {
-                         html += `<div class="form-group">
-                                    <label>Antwort:</label>
-                                    <select data-path="${answerPath}">
-                                        <option value="" ${answerValue === null ? 'selected' : ''}>Bitte wählen</option>
-                                        <option value="true" ${answerValue === true ? 'selected' : ''}>Ja</option>
-                                        <option value="false" ${answerValue === false ? 'selected' : ''}>Nein</option>
-                                    </select>
-                                  </div>`;
+            
+            function syncUiToData() {
+                if (!reportData) return;
+                const inputs = reportContainer.querySelectorAll('[data-path]');
+                inputs.forEach(input => {
+                    if (input.tagName === 'BUTTON') return;
+                    const path = input.dataset.path;
+                    let value;
+                    if (input.type === 'checkbox') {
+                        value = input.checked;
+                    } else if (input.tagName === 'SELECT') {
+                        value = input.value === 'true' ? true : (input.value === 'false' ? false : null);
                     } else {
-                        html += createTextArea('Antwort:', answerPath, answerValue);
+                        value = input.value;
                     }
-                    html += '</div>';
-                } else if (q.type === 'finding') {
-                    const findingPath = `${basePath}.content[${index}].findingText`;
-                    const findingValue = get(jsonData, findingPath, '');
-                     html += `<div class="finding-block">
-                                ${createTextArea('Feststellung:', findingPath, findingValue)}
-                              </div>`;
-                }
-             });
-             return html;
-        }
-
-        function renderChapter1(data) {
-            let html = `<h2 id="chapter-1">1. Allgemeines</h2>`;
-            const infoVerbund = get(data, 'informationsverbund.content', []);
-            html += `<h3>1.4 Informationsverbund</h3>`;
-            html += createTextArea('Kurzbezeichnung:', `bsiAuditReport.allgemeines.informationsverbund.content[0].text`, get(infoVerbund, '[0].text', ''));
-            html += createTextArea('Kurzbeschreibung (Geltungsbereich):', `bsiAuditReport.allgemeines.informationsverbund.content[1].text`, get(infoVerbund, '[1].text', ''));
-            return html;
-        }
-
-        function renderChapter3(data) {
-            let html = `<h2 id="chapter-3">3. Dokumentenprüfung</h2>`;
-            for (const subChapterKey in data) {
-                const subChapterData = data[subChapterKey];
-                if (typeof subChapterData === 'object' && subChapterData !== null && subChapterData.title) {
-                     html += `<h3>${subChapterData.subchapterNumber} ${subChapterData.title}</h3>`;
-                     const basePath = `bsiAuditReport.dokumentenpruefung.${subChapterKey}`;
-
-                     if (subChapterData.content) {
-                        html += createQuestionBlock(subChapterData.content, basePath);
-                     }
-                     
-                     // Handle nested sub-sub-chapters like in 3.3
-                     for(const sectionKey in subChapterData) {
-                         const sectionData = subChapterData[sectionKey];
-                         if (typeof sectionData === 'object' && sectionData !== null && sectionData.title) {
-                            html += `<h4>${sectionData.subchapterNumber} ${sectionData.title}</h4>`;
-                            const sectionBasePath = `${basePath}.${sectionKey}`;
-                            if(sectionData.content) {
-                                html += createQuestionBlock(sectionData.content, sectionBasePath);
-                            }
-                         }
-                     }
-                }
+                    setValueByPath(reportData, path, value);
+                });
             }
-            return html;
-        }
-        
-        function renderChapter4(data) {
-            let html = `<h2 id="chapter-4">4. Erstellung eines Prüfplans</h2>`;
-            const auditplanung = get(data, 'auditplanung', {});
-            for(const key in auditplanung) {
-                const section = auditplanung[key];
-                 if (typeof section === 'object' && section !== null && section.title && section.table) {
-                    html += `<h3>${section.subchapterNumber} ${section.title}</h3>`;
-                    html += createTable(section.table, `bsiAuditReport.erstellungEinesPruefplans.auditplanung.${key}.table`);
-                 }
+
+            function createFilterButtons(data) {
+                filterContainer.innerHTML = '';
+                const chapters = data?.bsiAuditReport || {};
+                const allButton = document.createElement('button');
+                allButton.textContent = 'Show All';
+                allButton.onclick = () => filterView('all');
+                filterContainer.appendChild(allButton);
+
+                Object.keys(chapters).forEach(key => {
+                    if (typeof chapters[key] === 'object' && chapters[key]?.title) {
+                        const button = document.createElement('button');
+                        button.textContent = `${chapters[key].chapterNumber || ''} ${chapters[key].title}`;
+                        button.onclick = () => filterView(key);
+                        filterContainer.appendChild(button);
+                    }
+                });
             }
-            return html;
-        }
 
-        function renderChapter5(data) {
-            let html = `<h2 id="chapter-5">5. Vor-Ort-Audit</h2>`;
-            const verificCtn = get(data, 'verifikationDesITGrundschutzChecks.einzelergebnisse', {});
-            html += `<h3>5.5.2 Einzelergebnisse des IT-Grundschutz-Checks</h3>`;
+            function filterView(chapterKey) {
+                const allChapters = reportContainer.querySelectorAll('.chapter');
+                allChapters.forEach(chapter => {
+                    if (chapterKey === 'all' || chapter.dataset.chapterKey === chapterKey) {
+                        chapter.style.display = 'block';
+                    } else {
+                        chapter.style.display = 'none';
+                    }
+                });
+            }
 
-            const bausteinPruefungen = get(verificCtn, 'bausteinPruefungen', []);
-            bausteinPruefungen.forEach((bp, bpIndex) => {
-                const bpBasePath = `bsiAuditReport.vorOrtAudit.verifikationDesITGrundschutzChecks.einzelergebnisse.bausteinPruefungen[${bpIndex}]`;
-                html += `<div class="baustein-block">`;
-                html += createTextInput('Baustein:', `${bpBasePath}.baustein`, bp.baustein);
-                html += createTextInput('bezogen auf Zielobjekt:', `${bpBasePath}.bezogenAufZielobjekt`, bp.bezogenAufZielobjekt);
-                html += createTextInput('Auditiert am:', `${bpBasePath}.auditiertAm`, bp.auditiertAm);
-                html += createTextInput('Auditor(en):', `${bpBasePath}.auditor`, bp.auditor);
-                html += createTextInput('Befragt wurde:', `${bpBasePath}.befragtWurde`, bp.befragtWurde);
+            function renderReport(data) {
+                const currentScroll = window.scrollY;
+                reportContainer.innerHTML = ''; 
+                const report = data.bsiAuditReport;
+                if (!report) return;
 
-                if (bp.anforderungen) {
-                    bp.anforderungen.forEach((anf, anfIndex) => {
-                        const anfBasePath = `${bpBasePath}.anforderungen[${anfIndex}]`;
-                        html += `<div class="anforderung-block">`;
-                        html += `<h4>Anforderung: ${anf.nummer || ''}</h4>`;
-                        html += createTextArea('Anforderungstext:', `${anfBasePath}.anforderung`, anf.anforderung);
-                        html += createTextInput('Bewertung der Anforderung:', `${anfBasePath}.bewertung`, anf.bewertung);
-                        html += createTextArea('Dokumentation des Antragstellers zur Umsetzung dieser Anforderung:', `${anfBasePath}.dokuAntragsteller`, anf.dokuAntragsteller);
-                        
-                        // Prüfmethode Checkboxes
-                        html += `<div class="form-group pruefmethode-group"><label>Prüfmethode:</label>`;
-                        const pruefmethoden = get(anf, 'pruefmethode', {});
-                        ['D', 'I', 'C', 'S', 'A', 'B'].forEach(method => {
-                            const checked = pruefmethoden[method] ? 'checked' : '';
-                            html += `<div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" ${checked} data-path="${anfBasePath}.pruefmethode.${method}">
-                                        <label class="form-check-label">${method}</label>
-                                     </div>`;
+                for (const key in report) {
+                    const chapterData = report[key];
+                    if (typeof chapterData === 'object' && chapterData !== null) {
+                         reportContainer.appendChild(renderChapter(key, chapterData, `bsiAuditReport.${key}`));
+                    }
+                }
+                window.scrollTo(0, currentScroll);
+            }
+            
+            function renderChapter(key, chapterData, path) {
+                const chapterDiv = document.createElement('div');
+                chapterDiv.className = 'chapter';
+                chapterDiv.dataset.chapterKey = key;
+                
+                if(chapterData.title) chapterDiv.innerHTML += `<h2>${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
+                if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
+
+                for (const subKey in chapterData) {
+                    if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
+                         chapterDiv.appendChild(renderSection(subKey, chapterData[subKey], `${path}.${subKey}`));
+                    }
+                }
+                return chapterDiv;
+            }
+
+            function renderSection(key, sectionData, path) {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'subchapter';
+
+                if (sectionData.title) sectionDiv.innerHTML += `<h3>${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
+                if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
+                
+                const handledKeys = ['title', 'description', 'subchapterNumber'];
+
+                if (Array.isArray(sectionData.content)) {
+                    sectionData.content.forEach((item, index) => {
+                        const itemPath = `${path}.content[${index}]`;
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'content-item';
+                        if (item.type === 'question') {
+                            itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
+                        } else if (item.type === 'finding') {
+                            itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
+                        } else if (item.type === 'prose') {
+                            itemDiv.appendChild(createTextArea(item.label, item.text, `${itemPath}.text`));
+                        }
+                        sectionDiv.appendChild(itemDiv);
+                    });
+                    handledKeys.push('content');
+                }
+                
+                if (sectionData.table) {
+                    sectionDiv.appendChild(renderTable(sectionData.table, `${path}.table`));
+                    handledKeys.push('table');
+                }
+                
+                if (Array.isArray(sectionData.bausteinPruefungen)) {
+                    sectionDiv.appendChild(renderBausteinPruefung(sectionData.bausteinPruefungen, `${path}.bausteinPruefungen`));
+                    handledKeys.push('bausteinPruefungen');
+                } else if (Array.isArray(sectionData.massnahmenPruefungen)) {
+                    sectionDiv.appendChild(renderMassnahmenPruefung(sectionData.massnahmenPruefungen, `${path}.massnahmenPruefungen`));
+                    handledKeys.push('massnahmenPruefungen');
+                }
+
+                for (const subKey in sectionData) {
+                    if (handledKeys.includes(subKey)) continue;
+
+                    if (typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
+                        sectionDiv.appendChild(renderSection(subKey, sectionData[subKey], `${path}.${subKey}`));
+                    }
+                }
+                return sectionDiv;
+            }
+
+            function createInputField(label, value, type, path) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'content-item';
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const input = document.createElement('input');
+                input.type = type || 'text';
+                input.value = value || '';
+                input.id = path;
+                input.dataset.path = path;
+                wrapper.appendChild(input);
+                return wrapper;
+            }
+
+            function createReadOnlyField(label, value) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'content-item';
+                if (label) wrapper.innerHTML = `<label>${label}</label>`;
+                const div = document.createElement('div');
+                div.className = 'read-only-field';
+                div.textContent = value || 'N/A';
+                wrapper.appendChild(div);
+                return wrapper;
+            }
+
+            function createSelect(label, value, path) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'content-item';
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const select = document.createElement('select');
+                select.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Ja</option><option value="false" ${value === false ? 'selected' : ''}>Nein</option><option value="" ${value === null || value === undefined ? 'selected' : ''}>N/A</option>`;
+                select.id = path;
+                select.dataset.path = path;
+                wrapper.appendChild(select);
+                return wrapper;
+            }
+
+            function createTextArea(label, value, path, isFindingSource = false, context = {}) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'content-item';
+                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+                const textarea = document.createElement('textarea');
+                textarea.id = path;
+                textarea.dataset.path = path;
+                textarea.value = value || '';
+                if (isFindingSource) {
+                    textarea.dataset.findingSource = "true";
+                    for (const key in context) {
+                        textarea.dataset[key] = context[key];
+                    }
+                }
+                wrapper.appendChild(textarea);
+                return wrapper;
+            }
+
+            function renderTable(tableData, path) {
+                const tableContainer = document.createElement('div');
+                if (!tableData || !Array.isArray(tableData.headers)) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.textContent = `Error: Could not render table for ${path}. Data is malformed.`;
+                    return errorDiv;
+                }
+                const table = document.createElement('table');
+                const thead = table.createTHead();
+                const tbody = table.createTBody();
+                const tfoot = table.createTFoot();
+                const headerRow = thead.insertRow();
+                tableData.headers.forEach(headerText => {
+                    const th = document.createElement('th');
+                    th.textContent = headerText;
+                    headerRow.appendChild(th);
+                });
+                if (path.includes("anhang.abweichungen")) {
+                    headerRow.insertCell().className = 'action-cell';
+                }
+                if (Array.isArray(tableData.rows)) {
+                    tableData.rows.forEach((rowData, rowIndex) => {
+                        const row = tbody.insertRow();
+                        const rowPath = `${path}.rows[${rowIndex}]`;
+                        tableData.headers.forEach(header => {
+                            const cell = row.insertCell();
+                            const input = createInputField(null, rowData[header] || '', 'text', `${rowPath}.${header}`);
+                            cell.appendChild(input.querySelector('input')); // append only the input
                         });
-                        html += `</div>`;
-
-                        html += createTextArea('Auditfeststellung im Detail mit Nachweisen:', `${anfBasePath}.auditfeststellung`, anf.auditfeststellung);
-                        html += createTextArea('Es wurden folgende Abweichungen und Empfehlungen identifiziert:', `${anfBasePath}.abweichungen`, anf.abweichungen);
-                        html += `</div>`;
+                        if (path.includes("anhang.abweichungen")) {
+                            const actionCell = row.insertCell();
+                            actionCell.className = 'action-cell';
+                            const deleteBtn = document.createElement('button');
+                            deleteBtn.textContent = 'Delete';
+                            deleteBtn.className = 'delete-row-btn';
+                            deleteBtn.dataset.path = `${path}.rows`;
+                            deleteBtn.dataset.rowIndex = rowIndex;
+                            actionCell.appendChild(deleteBtn);
+                        }
                     });
                 }
-                html += `</div>`;
-            });
-            return html;
-        }
+                if (path.includes("anhang.abweichungen")) {
+                    const footerRow = tfoot.insertRow();
+                    const addCell = footerRow.insertCell();
+                    addCell.colSpan = tableData.headers.length + 1;
+                    const addBtn = document.createElement('button');
+                    addBtn.textContent = '+ Add Row';
+                    addBtn.className = 'add-row-btn';
+                    addBtn.dataset.path = `${path}.rows`;
+                    addBtn.dataset.headers = JSON.stringify(tableData.headers);
+                    addCell.appendChild(addBtn);
+                }
+                tableContainer.appendChild(table);
+                return tableContainer;
+            }
 
-        function renderChapter7(data) {
-             let html = `<h2 id="chapter-7">7. Anhang</h2>`;
-             const referenzdoku = get(data, 'referenzdokumente', {});
-             if(referenzdoku.title) {
-                 html += `<h3>${referenzdoku.subchapterNumber} ${referenzdoku.title}</h3>`;
-                 html += createTable(referenzdoku.table, `bsiAuditReport.anhang.referenzdokumente.table`);
-             }
+            function renderBausteinPruefung(pruefungen, path) {
+                const container = document.createElement('div');
+                if (Array.isArray(pruefungen)) {
+                    pruefungen.forEach((pruefung, pIndex) => {
+                        const pPath = `${path}[${pIndex}]`;
+                        const fieldset = document.createElement('fieldset');
+                        fieldset.className = 'baustein-pruefung';
+                        
+                        const legend = document.createElement('legend');
+                        legend.textContent = `Prüfung für Baustein: ${pruefung.baustein || 'N/A'}`;
+                        fieldset.appendChild(legend);
 
-             const abweichungen = get(data, 'abweichungenUndEmpfehlungen', {});
-             if(abweichungen.title) {
-                 html += `<h3>${abweichungen.subchapterNumber} ${abweichungen.title}</h3>`;
-                 for(const key in abweichungen) {
-                     const section = abweichungen[key];
-                     if(typeof section === 'object' && section.title && section.table) {
-                        html += `<h4>${section.title}</h4>`;
-                        html += createTable(section.table, `bsiAuditReport.anhang.abweichungenUndEmpfehlungen.${key}.table`);
-                     }
-                 }
-             }
-             return html;
-        }
+                        fieldset.appendChild(createInputField('bezogen auf Zielobjekt', pruefung.bezogenAufZielobjekt, 'text', `${pPath}.bezogenAufZielobjekt`));
+                        fieldset.appendChild(createInputField('Auditiert am', pruefung.auditiertAm, 'text', `${pPath}.auditiertAm`));
+                        fieldset.appendChild(createInputField('Auditor(en)', pruefung.auditor, 'text', `${pPath}.auditor`));
+                        fieldset.appendChild(createInputField('Befragt wurde', pruefung.befragtWurde, 'text', `${pPath}.befragtWurde`));
+                        
+                        if (Array.isArray(pruefung.anforderungen)) {
+                            pruefung.anforderungen.forEach((anf, aIndex) => {
+                                const aPath = `${pPath}.anforderungen[${aIndex}]`;
+                                const anfBlock = document.createElement('div');
+                                anfBlock.className = 'anforderung-block';
 
+                                // Read-only fields
+                                anfBlock.appendChild(createReadOnlyField('Nummer', anf.nummer));
+                                anfBlock.appendChild(createReadOnlyField('Anforderung', anf.anforderung));
+                                anfBlock.appendChild(createReadOnlyField('Bewertung der Anforderung', anf.bewertung));
+                                anfBlock.appendChild(createReadOnlyField('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
+
+                                // Prüfmethode Checkboxes
+                                const pmGroup = document.createElement('div');
+                                pmGroup.className = 'pruefmethode-group';
+                                pmGroup.innerHTML = '<label>Prüfmethode:</label>';
+                                const pruefmethoden = anf.pruefmethode || {};
+                                ['D', 'I', 'C', 'S', 'A', 'B'].forEach(method => {
+                                    const checkWrapper = document.createElement('div');
+                                    checkWrapper.className = 'form-check-inline';
+                                    const checkbox = document.createElement('input');
+                                    checkbox.type = 'checkbox';
+                                    checkbox.className = 'form-check-input';
+                                    checkbox.checked = !!pruefmethoden[method];
+                                    checkbox.dataset.path = `${aPath}.pruefmethode.${method}`;
+                                    const checkLabel = document.createElement('label');
+                                    checkLabel.className = 'form-check-label';
+                                    checkLabel.textContent = method;
+                                    checkWrapper.appendChild(checkbox);
+                                    checkWrapper.appendChild(checkLabel);
+                                    pmGroup.appendChild(checkWrapper);
+                                });
+                                anfBlock.appendChild(pmGroup);
+
+                                // Editable fields
+                                anfBlock.appendChild(createTextArea('Auditfeststellung im Detail mit Nachweisen', anf.auditfeststellung, `${aPath}.auditfeststellung`));
+                                anfBlock.appendChild(createTextArea(
+                                    'Es wurden folgende Abweichungen und Empfehlungen identifiziert', 
+                                    anf.abweichungen, 
+                                    `${aPath}.abweichungen`,
+                                    true, // isFindingSource = true
+                                    { baustein: pruefung.baustein, anforderungId: anf.nummer }
+                                ));
+                                
+                                fieldset.appendChild(anfBlock);
+                            });
+                        }
+                        container.appendChild(fieldset);
+                    });
+                }
+                return container;
+            }
+
+
+            function renderMassnahmenPruefung(pruefungen, path) {
+                const container = document.createElement('div');
+                const table = document.createElement('table');
+                table.innerHTML = `<thead><tr><th>Maßnahme</th><th>Zielobjekt</th><th>Bewertung</th><th>Auditfeststellung</th><th>Abweichungen</th></tr></thead>`;
+                const tbody = table.createTBody();
+                if (Array.isArray(pruefungen)) {
+                    pruefungen.forEach((massnahme, mIndex) => {
+                        const mPath = `${path}[${mIndex}]`;
+                        const row = tbody.insertRow();
+                        row.insertCell().appendChild(createInputField(null, massnahme.massnahme, 'text', `${mPath}.massnahme`));
+                        row.insertCell().appendChild(createInputField(null, massnahme.zielobjekt, 'text', `${mPath}.zielobjekt`));
+                        row.insertCell().appendChild(createInputField(null, massnahme.bewertung, 'text', `${mPath}.bewertung`));
+                        row.insertCell().appendChild(createInputField(null, massnahme.auditfeststellung, 'text', `${mPath}.auditfeststellung`));
+                        row.insertCell().appendChild(createInputField(null, massnahme.abweichungen, 'text', `${mPath}.abweichungen`));
+                    });
+                }
+                container.appendChild(table);
+                return container;
+            }
+
+            function handleAddRow(button) {
+                syncUiToData();
+                const path = button.dataset.path;
+                const headers = JSON.parse(button.dataset.headers);
+                const newRow = {};
+                headers.forEach(header => { newRow[header] = ''; });
+
+                const tableRows = getValueByPath(reportData, path);
+                if (Array.isArray(tableRows)) {
+                    tableRows.push(newRow);
+                    renderReport(reportData);
+                }
+            }
+
+            function handleDeleteRow(button) {
+                syncUiToData();
+                const path = button.dataset.path;
+                const rowIndex = parseInt(button.dataset.rowIndex, 10);
+
+                const tableRows = getValueByPath(reportData, path);
+                if (Array.isArray(tableRows) && !isNaN(rowIndex)) {
+                    tableRows.splice(rowIndex, 1);
+                    renderReport(reportData);
+                }
+            }
+
+            function handleFindingInput(textarea) {
+                const findingText = textarea.value.trim();
+                if (!findingText) return;
+
+                const context = textarea.dataset;
+                let category = prompt("Bitte geben Sie die Kategorie für diese Feststellung ein (AG, AS, E):")?.toUpperCase();
+                
+                const validCategories = ['AG', 'AS', 'E'];
+                if (!category || !validCategories.includes(category)) {
+                    alert("Ungültige Kategorie. Bitte geben Sie AG, AS oder E ein.");
+                    return;
+                }
+
+                const newFinding = {
+                    "Nr.": `Manual-${Date.now()}`,
+                    "Beschreibung der Abweichung": `[${context.anforderungId}] ${findingText}`,
+                    "Quelle (Kapitel)": `5.5.2 (${context.baustein})`,
+                    "Behebungsfrist": "30 Tage nach Audit",
+                    "Status": "Offen"
+                };
+
+                let targetArray;
+                if (category === 'AG') {
+                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows');
+                } else if (category === 'AS') {
+                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows');
+                } else { // 'E'
+                    newFinding["Beschreibung der Empfehlung"] = newFinding["Beschreibung der Abweichung"];
+                    delete newFinding["Beschreibung der Abweichung"];
+                    newFinding["Status"] = "Zur Umsetzung empfohlen";
+                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows');
+                }
+                
+                if (Array.isArray(targetArray)) {
+                    targetArray.push(newFinding);
+                    textarea.value = ''; // Clear the textarea
+                    setValueByPath(reportData, textarea.dataset.path, ''); // Update data model
+                    alert(`Feststellung wurde zur Tabelle '${category}' im Anhang hinzugefügt.`);
+                    renderReport(reportData); // Re-render the whole report
+                    // Jump to chapter 7
+                    setTimeout(() => window.location.hash = "chapter-7-anchor", 100); 
+                }
+            }
+
+            function handleExport() {
+                syncUiToData();
+                if (!reportData) {
+                    alert("No data loaded to export.");
+                    return;
+                }
+                const updatedData = JSON.parse(JSON.stringify(reportData)); 
+                downloadObjectAsJson(updatedData, 'edited_report.json');
+            }
+            
+            function getValueByPath(obj, path) {
+                const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+                let current = obj;
+                for (let i = 0; i < keys.length; i++) {
+                    if (current === undefined || current === null) return undefined;
+                    current = current[keys[i]];
+                }
+                return current;
+            }
+
+            function setValueByPath(obj, path, value) {
+                const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+                let current = obj;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    const key = keys[i];
+                    if (current[key] === undefined || typeof current[key] !== 'object' || current[key] === null) {
+                         // Look ahead to see if the next key is a number, to create an array if needed
+                        const nextKey = keys[i+1];
+                        current[key] = /^\d+$/.test(nextKey) ? [] : {};
+                    }
+                    current = current[key];
+                }
+                if(current && (typeof current === 'object' || Array.isArray(current))) {
+                    current[keys[keys.length - 1]] = value;
+                }
+            }
+
+            function downloadObjectAsJson(exportObj, exportName) {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", exportName);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            }
+
+            // Add an ID to Chapter 7 for jump-to functionality
+            function renderChapter7(data) { // This is a helper, but we need to ensure the main render uses it.
+                 let html = `<h2 id="chapter-7-anchor">7. Anhang</h2>`; // Add anchor ID
+                 // ... rest of the rendering logic
+                 return html;
+            }
+
+        });
     </script>
 </body>
 </html>

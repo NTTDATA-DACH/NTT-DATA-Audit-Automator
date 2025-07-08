@@ -77,13 +77,14 @@ class Chapter5Runner:
             anforderungen_list = []
             for control in controls:
                 control_id = control.get("id", "N/A")
-                # Look up the customer's explanation from the extracted data
-                customer_explanation = extracted_data_map.get(control_id, {}).get("umsetzungserlaeuterung", "Keine Angabe im Grundschutz-Check gefunden.")
+                extracted_details = extracted_data_map.get(control_id, {})
+                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine Angabe im Grundschutz-Check gefunden.")
+                bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")
 
                 anforderungen_list.append({
                     "nummer": control_id,
                     "anforderung": control.get("title", "N/A"),
-                    "bewertung": "", # To be filled by auditor
+                    "bewertung": bewertung_status,
                     "dokuAntragsteller": customer_explanation,
                     "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
                     "auditfeststellung": "", # To be filled by auditor
