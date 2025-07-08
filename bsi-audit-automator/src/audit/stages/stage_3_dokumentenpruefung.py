@@ -8,6 +8,7 @@ import fitz # PyMuPDF
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
+from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
@@ -47,7 +48,7 @@ class Chapter3Runner:
         "realisierungsplan": {"source_categories": ["Realisierungsplan"]},
     }
 
-    def __init__(self, config: AppConfig, ai_client: AiClient, rag_client: RagClient):
+    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
@@ -389,9 +390,6 @@ class Chapter3Runner:
             if task_type == 'custom_logic' and key == 'detailsZumItGrundschutzCheck':
                 logging.info(f"--- Processing custom logic task: {key} ---")
                 result = await self._process_details_zum_it_grundschutz_check()
-            elif task_type == 'ai_driven':
-                # Batch AI tasks together
-                pass # This logic will be handled below
             
             if result:
                 processed_results.append(result)

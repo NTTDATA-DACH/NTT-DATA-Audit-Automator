@@ -33,10 +33,10 @@ class AuditController:
             "Chapter-5": Chapter5Runner,
             "Chapter-7": Chapter7Runner,
         }
-        # Chapter 4 no longer needs rag_client
+        # This defines the exact order of dependencies for each runner's constructor.
         self.runner_dependencies = {
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
-            "Chapter-3": (self.config, self.ai_client, self.rag_client, self.gcs_client,),
+            "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.ai_client),
             "Chapter-5": (self.config, self.gcs_client, self.ai_client),
             "Chapter-7": (self.config, self.gcs_client),
