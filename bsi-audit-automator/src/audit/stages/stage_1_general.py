@@ -46,7 +46,12 @@ class Chapter1Runner:
         schema = self._load_asset_json("assets/schemas/stage_1_4_informationsverbund_schema.json")
         
         # The prompt no longer needs context formatted in, as the files are attached directly.
-        return await self.ai_client.generate_json_response(prompt_template, schema, gcs_uris)
+        return await self.ai_client.generate_json_response(
+            prompt=prompt_template,
+            json_schema=schema,
+            gcs_uris=gcs_uris,
+            request_context_log="Chapter-1: informationsverbund"
+        )
 
     async def run(self) -> dict:
         """Executes the generation logic for Chapter 1."""

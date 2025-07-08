@@ -25,7 +25,7 @@ class AiClient:
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
-    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None) -> Dict[str, Any]:
+    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None, request_context_log: str = "Generic AI Request") -> Dict[str, Any]:
         """
         Generates a JSON response from the AI model, enforcing a specific schema and
         optionally providing GCS files as context. Implements an async retry loop
@@ -35,6 +35,7 @@ class AiClient:
             prompt: The text prompt for the model.
             json_schema: The JSON schema to enforce on the model's output.
             gcs_uris: A list of 'gs://...' URIs pointing to PDF files for context.
+            request_context_log: A string to identify the request source in logs.
 
         Returns:
             The parsed JSON response from the model.
@@ -66,7 +67,7 @@ class AiClient:
             for attempt in range(MAX_RETRIES):
                 try:
                     if self.config.is_test_mode:
-                        logging.info(f"Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
+                        logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
                     response = await self.generative_model.generate_content_async(
                         contents=contents,
                         generation_config=gen_config,
@@ -83,21 +84,21 @@ class AiClient:
 
                     response_json = json.loads(response.text)
                     if self.config.is_test_mode:
-                        logging.info(f"Successfully generated and parsed JSON response on attempt {attempt + 1}.")
+                        logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
                 except (api_core_exceptions.GoogleAPICallError, Exception) as e:
                     wait_time = 2 ** attempt
                     # If this was the last attempt, log critical error and re-raise the exception.
                     if attempt == MAX_RETRIES - 1:
-                        logging.critical(f"AI generation failed after all {MAX_RETRIES} retries.", exc_info=True)
+                        logging.critical(f"[{request_context_log}] AI generation failed after all {MAX_RETRIES} retries.", exc_info=True)
                         raise # This is now inside the except block and will correctly re-raise 'e'.
 
                     # Log the appropriate warning for the current attempt.
                     if isinstance(e, api_core_exceptions.GoogleAPICallError):
-                        logging.warning(f"Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}). Retrying in {wait_time}s...")
+                        logging.warning(f"[{request_context_log}] Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}): {e.message}. Retrying in {wait_time}s...")
                     else:
-                        logging.warning(f"Generation attempt {attempt + 1} failed with an exception: {e}. Retrying in {wait_time}s...")
+                        logging.warning(f"[{request_context_log}] Generation attempt {attempt + 1} failed with an exception: {e}. Retrying in {wait_time}s...")
 
                     await asyncio.sleep(wait_time)
 

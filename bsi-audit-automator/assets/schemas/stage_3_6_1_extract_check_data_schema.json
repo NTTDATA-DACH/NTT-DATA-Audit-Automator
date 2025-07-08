@@ -1,0 +1,40 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Extracted Grundschutz-Check Data",
+    "description": "A schema to hold the structured list of requirements extracted from the Grundschutz-Check document.",
+    "type": "object",
+    "properties": {
+      "anforderungen": {
+        "type": "array",
+        "description": "A list of all security requirements found in the document.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The full ID of the requirement, e.g., 'ISMS.1.A1'."
+            },
+            "titel": {
+              "type": "string",
+              "description": "The title of the requirement."
+            },
+            "umsetzungsstatus": {
+              "type": "string",
+              "description": "The implementation status (e.g., 'Ja', 'Nein', 'teilweise', 'entbehrlich')."
+            },
+            "umsetzungserlaeuterung": {
+              "type": "string",
+              "description": "The full text of the implementation explanation."
+            },
+            "datumLetztePruefung": {
+              "type": "string",
+              "description": "The date of the last check, in YYYY-MM-DD or DD.MM.YYYY format.",
+              "format": "date"
+            }
+          },
+          "required": ["id", "titel", "umsetzungsstatus", "umsetzungserlaeuterung", "datumLetztePruefung"]
+        }
+      }
+    },
+    "required": ["anforderungen"]
+  }

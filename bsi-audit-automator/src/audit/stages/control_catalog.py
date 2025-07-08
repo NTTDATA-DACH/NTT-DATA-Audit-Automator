@@ -44,3 +44,21 @@ class ControlCatalog:
         if not controls:
             logging.warning(f"No controls found for Baustein ID: {baustein_id}")
         return controls
+
+    def get_level_1_control_ids(self) -> List[str]:
+        """
+        Scans the entire catalog and returns a list of all control IDs that
+        are marked as Level 1 (MUSS-Anforderungen).
+
+        Returns:
+            A list of Level 1 control ID strings.
+        """
+        level_1_ids = []
+        for baustein_id, controls in self._baustein_map.items():
+            for control in controls:
+                for prop in control.get("props", []):
+                    if prop.get("name") == "level" and prop.get("value") == "1":
+                        level_1_ids.append(control.get("id"))
+                        break # Move to the next control once level is found
+        logging.info(f"Found {len(level_1_ids)} Level 1 (MUSS) controls in the catalog.")
+        return level_1_ids

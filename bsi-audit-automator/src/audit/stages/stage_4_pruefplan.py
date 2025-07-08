@@ -87,7 +87,11 @@ class Chapter4Runner:
         schema = self._load_asset_json(definition["schema_path"])
         
         try:
-            generated_rows = await self.ai_client.generate_json_response(prompt_template, schema)
+            generated_rows = await self.ai_client.generate_json_response(
+                prompt=prompt_template,
+                json_schema=schema,
+                request_context_log=f"Chapter-4: {name}"
+            )
             logging.info(f"Successfully generated plan for subchapter {definition['key']}")
             return {name: {"table": generated_rows}}
         except Exception as e:

@@ -69,7 +69,11 @@ class RagClient:
         prompt = prompt_template.format(filenames_json=filenames_json)
 
         try:
-            classification_result = await self.ai_client.generate_json_response(prompt, schema)
+            classification_result = await self.ai_client.generate_json_response(
+                prompt,
+                schema,
+                request_context_log="Document Classification"
+            )
             content_to_upload = json.dumps(classification_result, indent=2, ensure_ascii=False)
             logging.info("Successfully created document map via AI.")
         except Exception as e:
