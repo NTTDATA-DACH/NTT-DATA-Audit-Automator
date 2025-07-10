@@ -17,11 +17,9 @@ class Chapter3Runner:
     """
     Handles generating content for Chapter 3 "Dokumentenprüfung" by dynamically
     parsing the master report template and using the central prompt configuration.
-    parsing the master report template and using the central prompt configuration.
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
 
@@ -31,7 +29,6 @@ class Chapter3Runner:
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
@@ -87,35 +84,14 @@ class Chapter3Runner:
         task_config = self.prompt_config["stages"]["Chapter-3"].get(key)
         if not task_config:
             return None
-        """Creates a single task dictionary for the execution plan using the central prompt config."""
-        task_config = self.prompt_config["stages"]["Chapter-3"].get(key)
-        if not task_config:
-            return None
 
         task = {"key": key}
         task_type = task_config.get("type", "ai_driven")
         task["type"] = task_type
         
         if task_type == "custom_logic":
-        task_type = task_config.get("type", "ai_driven")
-        task["type"] = task_type
-        
-        if task_type == "custom_logic":
             return task
 
-        task["schema_path"] = task_config["schema_path"]
-        task["source_categories"] = task_config.get("source_categories")
-
-        if task_type == "ai_driven":
-            generic_prompt = self.prompt_config["stages"]["Chapter-3"]["generic_question"]["prompt"]
-            content = data.get("content", [])
-            questions = [item["questionText"] for item in content if item.get("type") == "question"]
-            task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
-            task["prompt"] = generic_prompt
-        
-        elif task_type == "summary":
-            task["prompt"] = self.prompt_config["stages"]["Chapter-3"]["generic_summary"]["prompt"]
-            task["summary_topic"] = data.get("title", key)
         task["schema_path"] = task_config["schema_path"]
         task["source_categories"] = task_config.get("source_categories")
 
@@ -244,9 +220,6 @@ class Chapter3Runner:
         extraction_config = self.prompt_config["stages"]["Chapter-3"]["detailsZumItGrundschutzCheck_extraction"]
         prompt_template = extraction_config["prompt"]
         schema = self._load_asset_json(extraction_config["schema_path"])
-        extraction_config = self.prompt_config["stages"]["Chapter-3"]["detailsZumItGrundschutzCheck_extraction"]
-        prompt_template = extraction_config["prompt"]
-        schema = self._load_asset_json(extraction_config["schema_path"])
 
         pass_50_task = self._run_extraction_pass(doc, 50, prompt_template, schema)
         pass_60_task = self._run_extraction_pass(doc, 60, prompt_template, schema)
@@ -317,14 +290,9 @@ class Chapter3Runner:
             date_str = a.get("datumLetztePruefung")
             try:
                 if date_str and "." in str(date_str):
-                if date_str and "." in date_str:
                     check_date = datetime.strptime(date_str, "%d.%m.%Y")
                 elif date_str:
-                elif date_str:
                     check_date = datetime.fromisoformat(date_str.split("T")[0])
-                else:
-                    outdated_items.append(a["id"]) # Count as outdated if date is missing
-                    continue
                 else:
                     outdated_items.append(a["id"]) # Count as outdated if date is missing
                     continue
@@ -350,7 +318,6 @@ class Chapter3Runner:
         logging.info(f"Starting AI generation for subchapter: {key}")
         
         prompt = task["prompt"].format(questions=task["questions_formatted"])
-        prompt = task["prompt"].format(questions=task["questions_formatted"])
         schema = self._load_asset_json(task["schema_path"])
         gcs_uris = self.rag_client.get_gcs_uris_for_categories(
             source_categories=task.get("source_categories")
@@ -360,7 +327,6 @@ class Chapter3Runner:
              return {key: {"error": f"No source documents found for categories: {task.get('source_categories')}"}}
         try:
             generated_data = await self.ai_client.generate_json_response(
-                prompt=prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-3: {key}"
                 prompt=prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-3: {key}"
             )
             if key == "aktualitaetDerReferenzdokumente":
@@ -378,11 +344,9 @@ class Chapter3Runner:
         logging.info(f"Starting summary generation for subchapter: {key}")
 
         prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
-        prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
         schema = self._load_asset_json(task["schema_path"])
         try:
             generated_data = await self.ai_client.generate_json_response(
-                prompt=prompt, json_schema=schema, request_context_log=f"Chapter-3 Summary: {key}"
                 prompt=prompt, json_schema=schema, request_context_log=f"Chapter-3 Summary: {key}"
             )
             return {key: generated_data}
@@ -421,25 +385,15 @@ class Chapter3Runner:
 
         # Run custom logic first, as it might be a dependency for others (like extraction)
         for task in custom_logic_tasks:
-        # Isolate custom logic, AI, and summary tasks
-        custom_logic_tasks = [t for t in self.execution_plan if t and t.get("type") == "custom_logic"]
-        ai_tasks = [t for t in self.execution_plan if t and t.get("type") == "ai_driven"]
-        summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
-
-        # Run custom logic first, as it might be a dependency for others (like extraction)
-        for task in custom_logic_tasks:
             key = task['key']
             logging.info(f"--- Processing custom logic task: {key} ---")
-            logging.info(f"--- Processing custom logic task: {key} ---")
             result = None
-            if key == 'detailsZumItGrundschutzCheck':
             if key == 'detailsZumItGrundschutzCheck':
                 result = await self._process_details_zum_it_grundschutz_check()
             if result:
                 processed_results.append(result)
                 aggregated_results.update(result)
 
-        # Batch process all standard AI tasks in parallel
         # Batch process all standard AI tasks in parallel
         if ai_tasks:
             logging.info(f"--- Processing {len(ai_tasks)} AI-driven subchapters ---")
@@ -449,7 +403,6 @@ class Chapter3Runner:
             for res in ai_results_batch:
                 aggregated_results.update(res)
 
-        # Process summary tasks last, using all previously generated results
         # Process summary tasks last, using all previously generated results
         if summary_tasks:
             logging.info(f"--- Processing {len(summary_tasks)} summary subchapters ---")
