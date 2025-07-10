@@ -50,19 +50,83 @@ Together, these files allow the audit process to be modified and extended by sim
 
 ---
 
-### **Phase 2: Hybrid Processing for Complex Tasks (A Deep Dive into Chapter 3.6.1)**
+### **Phase 2:  Intelligent Semantic Chunking**
 
-**Objective:** To accurately analyze the very large and complex "Grundschutz-Check" document. This special workflow is the most sophisticated example of the hybrid strategy, blending large-scale extraction, deterministic logic, and highly targeted AI analysis.
 
-#### **Sub-Phase 2.A: Idempotent Two-Pass Data Extraction**
-This phase is engineered for maximum data recall and robustness from a long, complex PDF that is prone to parsing errors.
+#### **Step 1: Build the Context Map** (Unchanged and Still Essential)
 
-1.  **Target and Two-Pass Chunking:** The runner targets the "Grundschutz-Check" PDF. It performs **two full extraction passes in parallel** to combat the fragility of parsing tables that may span page breaks differently depending on chunk size.
-    *   **Pass 1:** The document is split into **50-page chunks**.
-    *   **Pass 2:** It is simultaneously split into **60-page chunks**. This dual-pronged approach significantly increases the probability of capturing all requirements.
-2.  **Parallel Extraction:** For each chunk in both passes, a temporary PDF is uploaded to GCS, and a parallel AI call is made with a prompt specifically designed for data extraction.
-3.  **Merge for Completeness (Union):** The results from both passes are aggregated into a final master list. This is a **union** operation to maximize data retention. If a requirement is successfully extracted in both passes, a "survival of the fittest" logic applies: the version with the more detailed text content (judged by total character length) is kept. This ensures that all unique requirements from both passes are included, and duplicates are resolved by choosing the highest-quality extraction.
-4.  **Idempotent Save:** This final, comprehensive list is saved as `output/results/intermediate/extracted_grundschutz_check_merged.json`. If this file already exists on subsequent runs, this entire, computationally expensive sub-phase is skipped.
+This step remains exactly as we discussed. It is the mandatory first step.
+1.  **Extract `Zielobjekte` from Strukturanalyse (A.1):** Get the master list of all `Kürzel` and `Name`.
+2.  **Extract `Modellierung` from Modellierung Document (A.3):** Map which `Bausteine` apply to which `Zielobjekt`.
+3.  **Consolidate:** Create the single `system_structure_map.json` file. This is our ground truth.
+
+---
+
+#### **Step 2: The Semantic Chunking Algorithm** (The New Core Logic)
+
+This step replaces the fixed-size chunking passes. It will parse the `Grundschutz-Check` PDF and generate a list of "smart" chunks, where each chunk is a self-contained PDF segment ready for AI processing.
+
+*   **2.1. Pre-Scan and Index `Zielobjekt` Headers:**
+    *   **Action:** As planned before, we perform a fast, deterministic pre-scan of the `Grundschutz-Check` PDF to find the exact page number where each `Zielobjekt` section begins.
+    *   **Output:** An ordered index of headers and their starting pages.
+        *   *Example Index:*
+            1.  `ISMS.1` (Sicherheitsmanagement) - starts on page 5
+            2.  `SYS.1.1` (Allgemeiner Server) - starts on page 12
+            3.  `NET.3.2` (Firewall) - starts on page 62
+            4.  `APP.1.1` (Webanwendungen) - starts on page 67
+            5.  *(End of Document)* - on page 70
+
+*   **2.2. The New Chunking Logic:**
+    *   **Action:** We will now iterate through this index to define our chunks. We'll also define a safety limit, for example: `MAX_PAGES_PER_CHUNK = 25`.
+
+    *   For each `Zielobjekt` in our index, we calculate the number of pages it occupies.
+        *   `ISMS.1` occupies pages 5 to 11 (7 pages).
+        *   `SYS.1.1` occupies pages 12 to 61 (50 pages).
+        *   `NET.3.2` occupies pages 62 to 66 (5 pages).
+        *   `APP.1.1` occupies pages 67 to 70 (4 pages).
+
+    *   We then apply the following logic to create our chunk definitions:
+        *   **IF a `Zielobjekt` section is *smaller than or equal to* `MAX_PAGES_PER_CHUNK`:**
+            *   The entire section becomes a single chunk.
+            *   *Result:* `ISMS.1` (pages 5-11), `NET.3.2` (pages 62-66), and `APP.1.1` (pages 67-70) each become one chunk.
+        *   **IF a `Zielobjekt` section is *larger than* `MAX_PAGES_PER_CHUNK`:**
+            *   The section is split into multiple, smaller sub-chunks of `MAX_PAGES_PER_CHUNK` size.
+            *   Critically, **every sub-chunk is tagged with the same `Zielobjekt` ID.**
+            *   *Result:* The `SYS.1.1` section (50 pages) is too large. It will be split into two chunks:
+                1.  Chunk for `SYS.1.1` covering pages 12-36 (25 pages).
+                2.  Chunk for `SYS.1.1` covering pages 37-61 (25 pages).
+
+*   **2.3. Chunk Creation:**
+    *   **Action:** Based on the definitions from the logic above, the code will now create the small, in-memory PDF chunks and send them to the AI for processing.
+
+---
+
+#### **Step 3: AI Extraction with Simplified Prompts**
+
+The AI processing now becomes much cleaner.
+*   The extraction prompt no longer needs complex instructions about guessing context. It can be simplified to:
+    > "You are extracting security requirements. All requirements in the following document chunk belong to the **Zielobjekt 'SYS.1.1'**. For every requirement you extract, you MUST include a `zielobjekt_kuerzel` field with the value 'ABBR'."
+*   The schema for the AI output (`stage_3_6_1_extract_check_data_schema.json`) is still updated to require the `zielobjekt_kuerzel` field.
+
+---
+
+#### **Step 4: Merge-and-Refine** (Effectively Unchanged)
+
+This final reconstruction Step works exactly as we designed it previously, as it's already built to handle the output of the extraction process.
+*   **Group by Compound Key:** `(zielobjekt_kürzel, anforderung_id)`.
+*   **Merge and Reconstruct:** Apply the logic to merge titles, descriptions, statuses, and dates.
+*   **Final Assembly:** Create the final, clean list of requirements, each correctly associated with its parent `Zielobjekt`.
+
+### **Summary of Final, Enhanced Strategy**
+
+This **"Intelligent Semantic Chunking"** approach is the most robust solution:
+
+1.  **Perfect Context:** By splitting at `Zielobjekt` headers, every chunk has perfect, unambiguous context.
+2.  **Guaranteed Safety:** The `MAX_PAGES_PER_CHUNK` limit prevents oversized chunks and protects us from API token limits.
+3.  **Maximum Efficiency:** We avoid creating excessively small chunks, and very large sections are processed in an optimal size.
+4.  **Simplified AI Interaction:** Prompts become simpler and more direct, which can lead to higher accuracy from the model.
+5.  **Complete Data Recovery:** The "Merge-and-Refine" logic in the final phase ensures we reconstruct all partial data into a complete whole.
+
 
 #### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**
 This phase uses the clean, structured JSON data from the extraction to answer the five audit questions with surgical precision, using the right tool for each job.

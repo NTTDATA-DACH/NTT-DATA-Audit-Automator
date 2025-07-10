@@ -13,7 +13,6 @@ class AppConfig:
     gcp_project_id: str
     source_prefix: str
     output_prefix: str
-    etl_status_prefix: str
     audit_type: str
     vertex_ai_region: str
     max_concurrent_ai_requests: int
@@ -36,8 +35,7 @@ def load_config_from_env() -> AppConfig:
     load_dotenv()
 
     required_vars = [
-        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "ETL_STATUS_PREFIX",
-        "AUDIT_TYPE", "VERTEX_AI_REGION"
+        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "VERTEX_AI_REGION"
     ]
     
     config_values = {}

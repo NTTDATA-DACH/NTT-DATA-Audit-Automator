@@ -49,10 +49,9 @@ export INDEX_ENDPOINT_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output 
 # These prefixes now reflect the simpler GCS layout.
 export SOURCE_PREFIX="source_documents/"
 export OUTPUT_PREFIX="output/"
-export ETL_STATUS_PREFIX="output/etl_status/"
 
 # Manually set the audit type and test mode for your local run
-export AUDIT_TYPE="Zertifizierungsaudit"
+export AUDIT_TYPE="Überwachungsaudit"
 export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
