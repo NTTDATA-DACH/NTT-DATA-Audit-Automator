@@ -68,7 +68,7 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=8192, # Increased from 65k to 8k as 65k is invalid. Standard is 2048. 8192 is a safe max.
+            max_output_tokens=65536, # Increased from 65k to 8k as 65k is invalid. Standard is 2048. 8192 is a safe max.
             temperature=0.2,
         )
 

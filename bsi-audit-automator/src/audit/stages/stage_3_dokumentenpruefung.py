@@ -108,6 +108,30 @@ class Chapter3Runner:
         
         return task
 
+    def _deduplicate_and_select_best(self, requirements: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """
+        De-duplicates a list of requirements from a single pass based on their ID.
+        If duplicates are found, it keeps the one with the most text content.
+        """
+        best_versions: Dict[str, Dict[str, Any]] = {}
+        for req in requirements:
+            req_id = req.get("id")
+            if not req_id:
+                continue
+
+            if req_id not in best_versions:
+                best_versions[req_id] = req
+            else:
+                current_best = best_versions[req_id]
+                # Compare and update if the new one is better
+                len_current = len(current_best.get('umsetzungserlaeuterung', '')) + len(current_best.get('titel', ''))
+                len_new = len(req.get('umsetzungserlaeuterung', '')) + len(req.get('titel', ''))
+                if len_new > len_current:
+                    best_versions[req_id] = req
+        
+        logging.info(f"De-duplicated list of {len(requirements)} raw items down to {len(best_versions)} unique, best-of-pass items.")
+        return best_versions
+
     async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Runs a single data extraction pass over the document with a specific chunk size.
@@ -122,8 +146,8 @@ class Chapter3Runner:
         temp_blob_names = []
 
         for chunk_index, i in enumerate(range(0, total_pages, chunk_size)):
-            if self.config.is_test_mode and chunk_index >= 5:
-                logging.info(f"TEST MODE: Limiting extraction pass (chunk size {chunk_size}) to 5 chunks.")
+            if self.config.is_test_mode and chunk_index >= 2:
+                logging.info(f"TEST MODE: Limiting extraction pass (chunk size {chunk_size}) to 2 chunks.")
                 break
             chunk_doc = fitz.open()
             chunk_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
@@ -165,34 +189,35 @@ class Chapter3Runner:
 
     def _merge_extraction_results(self, pass1_results: List[Dict[str, Any]], pass2_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Merges two lists of extracted requirements using a UNION strategy.
-        If a requirement is found in both lists, the one with more detailed
-        text content ("longer is better") is kept.
+        Merges two lists of extracted requirements using a refined UNION strategy.
+        It first de-duplicates each pass individually, keeping the best version of
+        each requirement. Then, it merges the two de-duplicated lists, again
+        keeping the best version if a requirement is present in both.
         """
-        logging.info(f"Merging results from two extraction passes (Pass 1: {len(pass1_results)} items, Pass 2: {len(pass2_results)} items).")
+        logging.info(f"De-duplicating and merging results from two extraction passes (Pass 1: {len(pass1_results)} items, Pass 2: {len(pass2_results)} items).")
         
-        # Start with all items from the first pass, keyed by their ID for efficient lookup.
-        merged_data = {item['id']: item for item in pass1_results if item.get('id')}
+        # Step 1: De-duplicate each pass, selecting the best version for each ID within that pass.
+        best_of_pass1 = self._deduplicate_and_select_best(pass1_results)
+        best_of_pass2 = self._deduplicate_and_select_best(pass2_results)
+
+        # Step 2: Merge the two de-duplicated lists. Start with pass 1 as the base.
+        merged_data = best_of_pass1.copy()
 
         # Iterate through the second pass to merge
-        for item_pass2 in pass2_results:
-            item_id = item_pass2.get('id')
-            if not item_id:
-                continue # Ignore items without an ID
-
-            if item_id in merged_data:
-                # If item exists, compare and potentially update
-                item_pass1 = merged_data[item_id]
-                len_pass1_text = len(item_pass1.get('umsetzungserlaeuterung', '')) + len(item_pass1.get('titel', ''))
-                len_pass2_text = len(item_pass2.get('umsetzungserlaeuterung', '')) + len(item_pass2.get('titel', ''))
+        for req_id, req_pass2 in best_of_pass2.items():
+            if req_id in merged_data:
+                # If item exists, compare the best of pass 1 with the best of pass 2
+                req_pass1 = merged_data[req_id]
+                len_pass1_text = len(req_pass1.get('umsetzungserlaeuterung', '')) + len(req_pass1.get('titel', ''))
+                len_pass2_text = len(req_pass2.get('umsetzungserlaeuterung', '')) + len(req_pass2.get('titel', ''))
                 if len_pass2_text > len_pass1_text:
-                    merged_data[item_id] = item_pass2 # Overwrite with the more detailed item
+                    merged_data[req_id] = req_pass2 # Overwrite with the better version from pass 2
             else:
-                # If item is new, just add it
-                merged_data[item_id] = item_pass2
+                # If item is new to the merged set, just add it
+                merged_data[req_id] = req_pass2
 
         final_list = list(merged_data.values())
-        logging.info(f"Merging complete. Final union result contains {len(final_list)} unique requirements.")
+        logging.info(f"Merging complete. Final union result contains {len(final_list)} unique, high-quality requirements.")
         return final_list
 
     async def _extract_data_from_grundschutz_check(self) -> dict:
