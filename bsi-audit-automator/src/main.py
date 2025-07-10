@@ -41,7 +41,7 @@ async def main_async():
     parser.add_argument(
         '--force',
         action='store_true',
-        help='Force re-running of stages that have already completed. Only applies to --run-all-stages.'
+        help='Force re-running of completed stages and re-classification of source documents.'
     )
 
     args = parser.parse_args()
@@ -58,7 +58,7 @@ async def main_async():
     # For audit stages, we need the RagClient (Document Finder)
     logging.info("Initializing Document Finder Client...")
     try:
-        rag_client = await RagClient.create(config, gcs_client, ai_client)
+        rag_client = await RagClient.create(config, gcs_client, ai_client, force_remap=args.force)
     except Exception as e:
         logging.critical(f"Failed to initialize the Document Finder client. This can happen if no source documents are present. Error: {e}", exc_info=True)
         exit(1)
@@ -66,6 +66,8 @@ async def main_async():
     controller = AuditController(config, gcs_client, ai_client, rag_client)
 
     if args.run_stage:
+        # For single stage runs, we always overwrite the stage result.
+        # The --force flag will have already re-mapped the documents if it was passed.
         await controller.run_single_stage(args.run_stage, force_overwrite=True)
     elif args.run_all_stages:
         await controller.run_all_stages(force_overwrite=args.force)
