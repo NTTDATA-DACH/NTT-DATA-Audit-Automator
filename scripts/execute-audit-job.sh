@@ -9,8 +9,8 @@ set -euo pipefail
 # --- Script Usage ---
 usage() {
   echo "Usage: $0"
-  echo "Interactively selects and executes a BSI audit task for the customer"
-  echo "defined in the Terraform configuration. Must be run from the project root."
+  echo "Interactively selects and executes a BSI audit task. Must be run"
+  echo "from the project root ('bsi-audit-automator')."
   exit 1
 }
 
@@ -18,18 +18,23 @@ usage() {
 if [[ $# -ne 0 ]]; then
   usage
 fi
-TEST_MODE="false"
+
+# --- Configuration ---
+# Set to "true" to run in test mode (processes fewer files/items)
+TEST_MODE="true"
 MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
 echo "🔹 Fetching infrastructure details from Terraform..."
 TERRAFORM_DIR="../terraform"
+if [ ! -d "$TERRAFORM_DIR" ]; then
+    echo "❌ Error: Terraform directory not found at '$TERRAFORM_DIR'."
+    echo "   Please run this script from the project root ('bsi-audit-automator')."
+    exit 1
+fi
 GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
-INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
-INDEX_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_public_domain)"
-INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
 
 # --- INTERACTIVE SELECTION: Audit Type ---
 echo "🔹 Please select the audit type."
@@ -46,16 +51,14 @@ done
 
 # --- INTERACTIVE SELECTION: Task/Stage ---
 echo "🔹 Please select the task to execute."
-tasks=("Run ETL (Embedding)" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
+# Removed "Run ETL (Embedding)" as it is deprecated.
+tasks=("Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
 PS3="Select task number: "
-declare TASK_ARGS # This will hold the arguments for main.py
+declare TASK_ARGS=""
+declare FORCE_FLAG=""
 
 select task in "${tasks[@]}"; do
   case $task in
-    "Run ETL (Embedding)")
-      TASK_ARGS="--run-etl"
-      break
-      ;;
     "Run Single Audit Stage")
       echo "🔹 Please select the stage to run."
       stages=("Chapter-1" "Chapter-3" "Chapter-4" "Chapter-5" "Chapter-7")
@@ -68,10 +71,18 @@ select task in "${tasks[@]}"; do
           echo "Invalid stage selection. Try again."
         fi
       done
+      read -p "Force re-run? (Re-classifies documents & overwrites stage results) [y/N]: " force_choice
+      if [[ "$force_choice" =~ ^[Yy]$ ]]; then
+          FORCE_FLAG=",--force"
+      fi
       break
       ;;
     "Run All Audit Stages")
       TASK_ARGS="--run-all-stages"
+      read -p "Force re-run? (Re-classifies documents & overwrites all stage results) [y/N]: " force_choice
+       if [[ "$force_choice" =~ ^[Yy]$ ]]; then
+          FORCE_FLAG=",--force"
+      fi
       break
       ;;
     "Generate Final Report")
@@ -88,16 +99,19 @@ select task in "${tasks[@]}"; do
   esac
 done
 
-# --- Final gcloud Execution ---
-echo "🚀 Executing task with args: [main.py ${TASK_ARGS}]"
+# Combine the main task arguments with the force flag
+FULL_TASK_ARGS="${TASK_ARGS}${FORCE_FLAG}"
 
-# NOTE: The '--args' flag on 'gcloud run jobs execute' overrides the default
-# command arguments of the deployed job, allowing us to run any task.
-# The INDEX_ENDPOINT_PUBLIC_DOMAIN is now passed to the job.
+# --- Final gcloud Execution ---
+# Using //,/ / to replace commas with spaces for a more readable display.
+echo "🚀 Executing task with args: [main.py ${FULL_TASK_ARGS//,/ }]"
+
+# The '--args' flag on 'gcloud run jobs execute' overrides the default command arguments.
+# Removed unused environment variables like INDEX_ENDPOINT_ID.
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},INDEX_ENDPOINT_ID=${INDEX_ENDPOINT_ID},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,ETL_STATUS_PREFIX=output/etl_status/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},INDEX_ENDPOINT_PUBLIC_DOMAIN=${INDEX_PUBLIC_DOMAIN}" \
-  --args="${TASK_ARGS}"
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,ETL_STATUS_PREFIX=output/etl_status/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
+  --args="${FULL_TASK_ARGS}"
 
-echo "✅ Job execution' finished."
+echo "✅ Job execution finished."

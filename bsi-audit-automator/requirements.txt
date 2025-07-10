@@ -5,3 +5,4 @@ google-cloud-aiplatform
 # For local development, to load .env files
 python-dotenv
 jsonschema # For validating AI model outputs
+PyMuPDF # For PDF processing (provides 'fitz' module)
