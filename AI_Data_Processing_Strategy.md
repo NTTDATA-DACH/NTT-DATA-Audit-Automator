@@ -59,10 +59,10 @@ This phase is engineered for maximum data recall and robustness from a long, com
 
 1.  **Target and Two-Pass Chunking:** The runner targets the "Grundschutz-Check" PDF. It performs **two full extraction passes in parallel** to combat the fragility of parsing tables that may span page breaks differently depending on chunk size.
     *   **Pass 1:** The document is split into **50-page chunks**.
-    *   **Pass 2:** It is simultaneously split into **60-page chunks**. This dual-pronged approach significantly increases the probability that at least one of the passes will correctly parse and extract every single requirement.
+    *   **Pass 2:** It is simultaneously split into **60-page chunks**. This dual-pronged approach significantly increases the probability of capturing all requirements.
 2.  **Parallel Extraction:** For each chunk in both passes, a temporary PDF is uploaded to GCS, and a parallel AI call is made with a prompt specifically designed for data extraction.
-3.  **Merge for Completeness:** The results from both passes are aggregated. A merging logic then iterates through the combined data. For any requirement ID found in both sets, it compares the text length of the explanations and keeps the version with more content, assuming it's the more complete extraction. This "survival of the fittest" merge creates a single, high-quality master list.
-4.  **Idempotent Save:** This final list is saved as `output/results/intermediate/extracted_grundschutz_check_merged.json`. If this file already exists on subsequent runs, this entire, computationally expensive sub-phase is skipped.
+3.  **Merge for Completeness (Union):** The results from both passes are aggregated into a final master list. This is a **union** operation to maximize data retention. If a requirement is successfully extracted in both passes, a "survival of the fittest" logic applies: the version with the more detailed text content (judged by total character length) is kept. This ensures that all unique requirements from both passes are included, and duplicates are resolved by choosing the highest-quality extraction.
+4.  **Idempotent Save:** This final, comprehensive list is saved as `output/results/intermediate/extracted_grundschutz_check_merged.json`. If this file already exists on subsequent runs, this entire, computationally expensive sub-phase is skipped.
 
 #### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**
 This phase uses the clean, structured JSON data from the extraction to answer the five audit questions with surgical precision, using the right tool for each job.

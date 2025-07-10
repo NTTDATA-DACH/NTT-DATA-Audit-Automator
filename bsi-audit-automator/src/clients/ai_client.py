@@ -3,6 +3,7 @@ import logging
 import json
 import asyncio
 import time
+import datetime
 from typing import List, Dict, Any
 
 from google.cloud import aiplatform
@@ -24,9 +25,14 @@ class AiClient:
         
         with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
             prompt_config = json.load(f)
-        self.system_message = prompt_config.get("system_message", "")
-        if not self.system_message:
+        
+        base_system_message = prompt_config.get("system_message", "")
+        if not base_system_message:
             logging.warning("System message is empty. AI calls will not have a predefined persona.")
+
+        # Append the current date to the system prompt
+        current_date = datetime.date.today().strftime("%Y-%m-%d")
+        self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
         aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
         self.generative_model = GenerativeModel(
@@ -35,6 +41,7 @@ class AiClient:
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
+        logging.info(f"System Message Context includes today's date: {current_date}")
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None, request_context_log: str = "Generic AI Request") -> Dict[str, Any]:
         """
@@ -61,7 +68,7 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=65536, # Default is 2048, need more for large extractions
+            max_output_tokens=8192, # Increased from 65k to 8k as 65k is invalid. Standard is 2048. 8192 is a safe max.
             temperature=0.2,
         )
 

@@ -165,9 +165,9 @@ class Chapter3Runner:
 
     def _merge_extraction_results(self, pass1_results: List[Dict[str, Any]], pass2_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Merges two lists of extracted requirements. It ensures all unique items are
-        kept and for items found in both lists, it chooses the one with more
-        detailed text fields.
+        Merges two lists of extracted requirements using a UNION strategy.
+        If a requirement is found in both lists, the one with more detailed
+        text content ("longer is better") is kept.
         """
         logging.info(f"Merging results from two extraction passes (Pass 1: {len(pass1_results)} items, Pass 2: {len(pass2_results)} items).")
         
@@ -192,7 +192,7 @@ class Chapter3Runner:
                 merged_data[item_id] = item_pass2
 
         final_list = list(merged_data.values())
-        logging.info(f"Merging complete. Final result contains {len(final_list)} unique requirements.")
+        logging.info(f"Merging complete. Final union result contains {len(final_list)} unique requirements.")
         return final_list
 
     async def _extract_data_from_grundschutz_check(self) -> dict:
@@ -283,26 +283,36 @@ class Chapter3Runner:
         else:
             answers[3] = True # No unmet items to check
 
-        # Q5: Sind alle Anforderungen innerhalb der letzten 12 Monate überprüft worden? (Deterministic)
+        # Q5: Sind alle Anforderungen innerhalb der letzten 12 Monate überprüft worden? (Robust Deterministic)
         one_year_ago = datetime.now() - timedelta(days=365)
+        nineteen_seventy = datetime(1970, 1, 1)
         outdated_items = []
         for a in anforderungen:
             date_str = a.get("datumLetztePruefung")
             try:
-                if date_str and "." in str(date_str):
-                    check_date = datetime.strptime(date_str, "%d.%m.%Y")
-                elif date_str:
-                    check_date = datetime.fromisoformat(date_str.split("T")[0])
-                else:
-                    outdated_items.append(a["id"]) # Count as outdated if date is missing
+                check_date = None
+                if date_str:
+                    if "." in str(date_str):
+                        try:
+                            check_date = datetime.strptime(str(date_str), "%d.%m.%Y")
+                        except ValueError:
+                            check_date = datetime.strptime(str(date_str), "%d.%m.%y")
+                    else: # Assumes ISO format
+                        check_date = datetime.fromisoformat(str(date_str).split("T")[0])
+
+                if not check_date or check_date.year <= 1970: # Check for missing or fallback date
+                    outdated_items.append(a.get("id", "Unknown ID"))
                     continue
+                
                 if check_date < one_year_ago:
-                    outdated_items.append(a["id"])
-            except (ValueError, TypeError):
-                outdated_items.append(a["id"]) # Count as outdated if date is invalid
+                    outdated_items.append(a.get("id", "Unknown ID"))
+            except (ValueError, TypeError) as e:
+                logging.warning(f"Could not parse date '{date_str}' for item '{a.get('id', 'N/A')}'. Error: {e}. Counting as outdated.")
+                outdated_items.append(a.get("id", "Unknown ID")) # Count as outdated if date is invalid
+
         answers[4] = not bool(outdated_items)
         if outdated_items:
-            findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated_items)} Anforderungen (z.B. {outdated_items[0]}) liegt mehr als 12 Monate zurück oder das Datum ist ungültig."})
+            findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated_items)} Anforderungen (z.B. {outdated_items[0]}) liegt mehr als 12 Monate zurück, das Datum fehlt oder ist ungültig."})
 
         # Consolidate findings
         final_finding = {"category": "OK", "description": "Alle Prüfungen für den IT-Grundschutz-Check waren erfolgreich."}
