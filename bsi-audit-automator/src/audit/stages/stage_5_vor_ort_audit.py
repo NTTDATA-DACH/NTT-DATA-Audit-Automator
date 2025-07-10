@@ -16,7 +16,7 @@ class Chapter5Runner:
     enriching it with data extracted in prior stages.
     """
     STAGE_NAME = "Chapter-5"
-    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check.json"
+    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
