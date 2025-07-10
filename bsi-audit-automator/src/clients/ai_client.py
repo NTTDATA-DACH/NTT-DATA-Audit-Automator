@@ -21,15 +21,18 @@ class AiClient:
 
     def __init__(self, config: AppConfig):
         self.config = config
-        aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
-        self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
-        self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
         
         with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
             prompt_config = json.load(f)
         self.system_message = prompt_config.get("system_message", "")
         if not self.system_message:
             logging.warning("System message is empty. AI calls will not have a predefined persona.")
+
+        aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
+        self.generative_model = GenerativeModel(
+            GENERATIVE_MODEL_NAME, system_instruction=self.system_message
+        )
+        self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
@@ -58,13 +61,12 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=8192,
+            max_output_tokens=8192, # Default is 2048, need more for large extractions
             temperature=0.2,
         )
 
-        # Build the content list for the API call, prepending the system message.
-        full_prompt = f"{self.system_message}\n\n{prompt}"
-        contents = [full_prompt]
+        # Build the content list. The system message is now handled by the model constructor.
+        contents = [prompt]
         if gcs_uris:
             for uri in gcs_uris:
                 contents.append(Part.from_uri(uri, mime_type="application/pdf"))
