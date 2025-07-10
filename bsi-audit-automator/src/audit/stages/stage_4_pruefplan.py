@@ -36,7 +36,18 @@ class Chapter4Runner:
         definitions = {}
         ch4_config = self.prompt_config["stages"]["Chapter-4"]
 
-        # Deterministic part
+        # AI-driven part, conditional on audit type
+        if self.config.audit_type == "Zertifizierungsaudit":
+            logging.info("Loading definitions for 'Zertifizierungsaudit'.")
+            definitions["auswahlBausteineErstRezertifizierung"] = ch4_config["auswahlBausteineErstRezertifizierung"]
+        elif self.config.audit_type == "Überwachungsaudit":
+            logging.info("Loading definitions for 'Überwachungsaudit'.")
+            definitions["auswahlBausteine1Ueberwachungsaudit"] = ch4_config["auswahlBausteine1Ueberwachungsaudit"]
+            definitions["auswahlBausteine2Ueberwachungsaudit"] = ch4_config["auswahlBausteine2Ueberwachungsaudit"]
+        else:
+            logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
+            
+        # Common parts for all audit types
         definitions["auswahlStandorte"] = {
             "key": "4.1.4",
             "type": "deterministic",
@@ -44,15 +55,6 @@ class Chapter4Runner:
                 "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
             }
         }
-        
-        # Load AI-driven definitions based on config and audit type
-        if self.config.audit_type == "Zertifizierungsaudit":
-            definitions["auswahlBausteineErstRezertifizierung"] = ch4_config["auswahlBausteineErstRezertifizierung"]
-        elif self.config.audit_type == "Überwachungsaudit":
-            definitions["auswahlBausteine1Ueberwachungsaudit"] = ch4_config["auswahlBausteine1Ueberwachungsaudit"]
-        else:
-            logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
-            
         definitions["auswahlMassnahmenAusRisikoanalyse"] = ch4_config["auswahlMassnahmenAusRisikoanalyse"]
 
         # Mark the type for processing
