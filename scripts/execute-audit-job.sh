@@ -21,7 +21,7 @@ fi
 
 # --- Configuration ---
 # Set to "true" to run in test mode (processes fewer files/items)
-TEST_MODE="true"
+TEST_MODE="false"
 MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
