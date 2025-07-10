@@ -8,6 +8,7 @@
 # Use a remote backend for state management in a team environment.
 *.tfstate
 *.tfstate.*.backup
+terraform/terraform.tfstate.backup
 
 # Ignore generated plans, which can also contain sensitive information.
 *.tfplan
