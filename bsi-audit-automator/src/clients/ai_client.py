@@ -13,6 +13,7 @@ from src.config import AppConfig
 
 GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
 MAX_RETRIES = 5
+PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
 
 class AiClient:
@@ -23,6 +24,13 @@ class AiClient:
         aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
         self.generative_model = GenerativeModel(GENERATIVE_MODEL_NAME)
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
+        
+        with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            prompt_config = json.load(f)
+        self.system_message = prompt_config.get("system_message", "")
+        if not self.system_message:
+            logging.warning("System message is empty. AI calls will not have a predefined persona.")
+
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None, request_context_log: str = "Generic AI Request") -> Dict[str, Any]:
@@ -50,15 +58,15 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=65536,
+            max_output_tokens=8192,
             temperature=0.2,
         )
 
-        # Build the content list for the API call
-        contents = [prompt]
+        # Build the content list for the API call, prepending the system message.
+        full_prompt = f"{self.system_message}\n\n{prompt}"
+        contents = [full_prompt]
         if gcs_uris:
             for uri in gcs_uris:
-                # Assuming all provided documents are PDFs
                 contents.append(Part.from_uri(uri, mime_type="application/pdf"))
             if self.config.is_test_mode:
                 logging.info(f"Attaching {len(gcs_uris)} GCS files to the prompt.")
@@ -78,8 +86,6 @@ class AiClient:
 
                     finish_reason = response.candidates[0].finish_reason.name
                     if finish_reason not in ["STOP", "MAX_TOKENS"]:
-                        # Raise an exception to be caught by the generic handler below,
-                        # which will trigger the retry-with-backoff logic.
                         raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
 
                     response_json = json.loads(response.text)
@@ -89,12 +95,10 @@ class AiClient:
 
                 except (api_core_exceptions.GoogleAPICallError, Exception) as e:
                     wait_time = 2 ** attempt
-                    # If this was the last attempt, log critical error and re-raise the exception.
                     if attempt == MAX_RETRIES - 1:
                         logging.critical(f"[{request_context_log}] AI generation failed after all {MAX_RETRIES} retries.", exc_info=True)
-                        raise # This is now inside the except block and will correctly re-raise 'e'.
+                        raise
 
-                    # Log the appropriate warning for the current attempt.
                     if isinstance(e, api_core_exceptions.GoogleAPICallError):
                         logging.warning(f"[{request_context_log}] Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}): {e.message}. Retrying in {wait_time}s...")
                     else:
@@ -102,5 +106,4 @@ class AiClient:
 
                     await asyncio.sleep(wait_time)
 
-        # This line should not be reachable if the loop logic is correct, but serves as a fallback.
         raise RuntimeError("AI generation failed unexpectedly after exhausting all retries.")

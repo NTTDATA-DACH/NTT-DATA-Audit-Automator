@@ -11,15 +11,14 @@ from src.clients.rag_client import RagClient
 class Chapter1Runner:
     """Handles generating content for Chapter 1, with most sections being manual placeholders."""
     STAGE_NAME = "Chapter-1"
+    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
     def __init__(self, config: AppConfig, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.ai_client = ai_client
         self.rag_client = rag_client
+        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
-
-    def _load_asset_text(self, path: str) -> str:
-        with open(path, 'r', encoding='utf-8') as f: return f.read()
 
     def _load_asset_json(self, path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
@@ -27,6 +26,10 @@ class Chapter1Runner:
     async def _process_informationsverbund(self) -> Dict[str, Any]:
         """Handles 1.4 Informationsverbund using a filtered document query."""
         logging.info("Processing 1.4 Informationsverbund...")
+        
+        stage_config = self.prompt_config["stages"]["Chapter-1"]["informationsverbund"]
+        prompt_template = stage_config["prompt"]
+        schema = self._load_asset_json(stage_config["schema_path"])
         
         source_categories = ['Informationsverbund', 'Strukturanalyse']
         gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
@@ -42,10 +45,6 @@ class Chapter1Runner:
                 }
             }
             
-        prompt_template = self._load_asset_text("assets/prompts/stage_1_4_informationsverbund.txt")
-        schema = self._load_asset_json("assets/schemas/stage_1_4_informationsverbund_schema.json")
-        
-        # The prompt no longer needs context formatted in, as the files are attached directly.
         return await self.ai_client.generate_json_response(
             prompt=prompt_template,
             json_schema=schema,

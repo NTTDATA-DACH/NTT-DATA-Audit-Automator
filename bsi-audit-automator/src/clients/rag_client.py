@@ -12,6 +12,8 @@ from src.clients.ai_client import AiClient
 
 DOC_MAP_PATH = "output/document_map.json"
 MAX_FILES_TEST_MODE = 3
+PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
+
 
 class RagClient:
     """
@@ -27,6 +29,7 @@ class RagClient:
         self.ai_client = ai_client
         self._document_category_map: Optional[Dict[str, List[str]]] = None
         self._all_source_files: List[str] = []
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
 
     @classmethod
     async def create(cls, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, force_remap: bool = False):
@@ -41,9 +44,6 @@ class RagClient:
         self._all_source_files = [blob.name for blob in self.gcs_client.list_files()]
         await self._ensure_document_map_exists(force_remap=force_remap)
 
-    def _load_asset_text(self, path: str) -> str:
-        with open(path, 'r', encoding='utf-8') as f: return f.read()
-
     def _load_asset_json(self, path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
@@ -56,18 +56,17 @@ class RagClient:
         """
         logging.info("Starting AI-driven document classification...")
         
-        # Create a mapping from basename to the full GCS path for later use.
         basename_to_fullpath_map = {name.split('/')[-1]: name for name in self._all_source_files}
         filenames = list(basename_to_fullpath_map.keys())
 
         if not filenames:
             logging.warning("No source files found to classify.")
-            # Create an empty map to prevent repeated attempts
             self.gcs_client.upload_from_string("{}", DOC_MAP_PATH)
             return
 
-        prompt_template = self._load_asset_text("assets/prompts/etl_classify_documents.txt")
-        schema = self._load_asset_json("assets/schemas/etl_classify_documents_schema.json")
+        etl_config = self.prompt_config["stages"]["ETL"]["classify_documents"]
+        prompt_template = etl_config["prompt"]
+        schema = self._load_asset_json(etl_config["schema_path"])
         
         filenames_json = json.dumps(filenames, indent=2)
         prompt = prompt_template.format(filenames_json=filenames_json)
@@ -79,7 +78,6 @@ class RagClient:
                 request_context_log="Document Classification"
             )
             
-            # Replace basenames in the result with their full GCS paths before saving.
             for item in classification_result.get("document_map", []):
                 basename = item.get("filename")
                 if basename in basename_to_fullpath_map:
@@ -97,7 +95,6 @@ class RagClient:
                 "Document selection will be impaired.",
                 exc_info=True
             )
-            # The fallback map should use the full paths directly from the source file list.
             fallback_map = {"document_map": [{"filename": full_path, "category": "Sonstiges"} for full_path in self._all_source_files]}
             content_to_upload = json.dumps(fallback_map, indent=2, ensure_ascii=False)
         
@@ -112,7 +109,6 @@ class RagClient:
         Loads the document classification map from GCS. If it doesn't exist,
         or if `force_remap` is True, it triggers the creation process.
         """
-        # If force is requested, or if the map simply doesn't exist, create it.
         if force_remap or not self.gcs_client.blob_exists(DOC_MAP_PATH):
             if force_remap:
                 logging.info("--force flag is set. Re-creating document classification map.")
@@ -122,7 +118,6 @@ class RagClient:
         else:
              logging.info(f"Using existing document map from '{DOC_MAP_PATH}'.")
 
-        # Now, load the map that is guaranteed to exist and build the internal lookup.
         try:
             map_data = self.gcs_client.read_json(DOC_MAP_PATH)
         except NotFound:
@@ -133,7 +128,6 @@ class RagClient:
         doc_map_list = map_data.get("document_map", [])
         for item in doc_map_list:
             category = item.get("category")
-            # The map now correctly stores the full GCS path (e.g. 'source_documents/file.pdf'), not just the basename.
             filename = item.get("filename")
             if category and filename:
                 if category not in category_map:
@@ -155,7 +149,6 @@ class RagClient:
             A list of 'gs://...' URIs for the model to use as context.
         """
         if self._document_category_map is None:
-            # This should not happen due to the async initializer, but as a safeguard:
             raise RuntimeError("Document map has not been initialized. Call `await RagClient.create()`.")
             
         selected_filenames = set()
@@ -168,10 +161,8 @@ class RagClient:
                  logging.warning(f"No documents found for categories: {source_categories}. Returning all documents as a fallback.")
                  selected_filenames.update(self._all_source_files)
         else:
-            # If no categories are specified, use all source files
             selected_filenames.update(self._all_source_files)
 
-        # The filename (fname) is now the full path relative to the bucket root (e.g., 'source_documents/file.pdf')
         uris = [f"gs://{self.config.bucket_name}/{fname}" for fname in sorted(list(selected_filenames))]
         
         if self.config.is_test_mode and len(uris) > MAX_FILES_TEST_MODE:

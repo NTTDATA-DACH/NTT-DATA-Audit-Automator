@@ -16,37 +16,12 @@ from src.audit.stages.control_catalog import ControlCatalog
 class Chapter3Runner:
     """
     Handles generating content for Chapter 3 "Dokumentenprüfung" by dynamically
-    parsing the master report template.
+    parsing the master report template and using the central prompt configuration.
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
+    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
-
-    _DOC_CATEGORY_MAP = {
-        "aktualitaetDerReferenzdokumente": {"source_categories": None},
-        "sicherheitsleitlinieUndRichtlinienInA0": {"source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie"]},
-        "definitionDesInformationsverbundes": {"source_categories": ["Informationsverbund", "Strukturanalyse"]},
-        "bereinigterNetzplan": {"source_categories": ["Netzplan", "Strukturanalyse"]},
-        "listeDerGeschaeftsprozesse": {"source_categories": ["Strukturanalyse"]},
-        "listeDerAnwendungen": {"source_categories": ["Strukturanalyse"]},
-        "listeDerItSysteme": {"source_categories": ["Strukturanalyse"]},
-        "listeDerRaeumeGebaeudeStandorte": {"source_categories": ["Strukturanalyse"]},
-        "listeDerKommunikationsverbindungen": {"source_categories": ["Strukturanalyse"]},
-        "stichprobenDokuStrukturanalyse": {"source_categories": ["Strukturanalyse"]},
-        "listeDerDienstleister": {"source_categories": ["Strukturanalyse", "Dienstleister-Liste"]},
-        "definitionDerSchutzbedarfskategorien": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "schutzbedarfGeschaeftsprozesse": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "schutzbedarfAnwendungen": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "schutzbedarfItSysteme": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "schutzbedarfRaeume": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "schutzbedarfKommunikationsverbindungen": {"source_categories": ["Schutzbedarfsfeststellung"]},
-        "stichprobenDokuSchutzbedarf": {"source_categories": ["Strukturanalyse", "Schutzbedarfsfeststellung"]},
-        "modellierungsdetails": {"source_categories": ["Modellierung"]},
-        "detailsZumItGrundschutzCheck": {"source_categories": ["Grundschutz-Check", "Realisierungsplan"]},
-        "benutzerdefinierteBausteine": {"source_categories": ["Modellierung"]},
-        "risikoanalyse": {"source_categories": ["Risikoanalyse"]},
-        "realisierungsplan": {"source_categories": ["Realisierungsplan"]},
-    }
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
@@ -54,12 +29,10 @@ class Chapter3Runner:
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
+        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME} with dynamic execution plan.")
-
-    def _load_asset_text(self, path: str) -> str:
-        with open(path, 'r', encoding='utf-8') as f: return f.read()
 
     def _load_asset_json(self, path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
@@ -92,7 +65,6 @@ class Chapter3Runner:
         template = self._load_asset_json(self.TEMPLATE_PATH)
         ch3_template = template.get("bsiAuditReport", {}).get("dokumentenpruefung", {})
         
-        # Simpler, more direct iteration
         for subchapter_name, subchapter_data in ch3_template.items():
              if not isinstance(subchapter_data, dict): continue
              
@@ -108,43 +80,31 @@ class Chapter3Runner:
         return plan
 
     def _create_task_from_section(self, key: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Creates a single task dictionary for the execution plan."""
-        if key == "detailsZumItGrundschutzCheck":
-            return {"key": key, "type": "custom_logic"}
-
-        content = data.get("content", [])
-        if not content: return None
+        """Creates a single task dictionary for the execution plan using the central prompt config."""
+        task_config = self.prompt_config["stages"]["Chapter-3"].get(key)
+        if not task_config:
+            return None
 
         task = {"key": key}
-        if any("Votum" in item.get("label", "") for item in content if item.get("type") == "prose"):
-            task["type"] = "summary"
-            task["prompt_path"] = "assets/prompts/generic_summary_prompt.txt"
-            task["schema_path"] = "assets/schemas/generic_summary_schema.json"
-            task["summary_topic"] = data.get("title", key)
+        task_type = task_config.get("type", "ai_driven")
+        task["type"] = task_type
+        
+        if task_type == "custom_logic":
             return task
 
-        questions = [item["questionText"] for item in content if item.get("type") == "question"]
-        if not questions: return None
-        
-        task["type"] = "ai_driven"
-        task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
-        task["prompt_path"] = "assets/prompts/generic_question_prompt.txt"
-        
-        metadata = self._DOC_CATEGORY_MAP.get(key, {})
-        task["source_categories"] = metadata.get("source_categories")
+        task["schema_path"] = task_config["schema_path"]
+        task["source_categories"] = task_config.get("source_categories")
 
-        num_questions = len(questions)
-        schema_map = {1: "generic_1_question_schema.json", 2: "generic_2_question_schema.json",
-                      3: "generic_3_question_schema.json", 4: "generic_4_question_schema.json",
-                      5: "generic_5_question_schema.json"}
+        if task_type == "ai_driven":
+            generic_prompt = self.prompt_config["stages"]["Chapter-3"]["generic_question"]["prompt"]
+            content = data.get("content", [])
+            questions = [item["questionText"] for item in content if item.get("type") == "question"]
+            task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
+            task["prompt"] = generic_prompt
         
-        if key == "risikoanalyse": schema_map[4] = "stage_3_7_risikoanalyse_schema.json"
-        
-        schema_file = schema_map.get(num_questions)
-        if not schema_file:
-            logging.error(f"No generic schema for {num_questions} questions in section '{key}'.")
-            return None
-        task["schema_path"] = f"assets/schemas/{schema_file}"
+        elif task_type == "summary":
+            task["prompt"] = self.prompt_config["stages"]["Chapter-3"]["generic_summary"]["prompt"]
+            task["summary_topic"] = data.get("title", key)
         
         return task
 
@@ -247,8 +207,9 @@ class Chapter3Runner:
         pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(blob_name))
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         
-        prompt_template = self._load_asset_text("assets/prompts/stage_3_6_1_extract_check_data.txt")
-        schema = self._load_asset_json("assets/schemas/stage_3_6_1_extract_check_data_schema.json")
+        extraction_config = self.prompt_config["stages"]["Chapter-3"]["detailsZumItGrundschutzCheck_extraction"]
+        prompt_template = extraction_config["prompt"]
+        schema = self._load_asset_json(extraction_config["schema_path"])
 
         pass_50_task = self._run_extraction_pass(doc, 50, prompt_template, schema)
         pass_60_task = self._run_extraction_pass(doc, 60, prompt_template, schema)
@@ -263,7 +224,6 @@ class Chapter3Runner:
         )
         logging.info(f"Saved merged Grundschutz-Check data with {len(merged_anforderungen)} items.")
         return final_data
-
 
     async def _process_details_zum_it_grundschutz_check(self) -> Dict[str, Any]:
         """
@@ -319,11 +279,13 @@ class Chapter3Runner:
         for a in anforderungen:
             date_str = a.get("datumLetztePruefung")
             try:
-                # Handle different date formats
-                if "." in date_str:
+                if date_str and "." in date_str:
                     check_date = datetime.strptime(date_str, "%d.%m.%Y")
-                else:
+                elif date_str:
                     check_date = datetime.fromisoformat(date_str.split("T")[0])
+                else:
+                    outdated_items.append(a["id"]) # Count as outdated if date is missing
+                    continue
                 if check_date < one_year_ago:
                     outdated_items.append(a["id"])
             except (ValueError, TypeError):
@@ -340,40 +302,27 @@ class Chapter3Runner:
 
         return {"detailsZumItGrundschutzCheck": {"answers": answers, "finding": final_finding}}
 
-
     async def _process_ai_subchapter(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Generates content for a single AI-driven subchapter."""
         key = task["key"]
         logging.info(f"Starting AI generation for subchapter: {key}")
         
-        prompt_template_str = self._load_asset_text(task["prompt_path"])
+        prompt = task["prompt"].format(questions=task["questions_formatted"])
         schema = self._load_asset_json(task["schema_path"])
-
         gcs_uris = self.rag_client.get_gcs_uris_for_categories(
             source_categories=task.get("source_categories")
         )
-
         if not gcs_uris and task.get("source_categories") is not None:
              logging.warning(f"No documents found for {key}. Returning error structure.")
              return {key: {"error": f"No source documents found for categories: {task.get('source_categories')}"}}
-
-        prompt = prompt_template_str.format(
-            questions=task["questions_formatted"]
-        )
-
         try:
             generated_data = await self.ai_client.generate_json_response(
-                prompt=prompt,
-                json_schema=schema,
-                gcs_uris=gcs_uris,
-                request_context_log=f"Chapter-3: {key}"
+                prompt=prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-3: {key}"
             )
-            
             if key == "aktualitaetDerReferenzdokumente":
                 coverage_finding = self._check_document_coverage()
                 if coverage_finding['category'] != 'OK':
                     generated_data['finding'] = coverage_finding
-            
             return {key: generated_data}
         except Exception as e:
             logging.error(f"Failed to generate data for subchapter {key}: {e}", exc_info=True)
@@ -384,19 +333,11 @@ class Chapter3Runner:
         key = task["key"]
         logging.info(f"Starting summary generation for subchapter: {key}")
 
-        prompt_template_str = self._load_asset_text(task["prompt_path"])
+        prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
         schema = self._load_asset_json(task["schema_path"])
-        
-        prompt = prompt_template_str.format(
-            summary_topic=task["summary_topic"],
-            previous_findings=previous_findings
-        )
-
         try:
             generated_data = await self.ai_client.generate_json_response(
-                prompt=prompt,
-                json_schema=schema,
-                request_context_log=f"Chapter-3 Summary: {key}"
+                prompt=prompt, json_schema=schema, request_context_log=f"Chapter-3 Summary: {key}"
             )
             return {key: generated_data}
         except Exception as e:
@@ -427,24 +368,23 @@ class Chapter3Runner:
         aggregated_results = {}
         processed_results = []
         
-        tasks_to_run = self.execution_plan
-        
-        for task in tasks_to_run:
-            if not task: continue
+        # Isolate custom logic, AI, and summary tasks
+        custom_logic_tasks = [t for t in self.execution_plan if t and t.get("type") == "custom_logic"]
+        ai_tasks = [t for t in self.execution_plan if t and t.get("type") == "ai_driven"]
+        summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
+
+        # Run custom logic first, as it might be a dependency for others (like extraction)
+        for task in custom_logic_tasks:
             key = task['key']
-            task_type = task['type']
-            
+            logging.info(f"--- Processing custom logic task: {key} ---")
             result = None
-            if task_type == 'custom_logic' and key == 'detailsZumItGrundschutzCheck':
-                logging.info(f"--- Processing custom logic task: {key} ---")
+            if key == 'detailsZumItGrundschutzCheck':
                 result = await self._process_details_zum_it_grundschutz_check()
-            
             if result:
                 processed_results.append(result)
                 aggregated_results.update(result)
 
-        # Batch process all standard AI tasks
-        ai_tasks = [task for task in tasks_to_run if task and task.get("type") == "ai_driven"]
+        # Batch process all standard AI tasks in parallel
         if ai_tasks:
             logging.info(f"--- Processing {len(ai_tasks)} AI-driven subchapters ---")
             ai_coroutines = [self._process_ai_subchapter(task) for task in ai_tasks]
@@ -453,15 +393,13 @@ class Chapter3Runner:
             for res in ai_results_batch:
                 aggregated_results.update(res)
 
-        # Process summary tasks last, now that all other results are available
-        summary_tasks = [task for task in tasks_to_run if task and task.get("type") == "summary"]
+        # Process summary tasks last, using all previously generated results
         if summary_tasks:
             logging.info(f"--- Processing {len(summary_tasks)} summary subchapters ---")
             all_findings_text = self._get_findings_from_results(processed_results)
             
             summary_coroutines = [self._process_summary_subchapter(task, all_findings_text) for task in summary_tasks]
             summary_results_list = await asyncio.gather(*summary_coroutines)
-
             for res in summary_results_list:
                 aggregated_results.update(res)
 
