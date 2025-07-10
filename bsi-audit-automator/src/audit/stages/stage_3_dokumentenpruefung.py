@@ -20,7 +20,7 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
-    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check.json"
+    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
 
     _DOC_CATEGORY_MAP = {
         "aktualitaetDerReferenzdokumente": {"source_categories": None},
@@ -148,74 +148,122 @@ class Chapter3Runner:
         
         return task
 
-    async def _extract_data_from_grundschutz_check(self) -> dict:
+    async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Phase 1 of 3.6.1 processing. Extracts all requirement data from the large
-        Grundschutz-Check PDF by processing it in 50-page chunks. The result is
-        saved as an intermediate JSON file in GCS.
+        Runs a single data extraction pass over the document with a specific chunk size.
         """
-        try:
-            # Idempotency check: If the intermediate file exists, load and return it.
-            json_data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
-            logging.info(f"Found existing extracted data at '{self.INTERMEDIATE_CHECK_RESULTS_PATH}'. Skipping extraction.")
-            return json_data
-        except NotFound:
-            logging.info("No intermediate data found. Starting extraction from Grundschutz-Check PDF.")
-
-        uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check"])
-        if not uris:
-            raise FileNotFoundError("Could not find document with category 'Grundschutz-Check'.")
-        
-        # We process only the first document found.
-        gcs_uri = uris[0]
-        blob_name = gcs_uri.replace(f"gs://{self.config.bucket_name}/", "")
-        pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(blob_name))
-
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        logging.info(f"Starting extraction pass with chunk size: {chunk_size} pages.")
         total_pages = len(doc)
-        chunk_size = 50
         tasks = []
-        prompt_template = self._load_asset_text("assets/prompts/stage_3_6_1_extract_check_data.txt")
-        schema = self._load_asset_json("assets/schemas/stage_3_6_1_extract_check_data_schema.json")
+        temp_blob_names = []
 
         for i in range(0, total_pages, chunk_size):
             chunk_doc = fitz.open()
             chunk_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
             chunk_bytes = chunk_doc.write()
             
-            # Create a temporary blob for the chunk to get a GCS URI for the API
-            chunk_blob_name = f"output/results/intermediate/temp_chunk_{i}.pdf"
+            chunk_blob_name = f"output/results/intermediate/temp_chunk_{chunk_size}_{i}.pdf"
             self.gcs_client.bucket.blob(chunk_blob_name).upload_from_string(chunk_bytes, content_type="application/pdf")
             chunk_uri = f"gs://{self.config.bucket_name}/{chunk_blob_name}"
+            temp_blob_names.append(chunk_blob_name)
 
             task = self.ai_client.generate_json_response(
                 prompt=prompt_template,
                 json_schema=schema,
                 gcs_uris=[chunk_uri],
-                request_context_log=f"Chapter-3.6.1 Extraction (Pages {i}-{i+chunk_size-1})"
+                request_context_log=f"Chapter-3.6.1 Extraction (ChunkSize: {chunk_size}, Pages: {i}-{i+chunk_size-1})"
             )
             tasks.append(task)
-
-        # Run all chunk processing tasks in parallel
-        results = await asyncio.gather(*tasks)
-
-        # Clean up temporary chunk files
-        for i in range(0, total_pages, chunk_size):
-            chunk_blob_name = f"output/results/intermediate/temp_chunk_{i}.pdf"
-            self.gcs_client.bucket.blob(chunk_blob_name).delete()
         
-        # Aggregate results
-        all_anforderungen = []
-        for res in results:
-            all_anforderungen.extend(res.get("anforderungen", []))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for blob_name in temp_blob_names:
+            try:
+                self.gcs_client.bucket.blob(blob_name).delete()
+            except Exception as e:
+                logging.warning(f"Could not delete temporary blob {blob_name}: {e}")
         
-        final_data = {"anforderungen": all_anforderungen}
+        pass_anforderungen = []
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logging.error(f"Extraction pass (chunk size {chunk_size}, page {i*chunk_size}) failed: {res}")
+                continue
+            pass_anforderungen.extend(res.get("anforderungen", []))
+        
+        logging.info(f"Extraction pass with chunk size {chunk_size} completed, found {len(pass_anforderungen)} requirements.")
+        return pass_anforderungen
+
+    def _merge_extraction_results(self, pass1_results: List[Dict[str, Any]], pass2_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merges two lists of extracted requirements, prioritizing completeness by keeping
+        the version with longer text fields.
+        """
+        logging.info(f"Merging results from two extraction passes (Pass 1: {len(pass1_results)} items, Pass 2: {len(pass2_results)} items).")
+        merged_data: Dict[str, Dict[str, Any]] = {}
+
+        for item in pass1_results:
+            if item_id := item.get("id"):
+                merged_data[item_id] = item
+
+        for item2 in pass2_results:
+            if not (item2_id := item2.get("id")):
+                continue
+
+            if not (existing_item := merged_data.get(item2_id)):
+                merged_data[item2_id] = item2
+            else:
+                new_erl_len = len(item2.get("umsetzungserlaeuterung", ""))
+                old_erl_len = len(existing_item.get("umsetzungserlaeuterung", ""))
+                new_titel_len = len(item2.get("titel", ""))
+                old_titel_len = len(existing_item.get("titel", ""))
+
+                if new_erl_len > old_erl_len or new_titel_len > old_titel_len:
+                    merged_data[item2_id] = item2
+                    logging.debug(f"Updated item '{item2_id}' with content from second pass due to longer text fields.")
+
+        final_list = list(merged_data.values())
+        logging.info(f"Merging complete. Final result contains {len(final_list)} unique requirements.")
+        return final_list
+
+    async def _extract_data_from_grundschutz_check(self) -> dict:
+        """
+        Phase 1 of 3.6.1 processing. Extracts all requirement data from the large
+        Grundschutz-Check PDF by processing it in two separate passes with different
+        chunk sizes (50 and 60 pages), then merges the results for completeness.
+        """
+        try:
+            json_data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
+            logging.info(f"Found existing merged/extracted data at '{self.INTERMEDIATE_CHECK_RESULTS_PATH}'. Skipping extraction.")
+            return json_data
+        except NotFound:
+            logging.info("No merged intermediate data found. Starting two-pass extraction from Grundschutz-Check PDF.")
+
+        uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check"])
+        if not uris:
+            raise FileNotFoundError("Could not find document with category 'Grundschutz-Check'.")
+        
+        gcs_uri = uris[0]
+        blob_name = gcs_uri.replace(f"gs://{self.config.bucket_name}/", "")
+        pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(blob_name))
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        
+        prompt_template = self._load_asset_text("assets/prompts/stage_3_6_1_extract_check_data.txt")
+        schema = self._load_asset_json("assets/schemas/stage_3_6_1_extract_check_data_schema.json")
+
+        pass_50_task = self._run_extraction_pass(doc, 50, prompt_template, schema)
+        pass_60_task = self._run_extraction_pass(doc, 60, prompt_template, schema)
+        results_50, results_60 = await asyncio.gather(pass_50_task, pass_60_task)
+
+        merged_anforderungen = self._merge_extraction_results(results_50, results_60)
+        
+        final_data = {"anforderungen": merged_anforderungen}
         self.gcs_client.upload_from_string(
             json.dumps(final_data, indent=2, ensure_ascii=False),
             self.INTERMEDIATE_CHECK_RESULTS_PATH
         )
-        logging.info(f"Saved extracted Grundschutz-Check data with {len(all_anforderungen)} items.")
+        logging.info(f"Saved merged Grundschutz-Check data with {len(merged_anforderungen)} items.")
         return final_data
+
 
     async def _process_details_zum_it_grundschutz_check(self) -> Dict[str, Any]:
         """
