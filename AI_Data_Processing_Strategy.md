@@ -50,85 +50,81 @@ Together, these files allow the audit process to be modified and extended by sim
 
 ---
 
-### **Phase 2:  Intelligent Semantic Chunking**
+### **Phase 2:  Ground-Truth-Driven Semantic Chunking**
 
-
-#### **Step 1: Build the Context Map** (Unchanged and Still Essential)
-
-This step remains exactly as we discussed. It is the mandatory first step.
-1.  **Extract `Zielobjekte` from Strukturanalyse (A.1):** Get the master list of all `Kürzel` and `Name`.
-2.  **Extract `Modellierung` from Modellierung Document (A.3):** Map which `Bausteine` apply to which `Zielobjekt`.
-3.  **Consolidate:** Create the single `system_structure_map.json` file. This is our ground truth.
+This strategy establishes a definitive "ground truth" map of the customer's environment *first*, then uses that map to intelligently dissect and process the main `Grundschutz-Check` document.
 
 ---
 
-#### **Step 2: The Semantic Chunking Algorithm** (The New Core Logic)
+#### **Step 1: Establish the Ground Truth (The Context Map)**
 
-This step replaces the fixed-size chunking passes. It will parse the `Grundschutz-Check` PDF and generate a list of "smart" chunks, where each chunk is a self-contained PDF segment ready for AI processing.
+The goal is to create a single, authoritative `system_structure_map.json` file. This becomes the immutable reference for the rest of the process.
+
+*   **1.1. Extract `Zielobjekte` from Strukturanalyse (A.1):**
+    *   **Input:** The `Strukturanalyse` document(s).
+    *   **Action:** Use a dedicated AI prompt to parse the document and extract a complete list of all `Zielobjekte`. For each, we will capture two key fields:
+        1.  `kürzel`: The arbitrary, unique customer-defined ID (e.g., "A-001", "IT-SYS-DB-05").
+        2.  `name`: The full, descriptive name (e.g., "Main Web Server", "CRM Datenbank").
+    *   **Output:** A master dictionary mapping every `Kürzel` to its `Name`. This will be used to find the headers in the `Grundschutz-Check`.
+
+*   **1.2. Extract `Modellierung` and Apply Business Rules (A.3):**
+    *   **Input:** The `Modellierung` document(s) and the BSI `Baustein` structure.
+    *   **Action:** We will perform a two-part process:
+        *   **Deterministic Rule Application:** For any `Baustein` ID that starts with `ISMS`, `ORP`, `CON`, `OPS`, or `DER`, we will *deterministically* assign it to a special, system-defined `Zielobjekt` with the `Kürzel` **"Informationsverbund"**. This is a hardcoded rule based on your insight.
+        *   **AI-Driven Extraction:** For all other `Bausteine` (those typically in layers `SYS`, `INF`, `NET`, `APP`), we will use an AI prompt to parse the `Modellierung` document and extract the `Zielobjekt Kürzel` to which each `Baustein` is assigned.
+    *   **Output:** A master mapping of every `Baustein ID` to its corresponding `Zielobjekt Kürzel`.
+
+*   **1.3. Consolidate and Save:**
+    *   **Action:** Combine the outputs of the previous steps into the single `system_structure_map.json`. This file now contains our complete ground truth: a list of all `Zielobjekte` (`Kürzel` + `Name`) and a complete mapping of every `Baustein` to its parent `Zielobjekt Kürzel`.
+
+---
+
+#### **Step 2: Intelligent Semantic Chunking**
+
+This Step uses the map from Step 1 to split the `Grundschutz-Check` PDF perfectly along its contextual boundaries.
 
 *   **2.1. Pre-Scan and Index `Zielobjekt` Headers:**
-    *   **Action:** As planned before, we perform a fast, deterministic pre-scan of the `Grundschutz-Check` PDF to find the exact page number where each `Zielobjekt` section begins.
-    *   **Output:** An ordered index of headers and their starting pages.
-        *   *Example Index:*
-            1.  `ISMS.1` (Sicherheitsmanagement) - starts on page 5
-            2.  `SYS.1.1` (Allgemeiner Server) - starts on page 12
-            3.  `NET.3.2` (Firewall) - starts on page 62
-            4.  `APP.1.1` (Webanwendungen) - starts on page 67
-            5.  *(End of Document)* - on page 70
+    *   **Input:** The `Grundschutz-Check` PDF and our `system_structure_map.json`.
+    *   **Action:** We will perform a fast, deterministic text search through the entire PDF. We will search for headers that match the pattern `Kürzel` + `Name` for every `Zielobjekt` in our map (e.g., searching for the literal string `"A-001 Main Web Server"`). We will also search for the header `"Informationsverbund"`.
+    *   **Output:** A precise, ordered index of which `Zielobjekt Kürzel` begins on which page.
 
-*   **2.2. The New Chunking Logic:**
-    *   **Action:** We will now iterate through this index to define our chunks. We'll also define a safety limit, for example: `MAX_PAGES_PER_CHUNK = 25`.
-
-    *   For each `Zielobjekt` in our index, we calculate the number of pages it occupies.
-        *   `ISMS.1` occupies pages 5 to 11 (7 pages).
-        *   `SYS.1.1` occupies pages 12 to 61 (50 pages).
-        *   `NET.3.2` occupies pages 62 to 66 (5 pages).
-        *   `APP.1.1` occupies pages 67 to 70 (4 pages).
-
-    *   We then apply the following logic to create our chunk definitions:
-        *   **IF a `Zielobjekt` section is *smaller than or equal to* `MAX_PAGES_PER_CHUNK`:**
-            *   The entire section becomes a single chunk.
-            *   *Result:* `ISMS.1` (pages 5-11), `NET.3.2` (pages 62-66), and `APP.1.1` (pages 67-70) each become one chunk.
-        *   **IF a `Zielobjekt` section is *larger than* `MAX_PAGES_PER_CHUNK`:**
-            *   The section is split into multiple, smaller sub-chunks of `MAX_PAGES_PER_CHUNK` size.
-            *   Critically, **every sub-chunk is tagged with the same `Zielobjekt` ID.**
-            *   *Result:* The `SYS.1.1` section (50 pages) is too large. It will be split into two chunks:
-                1.  Chunk for `SYS.1.1` covering pages 12-36 (25 pages).
-                2.  Chunk for `SYS.1.1` covering pages 37-61 (25 pages).
-
-*   **2.3. Chunk Creation:**
-    *   **Action:** Based on the definitions from the logic above, the code will now create the small, in-memory PDF chunks and send them to the AI for processing.
+*   **2.2. The Semantic Chunking Algorithm:**
+    *   **Action:** We will use this index to define our chunks, governed by a safety limit (e.g., `MAX_PAGES_PER_CHUNK = 25`).
+        *   **IF** a `Zielobjekt` section (from its header to the next header) is **smaller than or equal to** the limit, the entire section becomes one chunk, tagged with its `Zielobjekt Kürzel`.
+        *   **IF** a section is **larger** than the limit, it is split into multiple, smaller sub-chunks, but **every sub-chunk is tagged with the same `Zielobjekt Kürzel`**.
 
 ---
 
-#### **Step 3: AI Extraction with Simplified Prompts**
+#### **Step 3: Context-Aware AI Extraction**
 
-The AI processing now becomes much cleaner.
-*   The extraction prompt no longer needs complex instructions about guessing context. It can be simplified to:
-    > "You are extracting security requirements. All requirements in the following document chunk belong to the **Zielobjekt 'SYS.1.1'**. For every requirement you extract, you MUST include a `zielobjekt_kuerzel` field with the value 'ABBR'."
-*   The schema for the AI output (`stage_3_6_1_extract_check_data_schema.json`) is still updated to require the `zielobjekt_kuerzel` field.
+This Step now operates on perfectly formed, contextually-whole chunks.
+
+*   **Action:** For each chunk generated in Step 2, we will call the AI.
+*   **Prompt Logic:** The prompt is now extremely simple and direct:
+    > "Extract all security requirements from the provided document. All requirements within this document belong to the `Zielobjekt` identified by the unique Kürzel **'A-001'**. You MUST include a `zielobjekt_kuerzel` field with the value 'A-001' in every requirement object you generate."
+*   **Schema Update:** The `stage_3_6_1_extract_check_data_schema.json` will be updated to require the `zielobjekt_kuerzel` field.
 
 ---
 
-#### **Step 4: Merge-and-Refine** (Effectively Unchanged)
+#### **Step 4: Final "Merge-and-Refine" Reconstruction**
 
-This final reconstruction Step works exactly as we designed it previously, as it's already built to handle the output of the extraction process.
-*   **Group by Compound Key:** `(zielobjekt_kürzel, anforderung_id)`.
-*   **Merge and Reconstruct:** Apply the logic to merge titles, descriptions, statuses, and dates.
-*   **Final Assembly:** Create the final, clean list of requirements, each correctly associated with its parent `Zielobjekt`.
+This final Step reconstructs the complete and accurate dataset from the raw AI extractions.
 
-### **Summary of Final, Enhanced Strategy**
+*   **4.1. Group by Compound Key:**
+    *   Aggregate all extracted requirements from all chunks into a single list.
+    *   Group this list into a dictionary using a **compound key**: `(zielobjekt_kürzel, anforderung_id)`. This correctly isolates `CON.1` for `Zielobjekt` "A-001" from `CON.1` for `Zielobjekt` "B-002".
 
-This **"Intelligent Semantic Chunking"** approach is the most robust solution:
+*   **4.2. Merge Logic (per group):**
+    *   **`titel`:** Longest and most complete.
+    *   **`umsetzungserlaeuterung`:** Combine unique sentences from all versions.
+    *   **`umsetzungsstatus`:** Highest priority (`Nein` > `teilweise` > `Ja` > `entbehrlich`).
+    *   **`datumLetztePruefung`:** Most recent valid date.
 
-1.  **Perfect Context:** By splitting at `Zielobjekt` headers, every chunk has perfect, unambiguous context.
-2.  **Guaranteed Safety:** The `MAX_PAGES_PER_CHUNK` limit prevents oversized chunks and protects us from API token limits.
-3.  **Maximum Efficiency:** We avoid creating excessively small chunks, and very large sections are processed in an optimal size.
-4.  **Simplified AI Interaction:** Prompts become simpler and more direct, which can lead to higher accuracy from the model.
-5.  **Complete Data Recovery:** The "Merge-and-Refine" logic in the final phase ensures we reconstruct all partial data into a complete whole.
+*   **4.3. Final Assembly:**
+    *   The output is a clean, flat list of fully reconstructed requirements. Each object in the list is now complete, de-duplicated, and correctly tagged with its parent `Zielobjekt Kürzel`. This becomes our final `extracted_grundschutz_check_merged.json`.
 
 
-#### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**
+### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**
 This phase uses the clean, structured JSON data from the extraction to answer the five audit questions with surgical precision, using the right tool for each job.
 
 1.  **Load Extracted Data:** The runner loads the merged intermediate JSON file. The original PDF is now irrelevant for this analysis.
