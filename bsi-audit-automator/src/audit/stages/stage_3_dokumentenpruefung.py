@@ -285,7 +285,7 @@ class Chapter3Runner:
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
         if entbehrlich_items:
             prompt = targeted_prompt_template.format(
-                question="Sind die Begründungen für 'entbehrlich' plausibel?",
+                question="Sind die Begründungen für 'entbehrlich' plausibel? Wenn sie in der Risikoanalyse nicht gezogen wurden ist das eine ausreichende Begründung!",
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q2")
