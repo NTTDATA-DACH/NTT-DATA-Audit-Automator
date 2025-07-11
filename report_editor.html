@@ -187,7 +187,7 @@
             vertical-align: top;
         }
         th { background-color: #f2f2f2; font-weight: bold; }
-        td input, td select { padding: 4px; width: 100%; box-sizing: border-box;}
+        td input, td textarea, td select { padding: 4px; width: 100%; box-sizing: border-box;}
         .action-cell { width: 80px; text-align: center; }
         .delete-row-btn, .add-row-btn {
             background-color: var(--danger-color);
@@ -354,7 +354,8 @@
                     if (input.type === 'checkbox') {
                         value = input.checked;
                     } else if (input.tagName === 'SELECT') {
-                        value = input.value === 'true' ? true : (input.value === 'false' ? false : null);
+                        const strVal = input.value;
+                        value = strVal === 'true' ? true : (strVal === 'false' ? false : null);
                     } else {
                         value = input.value;
                     }
@@ -457,6 +458,16 @@
                 if(chapterData.title) chapterDiv.innerHTML += `<h2 id="${navId}">${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
+                 // --- Custom Rendering for specific Chapters ---
+                if (key === 'voraudit') {
+                    chapterDiv.appendChild(renderSection('content', chapterData, path));
+                    return chapterDiv;
+                } else if (key === 'gesamtvotum') {
+                    chapterDiv.appendChild(renderGesamtvotum(chapterData, path));
+                    return chapterDiv;
+                }
+                // --- End Custom Rendering ---
+
                 for (const subKey in chapterData) {
                     if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
                          chapterDiv.appendChild(renderSection(subKey, chapterData[subKey], `${path}.${subKey}`));
@@ -474,7 +485,8 @@
                 if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
                 
                 const handledKeys = ['title', 'description', 'subchapterNumber'];
-
+                
+                // Handle content which can be an array of items, or a single string
                 if (Array.isArray(sectionData.content)) {
                     sectionData.content.forEach((item, index) => {
                         const itemPath = `${path}.content[${index}]`;
@@ -489,6 +501,9 @@
                         }
                         sectionDiv.appendChild(itemDiv);
                     });
+                    handledKeys.push('content');
+                } else if (typeof sectionData.content === 'string') {
+                    sectionDiv.appendChild(createReadOnlyField(sectionData.title, sectionData.content));
                     handledKeys.push('content');
                 }
                 
@@ -583,9 +598,8 @@
 
                 const tableContainer = document.createElement('div');
                 if (!tableData || !Array.isArray(tableData.headers)) {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.textContent = `Error: Could not render table for ${path}. Data is malformed.`;
-                    return errorDiv;
+                    tableContainer.textContent = `Info: No table data to render for ${path}.`;
+                    return tableContainer;
                 }
                 const table = document.createElement('table');
                 const thead = table.createTHead();
@@ -607,7 +621,8 @@
                         tableData.headers.forEach(header => {
                             const cell = row.insertCell();
                             const cellPath = `${rowPath}.${header}`;
-                            if (header === 'Nr.') {
+                            // The "Nummer" column should always be read-only text
+                            if (header === 'Nummer') {
                                 cell.textContent = getValueByPath(reportData, cellPath) || '';
                             } else {
                                 const input = document.createElement('textarea');
@@ -641,6 +656,43 @@
                 }
                 tableContainer.appendChild(table);
                 return tableContainer;
+            }
+            
+            function renderGesamtvotum(data, path) {
+                const container = document.createElement('div');
+                container.appendChild(createTextArea('Gesamteinschätzung und Begründung des Auditteamleiters:', data.gesamteinschaetzung, `${path}.gesamteinschaetzung`));
+                
+                const votumWrapper = document.createElement('div');
+                votumWrapper.className = 'content-item';
+                const selectLabel = document.createElement('label');
+                selectLabel.textContent = 'Votum:';
+                votumWrapper.appendChild(selectLabel);
+                
+                const votumTextStart = document.createElement('span');
+                votumTextStart.textContent = 'Aufgrund der durchgeführten Einzelprüfungen im Rahmen des IT-Grundschutz-Audits wird festgestellt, dass der Untersuchungsgegenstand die Anforderungen einer ISO 27001-Zertifizierung auf der Basis von IT-Grundschutz ';
+                votumWrapper.appendChild(votumTextStart);
+
+                const select = document.createElement('select');
+                select.dataset.path = `${path}.votum.entspricht`;
+                select.innerHTML = `
+                    <option value="true" ${data.votum.entspricht === true ? 'selected' : ''}>entspricht</option>
+                    <option value="false" ${data.votum.entspricht === false ? 'selected' : ''}>nicht entspricht</option>
+                    <option value="" ${data.votum.entspricht === null || data.votum.entspricht === undefined ? 'selected' : ''}>[Bitte wählen]</option>
+                `;
+                votumWrapper.appendChild(select);
+                
+                container.appendChild(votumWrapper);
+                
+                const dateInput = createInputField('Datum', data.votum.datum, 'date', `${path}.votum.datum`);
+                container.appendChild(dateInput);
+
+                const signatureDiv = document.createElement('div');
+                signatureDiv.className = 'content-item';
+                signatureDiv.innerHTML = `<br><br><hr style="width: 250px; margin-left: 0;">
+                <p style="margin-top: 5px;">${data.votum.unterschrift || 'Unterschrift des Auditteamleiters'}</p>`;
+                container.appendChild(signatureDiv);
+
+                return container;
             }
 
             function renderBausteinPruefung(pruefungen, path) {
@@ -811,7 +863,7 @@
                 
                 if (Array.isArray(targetArray)) {
                     const existingNumbers = targetArray.map(item => {
-                        const nr = item['Nr.'] || '';
+                        const nr = item['Nummer'] || '';
                         const match = nr.match(new RegExp(`^${idPrefix}-(\\d+)$`));
                         return match ? parseInt(match[1], 10) : 0;
                     });
@@ -820,7 +872,7 @@
                     const newId = `${idPrefix}-${nextIdNumber}`;
 
                     const newFinding = {
-                        "Nr.": newId,
+                        "Nummer": newId,
                         [descriptionKey]: `[${context.anforderungId}] ${findingText}`,
                         "Quelle (Kapitel)": `5.x (${context.baustein})`,
                         "Behebungsfrist": category !== 'E' ? "30 Tage nach Audit" : "N/A",
@@ -835,7 +887,7 @@
                     setTimeout(() => {
                         const anchor = document.getElementById('nav-bsiAuditReport-anhang');
                         if (anchor) {
-                            const targetElement = document.getElementById(anchor.id);
+                            const targetElement = document.getElementById(anchor.href.split('#')[1]);
                             if(targetElement) targetElement.scrollIntoView({ behavior: 'smooth' });
                         }
                     }, 100); 

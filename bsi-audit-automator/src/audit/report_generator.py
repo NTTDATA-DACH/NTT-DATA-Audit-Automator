@@ -137,7 +137,7 @@ class ReportGenerator:
         for finding in all_findings:
             category = finding.get('category')
             row_data = {
-                "Nr.": finding.get('id', 'N/A'),
+                "Nummer": finding.get('id', 'N/A'),
                 "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
             }
             if category == 'AG':

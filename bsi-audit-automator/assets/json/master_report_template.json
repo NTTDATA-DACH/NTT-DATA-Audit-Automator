@@ -238,7 +238,7 @@
             "title": "Stichprobendokumentation der Strukturanalyse",
             "subchapterNumber": "3.3.8",
             "table": {
-                "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"],
+                "headers": ["Nummer", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"],
                 "rows": []
             },
             "content": [
@@ -632,10 +632,12 @@
     "gesamtvotum": {
         "chapterNumber": "6.",
         "title": "Gesamtvotum",
-        "content": [
-            {"type": "prose", "label": "Gesamteinschätzung und Begründung des Auditteamleiters:", "text": ""},
-            {"type": "prose", "label": "Votum:", "text": ""}
-        ]
+        "gesamteinschaetzung": "",
+        "votum": {
+          "entspricht": null,
+          "datum": "",
+          "unterschrift": "Unterschrift des Auditteamleiters"
+        }        
     },
     "anhang": {
       "chapterNumber": "7.",
@@ -644,7 +646,7 @@
         "title": "Referenzdokumente",
         "subchapterNumber": "7.1",
         "table": {
-          "headers": ["Nr.", "Kurzbezeichnung", "Dateiname / Verweis", "Version, Datum", "Relevante Änderungen"],
+          "headers": ["Nummer", "Kurzbezeichnung", "Dateiname / Verweis", "Version, Datum", "Relevante Änderungen"],
           "rows": []
         }
       },
@@ -654,21 +656,21 @@
         "schwerwiegendeAbweichungen": {
           "title": "Schwerwiegende Abweichungen",
           "table": {
-            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
+            "headers": ["Nummer", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
             "rows": []
           }
         },
         "geringfuegigeAbweichungen": {
           "title": "Geringfügige Abweichungen",
           "table": {
-            "headers": ["Nr.", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
+            "headers": ["Nummer", "Beschreibung der Abweichung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
             "rows": []
           }
         },
         "empfehlungen": {
           "title": "Empfehlungen",
           "table": {
-            "headers": ["Nr.", "Beschreibung der Empfehlung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
+            "headers": ["Nummer", "Beschreibung der Empfehlung", "Quelle (Kapitel)", "Behebungsfrist", "Status"],
             "rows": []
           }
         }

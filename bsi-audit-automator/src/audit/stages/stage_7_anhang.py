@@ -27,7 +27,7 @@ class Chapter7Runner:
             rows = []
             for i, blob in enumerate(source_files):
                 rows.append({
-                    "Nr.": f"A.{i}",
+                    "Nummer": f"A.{i}",
                     "Kurzbezeichnung": blob.name.split('/')[-1],
                     "Dateiname / Verweis": blob.name,
                     "Version, Datum": blob.updated.strftime("%Y-%m-%d") if blob.updated else "N/A",
