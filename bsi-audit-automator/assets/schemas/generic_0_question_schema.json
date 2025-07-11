@@ -1,0 +1,17 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Generic Schema for a finding only",
+    "description": "A schema for a response that only contains a structured audit finding.",
+    "type": "object",
+    "properties": {
+      "finding": {
+        "type": "object",
+        "properties": {
+          "category": { "type": "string", "enum": ["AG", "AS", "E", "OK"] },
+          "description": { "type": "string" }
+        },
+        "required": ["category", "description"]
+      }
+    },
+    "required": ["finding"]
+  }

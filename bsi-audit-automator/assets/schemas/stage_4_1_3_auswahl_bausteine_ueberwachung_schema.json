@@ -13,7 +13,7 @@
             "Schicht": { "type": "string", "description": "e.g., 'ISMS', 'SYS', 'NET'" },
             "Baustein": { "type": "string", "description": "e.g., 'ISMS.1 Sicherheitsmanagement', 'SYS.2.1 Allgemeiner Client'" },
             "Zielobjekt": { "type": "string", "description": "The specific target object, e.g., 'Gesamtes ISMS', 'Standard-Arbeitsplatz'" },
-            "Begruendung zur Auswahl": { "type": "string", "description": "Justification for selecting this Baustein for the audit." }
+            "Begruendung_zur_Auswahl": { "type": "string", "description": "Justification for selecting this Baustein for the audit." }
           },
           "required": ["Schicht", "Baustein", "Zielobjekt", "Begruendung zur Auswahl"]
         }

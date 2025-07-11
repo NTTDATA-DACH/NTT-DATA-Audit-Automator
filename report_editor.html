@@ -673,8 +673,8 @@
                 const select = document.createElement('select');
                 select.dataset.path = `${path}.votum.entspricht`;
                 select.innerHTML = `
-                    <option value="true" ${votum.entspricht === true ? 'selected' : ''}>entspricht</option>
-                    <option value="false" ${votum.entspricht === false ? 'selected' : ''}>nicht entspricht</option>
+                    <option value="true" ${votum.entspricht === true ? 'selected' : ''}>erfüllt</option>
+                    <option value="false" ${votum.entspricht === false ? 'selected' : ''}>nicht erfüllt</option>
                     <option value="" ${votum.entspricht === null || votum.entspricht === undefined ? 'selected' : ''}>[Bitte wählen]</option>
                 `;
                 votumWrapper.appendChild(select);

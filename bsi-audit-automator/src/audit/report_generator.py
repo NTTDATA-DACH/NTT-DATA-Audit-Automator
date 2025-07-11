@@ -261,7 +261,8 @@ class ReportGenerator:
                         if item.get("type") == "question":
                             if answer_idx < len(answers):
                                 item["answer"] = answers[answer_idx]; answer_idx += 1
-            elif "votum" in result:
+
+            if "votum" in result:
                 content_list = self._ensure_list_path_exists(report, f"{target_path}.content")
                 if content_list:
                     for item in content_list:
