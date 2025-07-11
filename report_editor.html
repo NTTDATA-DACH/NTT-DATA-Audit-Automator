@@ -657,6 +657,9 @@
                 const container = document.createElement('div');
                 container.appendChild(createTextArea('Gesamteinschätzung und Begründung des Auditteamleiters:', data.gesamteinschaetzung, `${path}.gesamteinschaetzung`));
                 
+                // FIX: Ensure votum object exists before accessing its properties
+                const votum = data.votum && typeof data.votum === 'object' ? data.votum : { entspricht: null, datum: '', unterschrift: 'Unterschrift des Auditteamleiters' };
+
                 const votumWrapper = document.createElement('div');
                 votumWrapper.className = 'content-item';
                 const selectLabel = document.createElement('label');
@@ -670,21 +673,21 @@
                 const select = document.createElement('select');
                 select.dataset.path = `${path}.votum.entspricht`;
                 select.innerHTML = `
-                    <option value="true" ${data.votum.entspricht === true ? 'selected' : ''}>entspricht</option>
-                    <option value="false" ${data.votum.entspricht === false ? 'selected' : ''}>nicht entspricht</option>
-                    <option value="" ${data.votum.entspricht === null || data.votum.entspricht === undefined ? 'selected' : ''}>[Bitte wählen]</option>
+                    <option value="true" ${votum.entspricht === true ? 'selected' : ''}>entspricht</option>
+                    <option value="false" ${votum.entspricht === false ? 'selected' : ''}>nicht entspricht</option>
+                    <option value="" ${votum.entspricht === null || votum.entspricht === undefined ? 'selected' : ''}>[Bitte wählen]</option>
                 `;
                 votumWrapper.appendChild(select);
                 
                 container.appendChild(votumWrapper);
                 
-                const dateInput = createInputField('Datum', data.votum.datum, 'date', `${path}.votum.datum`);
+                const dateInput = createInputField('Datum', votum.datum, 'date', `${path}.votum.datum`);
                 container.appendChild(dateInput);
 
                 const signatureDiv = document.createElement('div');
                 signatureDiv.className = 'content-item';
                 signatureDiv.innerHTML = `<br><br><hr style="width: 250px; margin-left: 0;">
-                <p style="margin-top: 5px;">${data.votum.unterschrift || 'Unterschrift des Auditteamleiters'}</p>`;
+                <p style="margin-top: 5px;">${votum.unterschrift || 'Unterschrift des Auditteamleiters'}</p>`;
                 container.appendChild(signatureDiv);
 
                 return container;

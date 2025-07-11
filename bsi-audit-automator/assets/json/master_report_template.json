@@ -318,7 +318,7 @@
             "title": "Stichprobendokumentation der Schutzbedarfsfeststellung",
             "subchapterNumber": "3.4.7",
             "table": {
-                "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Ableitung des Schutzbedarfs nachvollziehbar", "Verknüpfungen zu Zielobjekten nachvollziehbar"],
+                "headers": ["Nummer", "Bezeichnung", "Beschreibung", "Ableitung des Schutzbedarfs nachvollziehbar", "Verknüpfungen zu Zielobjekten nachvollziehbar"],
                 "rows": []
             },
             "content": [
@@ -533,7 +533,7 @@
               {"type": "question", "questionText": "Gab es im vorhergehenden Audit Auflagen?", "answer": null}
           ],
           "table": {
-              "headers": ["Nr.", "Beschreibung der Auflage", "Auflage erteilt am"],
+              "headers": ["Nummer", "Beschreibung der Auflage", "Auflage erteilt am"],
               "rows": []
           },
           "bearbeitungAuflagen": {
