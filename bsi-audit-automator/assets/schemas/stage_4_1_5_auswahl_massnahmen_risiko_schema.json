@@ -12,7 +12,7 @@
             "Maßnahme": { "type": "string", "description": "A concise name for the security measure (e.g., 'Advanced DDoS Protection', 'Database Field-Level Encryption')." },
             "Risikoanalyse": { "type": "string", "description": "Reference to the risk analysis document or section (e.g., 'RA-2023-Web-App', 'Risikoanalyse PII-Datenbank')." },
             "Zielobjekt": { "type": "string", "description": "The target system or asset the measure applies to (e.g., 'Web Application Cluster', 'CRM Customer Database')." },
-            "Begruendung_zur_Auswahl": { "type": "string", "description": "The risk-based justification for selecting this measure for the audit." }
+            "Begründung zur Auswahl": { "type": "string", "description": "The risk-based justification for selecting this measure for the audit." }
           },
           "required": ["Maßnahme", "Risikoanalyse", "Zielobjekt", "Begründung zur Auswahl"]
         }
