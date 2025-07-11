@@ -6,7 +6,7 @@ This document outlines the requirements and development protocol for a Python-ba
 
 The primary goal is to develop a cloud-native application that performs a security audit based on the German BSI Grundschutz framework. The application will run as a batch job on Google Cloud Platform (GCP), processing customer-provided documents against BSI standards and generating a structured audit report.
 
-The core of the application is a **Retrieval-Augmented Generation (RAG)** pipeline. Source documents are first indexed into a Vertex AI Vector Search database. Then, for each section of the audit, the application retrieves the most relevant document excerpts to provide as context to the Gemini model, ensuring accurate, evidence-based findings.
+The core of the application is a hybrid pipeline combining deterministic logic with AI-driven analysis. For complex document reviews (e.g., Chapter 3), it employs a **Ground-Truth-Driven Semantic Chunking** strategy. This involves first creating an authoritative map of the customer's system structure from documents like the `Strukturanalyse` and `Modellierung`. This map is then used to perform a context-aware extraction and reconstruction of security requirements from the `Grundschutz-Check`, ensuring highly accurate, evidence-based findings. For simpler tasks, a document-finder model provides relevant source documents as context to the Gemini model.
 
 The audit process and resulting report must be based on two key documents:
 *   The relevant **BSI Grundschutz Standards** (BSI 200-1, BSI 200-2 and BSI 200-3 and the BSI Grundschutz Kompendium 2023 with its Auditierungsschema and Zertifizierungsschem).
@@ -19,48 +19,25 @@ The audit process and resulting report must be based on two key documents:
 *   **State Management & Resumability:** The application saves the results of each stage to Google Cloud Storage (GCS). For full audit runs (`--run-all-stages`), it checks for and skips previously completed stages. For single-stage runs, it overwrites existing results by default.
 *   **Centralized Finding Collection:** The application systematically collects all structured findings (deviations and recommendations with categories 'AG', 'AS', 'E') from all stages into a central `all_findings.json` file.
 *   **Audit Type Configuration:** The application is configurable for "Überwachungsaudit" or "Zertifizierungsaudit" via an environment variable, which drives different logic in the audit planning stage (Chapter 4).
-*   **Deterministic and AI-Driven Logic:** The pipeline intelligently combines AI-driven analysis (e.g., Chapter 3 document review) with deterministic, rule-based logic (e.g., Chapter 5 control checklist generation from the BSI catalog).
+*   **Deterministic and AI-Driven Logic:** The pipeline intelligently combines AI-driven analysis with deterministic, rule-based logic.
+    *   e.g., Chapter 5 deterministically generates a control checklist from the BSI catalog, while Chapter 3 employs a sophisticated hybrid strategy.
+    *   e.g., Chapter 3 first builds a 'ground-truth' map of the system using targeted AI calls, then uses this map to deterministically reconstruct and analyze security control data from unstructured documents, and finally uses a mix of Python and targeted AI to answer audit questions.
 *   **Comprehensive Reporting:** The final output is a comprehensive JSON audit report, populated from individual stage results and the central findings file, ready for review and finalization in the `report_editor.html` tool.
 
 **3. Gemini Model and API Interaction**
 *   **Model Configuration (Imperative):**
     *   **Generative Model:** `gemini-2.5-pro`
+    *   **Max Output Tokens:** 65536
     *   **Embedding Model:** `gemini-embedding-001` (for `3072` dimension vectors, as configured in Terraform).
 *   **Robustness:** All API calls use an asynchronous, parallel-limited (`Semaphore`), and robust error-handling wrapper with an exponential backoff retry loop.
-*   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. The `AiClient` handles this by iterating and making individual, robust requests. Imperative Example:
-```python
-from google.cloud import aiplatform
-from vertexai.language_models import TextEmbeddingModel
-from google.api_core import exceptions as api_core_exceptions
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from vertexai.language_models import TextEmbeddingInput
-from google.cloud.aiplatform_v1.types import IndexDatapoint
+*   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. 
 
-...
-
-response = self.embedding_model.get_embeddings([text_input])
-...
-filter_restriction = Namespace(                # ✅ helper dataclass
-    name="source_document",                    # the metadata key you indexed
-    allow_tokens=allow_list_filenames,         # the values to keep
-    # deny_tokens=[]                           # optional
-)
-...
-response = self.index_endpoint.find_neighbors(
-    deployed_index_id="bsi_deployed_index_kunde_x",
-    queries=query_vectors,
-    num_neighbors=NEIGHBOR_POOL_SIZE,
-    filter=[filter_restriction] if filter_restriction else []
-)
-
-```
-
-
+===
 **4. AI Collaboration & Development Protocol**
 
 **4.1. Communication Protocol**
 *   **Commit Message Format:** Start every response with a summary formatted as follows:
-    `Case: (A brief summary of my request, word as if cases was speaking)`
+    `Case: (A brief summary of my request, case is speaking)`
     `---`
     `Dixie: (A brief summary of your solution and key details)`
 *   **How to test this change:** CLI or similar to test.
@@ -77,6 +54,7 @@ response = self.index_endpoint.find_neighbors(
     *   Use inline comments not to explain *what* the code is doing (which should be obvious from the code itself), but to explain *why* a particular implementation choice was made, especially for complex logic, business rules, or workarounds.
 *   **Strict Type Hinting:** All new functions and methods MUST include full type hints for arguments and return values. This is essential for static analysis, readability, and preventing runtime errors.
 *   **Consistent Formatting:** Code MUST adhere to the PEP 8 style guide. It is recommended to use an automated formatter like `black` to ensure consistency across the project.
+*   **Try ... except** For all external calls to API, fielsystems etc use `try`
 *   **Robust Error Handling:** Avoid broad `except Exception:` clauses. Catch specific, anticipated exceptions and log them with informative messages. The robust retry logic in `AiClient` serves as a model for handling external API calls.
 
 **4.3. Architecture: "Schema-Stub" Generation**
@@ -107,7 +85,7 @@ This is a critical architectural pattern for ensuring reliability.
 
 
 **4.5. Code and Asset Management**
-*   **Externalized Assets:** All prompts must be stored in external `.txt` files and all JSON schemas in external `.json` files. This separation of logic and assets is mandatory.
+*   **Externalized Assets:** All prompts must be stored in `bsi-audit-automator/assets/json/prompt_config.json` and all JSON schemas in external `.json` files. This separation of logic and assets is mandatory.
 *   **Customer Data:** The customer documents are located in one directory the following GCS URI: [GCS_DATA_URI]
 
 **4.6. Testing and Logging**
@@ -117,7 +95,7 @@ This is a critical architectural pattern for ensuring reliability.
 *   **Conditional Logging:**
     *   The root logger level should be `INFO`.
     *   **In Test Mode:** Log detailed, step-by-step messages at the `INFO` level.
-    *   **In Production Mode (`TEST="false"`):** Log verbose messages at the `DEBUG` level. Log only high-level status updates at the `INFO` level.
+    *   **In Production Mode (`TEST="false"`):** Do not Log verbose messages at the `DEBUG` level. Log only high-level status updates at the `INFO` level. Log Status updates in long running processes as well.
     *   **Suppress Library Noise:** In production, set the logging level for third-party libraries like `google.auth` and `urllib3` to `WARNING` to maintain clean logs.
 
 
@@ -130,6 +108,5 @@ This is a critical architectural pattern for ensuring reliability.
 | `AUDIT_TYPE` | Yes | User Input | Specifies the audit type (e.g., "Zertifizierungsaudit"). |
 | `SOURCE_PREFIX` | Yes | Script | GCS prefix for source documents (e.g., `source_documents/`). |
 | `OUTPUT_PREFIX` | Yes | Script | GCS prefix for generated files (e.g., `output/`). |
-| `ETL_STATUS_PREFIX`| Yes | Script | GCS prefix for ETL status markers (e.g., `output/etl_status/`). |
 | `INDEX_ENDPOINT_ID`| Yes | Terraform | The numeric ID of the deployed Vertex AI Index Endpoint. |
 | `TEST` | No | User Input | Set to `"true"` to enable test mode. Defaults to `false`. |

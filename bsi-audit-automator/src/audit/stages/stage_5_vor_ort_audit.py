@@ -1,4 +1,4 @@
-# src/audit/stages/stage_5_vor_ort_audit.py
+# file: src/audit/stages/stage_5_vor_ort_audit.py
 import logging
 import json
 from typing import Dict, Any, List
@@ -26,25 +26,28 @@ class Chapter5Runner:
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
     def _load_extracted_check_data(self) -> Dict[str, Dict[str, Any]]:
-        """Loads the extracted Grundschutz-Check data and creates a lookup map."""
+        """
+        Loads the refined Grundschutz-Check data and creates a lookup map
+        keyed by the requirement ID for efficient access.
+        """
         try:
             data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
             anforderungen_list = data.get("anforderungen", [])
             # Create a map from requirement ID to the full object for easy lookup
             lookup_map = {item['id']: item for item in anforderungen_list}
-            logging.info(f"Successfully loaded and mapped {len(lookup_map)} extracted requirements.")
+            logging.info(f"Successfully loaded and mapped {len(lookup_map)} refined requirements for Chapter 5.")
             return lookup_map
         except NotFound:
-            logging.warning(f"Intermediate file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations.")
+            logging.warning(f"Refined check data file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations.")
             return {}
         except Exception as e:
-            logging.error(f"Failed to load or parse intermediate check data: {e}", exc_info=True)
+            logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)
             return {}
 
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        enriching it with customer explanations from the extracted data.
+        enriching it with the high-quality, merged customer explanations.
         """
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Generating enriched control checklist for {name} (5.5.2)...")
@@ -77,6 +80,7 @@ class Chapter5Runner:
             anforderungen_list = []
             for control in controls:
                 control_id = control.get("id", "N/A")
+                # Use the refined data from the lookup map
                 extracted_details = extracted_data_map.get(control_id, {})
                 customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine Angabe im Grundschutz-Check gefunden.")
                 bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")

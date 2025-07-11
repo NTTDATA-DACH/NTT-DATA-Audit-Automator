@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Zielobjekte Extraction",
+    "description": "Validates the list of Zielobjekte extracted from the Strukturanalyse document (A.1).",
+    "type": "object",
+    "properties": {
+        "zielobjekte": {
+            "type": "array",
+            "description": "A list of all target objects (Zielobjekte).",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kuerzel": {
+                        "type": "string",
+                        "description": "The unique, customer-defined ID of the Zielobjekt, e.g., 'A-001'."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The full, descriptive name of the Zielobjekt, e.g., 'Main Web Server'."
+                    }
+                },
+                "required": ["kuerzel", "name"]
+            }
+        }
+    },
+    "required": ["zielobjekte"]
+}

@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Schema for Extracted Grundschutz-Check Data",
-  "description": "A schema to hold the structured list of requirements extracted from the Grundschutz-Check document.",
+  "description": "A schema to hold the structured list of requirements and chapter headings extracted from a Grundschutz-Check document chunk.",
   "type": "object",
   "properties": {
     "anforderungen": {
       "type": "array",
-      "description": "A list of all security requirements found in the document.",
+      "description": "A list of all security requirements found in the document chunk.",
       "items": {
         "type": "object",
         "properties": {
@@ -20,7 +20,7 @@
           },
           "umsetzungsstatus": {
             "type": "string",
-            "description": "The implementation status (e.g., 'Ja', 'Nein', 'teilweise', 'entbehrlich')."
+            "description": "The implementation status, normalized (e.g., 'Ja', 'Nein', 'teilweise', 'entbehrlich')."
           },
           "umsetzungserlaeuterung": {
             "type": "string",
@@ -28,12 +28,29 @@
           },
           "datumLetztePruefung": {
             "type": "string",
-            "description": "The date of the last check, extracted as seen in the document (e.g., DD.MM.YYYY, DD.MM.YY, or YYYY-MM-DD). The fallback for a missing date is '1970-01-01'."
+            "description": "The date of the last check, extracted as seen in the document. The fallback for a missing date is '1970-01-01'."
+          },
+          "pagenumber": {
+            "type": "integer",
+            "description": "The page number where this requirement was found."
           }
         },
-        "required": ["id", "titel", "umsetzungsstatus", "umsetzungserlaeuterung", "datumLetztePruefung"]
+        "required": ["id", "titel", "umsetzungsstatus", "umsetzungserlaeuterung", "datumLetztePruefung", "pagenumber"]
+      }
+    },
+    "chapter_headings": {
+      "type": "array",
+      "description": "A list of all chapter headings found, which correspond to Zielobjekte.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kuerzel": { "type": "string", "description": "The short ID of the Zielobjekt, e.g., 'S-001'." },
+          "name": { "type": "string", "description": "The descriptive name of the Zielobjekt, e.g., 'Windows Server'." },
+          "pagenumber": { "type": "integer", "description": "The page number where this heading was found." }
+        },
+        "required": ["kuerzel", "name", "pagenumber"]
       }
     }
   },
-  "required": ["anforderungen"]
+  "required": ["anforderungen", "chapter_headings"]
 }

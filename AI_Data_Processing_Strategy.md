@@ -77,51 +77,40 @@ The goal is to create a single, authoritative `system_structure_map.json` file. 
 *   **1.3. Consolidate and Save:**
     *   **Action:** Combine the outputs of the previous steps into the single `system_structure_map.json`. This file now contains our complete ground truth: a list of all `Zielobjekte` (`Kürzel` + `Name`) and a complete mapping of every `Baustein` to its parent `Zielobjekt Kürzel`.
 
----
-
-#### **Step 2: Intelligent Semantic Chunking**
-
-This Step uses the map from Step 1 to split the `Grundschutz-Check` PDF perfectly along its contextual boundaries.
-
-*   **2.1. Pre-Scan and Index `Zielobjekt` Headers:**
-    *   **Input:** The `Grundschutz-Check` PDF and our `system_structure_map.json`.
-    *   **Action:** We will perform a fast, deterministic text search through the entire PDF. We will search for headers that match the pattern `Kürzel` + `Name` for every `Zielobjekt` in our map (e.g., searching for the literal string `"A-001 Main Web Server"`). We will also search for the header `"Informationsverbund"`.
-    *   **Output:** A precise, ordered index of which `Zielobjekt Kürzel` begins on which page.
-
-*   **2.2. The Semantic Chunking Algorithm:**
-    *   **Action:** We will use this index to define our chunks, governed by a safety limit (e.g., `MAX_PAGES_PER_CHUNK = 25`).
-        *   **IF** a `Zielobjekt` section (from its header to the next header) is **smaller than or equal to** the limit, the entire section becomes one chunk, tagged with its `Zielobjekt Kürzel`.
-        *   **IF** a section is **larger** than the limit, it is split into multiple, smaller sub-chunks, but **every sub-chunk is tagged with the same `Zielobjekt Kürzel`**.
 
 ---
 
-#### **Step 3: Context-Aware AI Extraction**
+#### **Step 2: Context-Aware AI Extraction**
 
-This Step now operates on perfectly formed, contextually-whole chunks.
+This Step now uses AI extraction to keep the context in which chapter an Anforderung is mentioned.
 
-*   **Action:** For each chunk generated in Step 2, we will call the AI.
+*   **Action:** We split the `Grundschutz-Check` document into chunks. Once in 19 Page and 21 page ones for the two runs. Call the AI on them. In parallel.
 *   **Prompt Logic:** The prompt is now extremely simple and direct:
-    > "Extract all security requirements from the provided document. All requirements within this document belong to the `Zielobjekt` identified by the unique Kürzel **'A-001'**. You MUST include a `zielobjekt_kuerzel` field with the value 'A-001' in every requirement object you generate."
-*   **Schema Update:** The `stage_3_6_1_extract_check_data_schema.json` will be updated to require the `zielobjekt_kuerzel` field.
+    > "Extract all security requirements (their Anforderungs-ID (eg "OPS.1.3.4.A1" or "SYS.1.1.A3"), the "Umsetzungsstatus" (like "Umgesetzt", "Entbehrlich, "Teilweise Umgesetzt" -> "Teilweise", "Nein" - "Nicht umgesetzt"), "Umsetzungserläuterung"(and if it exists a Date)  ) **AND** all chapter_headers form from the provided document. Important: Note the page Number for each of them. The chapter_headers are lines of text, starting at the beginning consisting a kürzel and a name of the Zielobjekt like "S-001 Windows Server" -> kürzel="S-001", name="Windows Server". Return this in JSON together with all the Anforderungen.
+*   **Schema Update:** The `stage_3_6_1_extract_check_data_schema.json` will be updated to allow for the "chapter_heading" and  require the `pagenumber` field for "Anforderungen" and "chapter_heading".
 
 ---
 
-#### **Step 4: Final "Merge-and-Refine" Reconstruction**
+#### **Step 3: Final "Merge-and-Refine" Reconstruction**
 
-This final Step reconstructs the complete and accurate dataset from the raw AI extractions.
+This final Step assembles the resulting json of all anforderungen and which Zielobjekt they belong to.
 
-*   **4.1. Group by Compound Key:**
-    *   Aggregate all extracted requirements from all chunks into a single list.
-    *   Group this list into a dictionary using a **compound key**: `(zielobjekt_kürzel, anforderung_id)`. This correctly isolates `CON.1` for `Zielobjekt` "A-001" from `CON.1` for `Zielobjekt` "B-002".
+*   **3.1. Assing by Kürzel Key:**
+    *   Check the list of chapter_headings and their page numbers.
+    *   build the result array with all kürzel from chapter_headings
+    *   Find all Anforderungen with the same page numbers from both runs and add them as elements to the corresponding kürzel in the result array.
 
-*   **4.2. Merge Logic (per group):**
+
+*   **3.2. Merge (per kürzel):**
+    *   Go through all the kürzel in the result array.
+    *   Find those with the same Anforderungs-ID and merge them. 
     *   **`titel`:** Longest and most complete.
     *   **`umsetzungserlaeuterung`:** Combine unique sentences from all versions.
     *   **`umsetzungsstatus`:** Highest priority (`Nein` > `teilweise` > `Ja` > `entbehrlich`).
     *   **`datumLetztePruefung`:** Most recent valid date.
 
-*   **4.3. Final Assembly:**
-    *   The output is a clean, flat list of fully reconstructed requirements. Each object in the list is now complete, de-duplicated, and correctly tagged with its parent `Zielobjekt Kürzel`. This becomes our final `extracted_grundschutz_check_merged.json`.
+*   **3.3. Final Assembly:**
+    *   The output is a clean, flat list of fully reconstructed requirements. Each object in the list is now complete, de-duplicated, and an element of the `Zielobjekt Kürzel`. This becomes our final `extracted_grundschutz_check_merged.json`.
 
 
 ### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**

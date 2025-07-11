@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Baustein-to-Zielobjekt Mappings",
+    "description": "Validates the list of mappings extracted from the Modellierung document (A.3).",
+    "type": "object",
+    "properties": {
+        "mappings": {
+            "type": "array",
+            "description": "A list of mappings.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "baustein_id": {
+                        "type": "string",
+                        "description": "The ID of the Baustein, e.g., 'SYS.1.1'."
+                    },
+                    "zielobjekt_kuerzel": {
+                        "type": "string",
+                        "description": "The unique ID (Kürzel) of the Zielobjekt it is mapped to."
+                    }
+                },
+                "required": ["baustein_id", "zielobjekt_kuerzel"]
+            }
+        }
+    },
+    "required": ["mappings"]
+}

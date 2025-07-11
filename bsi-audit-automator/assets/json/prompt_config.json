@@ -7,6 +7,16 @@
         "schema_path": "assets/schemas/etl_classify_documents_schema.json"
       }
     },
+    "Chapter-3-Ground-Truth": {
+      "extract_zielobjekte": {
+        "prompt": "You are an expert data extraction system. From the attached Strukturanalyse document (A.1), extract a complete list of all Zielobjekte (target objects). For each Zielobjekt, provide its unique ID (Kürzel) and its full descriptive name (Name).",
+        "schema_path": "assets/schemas/stage_3_gt_zielobjekte_schema.json"
+      },
+      "extract_baustein_mappings": {
+        "prompt": "You are an expert data extraction system. From the attached Modellierung document (A.3), analyze which Zielobjekt (target object) each Baustein (building block) is applied to. Return a list of mappings, where each mapping contains the Baustein ID and the Kürzel (unique ID) of the Zielobjekt it's mapped to. Ignore Bausteine from layers ISMS, ORP, CON, OPS, and DER.",
+        "schema_path": "assets/schemas/stage_3_gt_baustein_mappings_schema.json"
+      }
+    },
     "Chapter-1": {
       "informationsverbund": {
         "prompt": "Your task is to analyze the provided context, which describes the scope of an information security network (Informationsverbund), and extract two key pieces of information:\n1.  **kurzbezeichnung**: A short, official name or title for the Informationsverbund.\n2.  **kurzbeschreibung**: A concise paragraph summarizing the scope, including key business processes, applications, and physical locations. This should also serve as the main description for the 'Geltungsbereich'.\n\nIf the provided context is insufficient or empty, state that the scope could not be fully determined from the documents and must be clarified manually.",
@@ -17,11 +27,14 @@
       "generic_question": {
         "prompt": "The questions to answer are:\n{questions}"
       },
+      "targeted_question": {
+        "prompt": "Based *only* on the following structured JSON data and, if provided, the attached context document, answer the question: {question}\n\n**JSON Data:**\n---\n{json_data}\n---"
+      },
       "generic_summary": {
         "prompt": "You are a BSI security auditor providing a final verdict on the {summary_topic}.\nBased on the summary of findings from the previous sections provided below, provide a summary verdict (\"Votum\").\n\n**Summary of Previous Findings:**\n---\n{previous_findings}\n---"
       },
       "detailsZumItGrundschutzCheck_extraction": {
-        "prompt": "You are an expert data extraction system for BSI Grundschutz documents.\nYour task is to analyze the attached document, which is a page from a 'Grundschutz-Check' report.\n\nFrom this document, extract all security requirements ('Anforderungen') listed.\nFor each requirement, you MUST extract the following information:\n- The full requirement ID (e.g., \"ISMS.1.A1\").\n- The title of the requirement (e.g., \"Übernahme der Gesamtverantwortung...\").\n- The implementation status ('Umsetzungsstatus'), which can be \"Ja\", \"Nein\", \"teilweise\", or \"entbehrlich\".\n- The implementation explanation ('Umsetzungserläuterung'), including any dates mentioned.\n- The date of the last check ('datumLetztePruefung').\n\n**CRITICAL DATE INSTRUCTION:** Extract the date exactly as it appears in the text. Prefer German formats like `DD.MM.YYYY` or `DD.MM.YY`. If no date is found for a requirement, you MUST use the string '1970-01-01' as a placeholder.",
+        "prompt": "Extract all security requirements ('Anforderungen') and all chapter headers ('chapter_headings') from the provided document chunk. For each item, you MUST provide the page number where it was found.\n\n- **Anforderungen** contain: Anforderungs-ID, Umsetzungsstatus, and Umsetzungserläuterung (including any dates).\n- **Chapter Headers** are lines that identify a new section, typically starting with a short ID (Kürzel) and a descriptive name, like 'S-001 Windows Server'. Extract this Kürzel and Name.\n\nReturn the result as a single JSON object.",
         "schema_path": "assets/schemas/stage_3_6_1_extract_check_data_schema.json"
       },
       "aktualitaetDerReferenzdokumente": {
