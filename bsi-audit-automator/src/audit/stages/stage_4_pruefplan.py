@@ -36,13 +36,15 @@ class Chapter4Runner:
         definitions = {}
         ch4_config = self.prompt_config["stages"]["Chapter-4"]
 
-        # AI-driven part, conditional on audit type
+        # AI-driven Baustein selection, conditional on the specific audit type
         if self.config.audit_type == "Zertifizierungsaudit":
             logging.info("Loading definitions for 'Zertifizierungsaudit'.")
             definitions["auswahlBausteineErstRezertifizierung"] = ch4_config["auswahlBausteineErstRezertifizierung"]
-        elif self.config.audit_type == "Überwachungsaudit":
-            logging.info("Loading definitions for 'Überwachungsaudit'.")
+        elif self.config.audit_type == "1. Überwachungsaudit":
+            logging.info("Loading definitions for '1. Überwachungsaudit'.")
             definitions["auswahlBausteine1Ueberwachungsaudit"] = ch4_config["auswahlBausteine1Ueberwachungsaudit"]
+        elif self.config.audit_type == "2. Überwachungsaudit":
+            logging.info("Loading definitions for '2. Überwachungsaudit'.")
             definitions["auswahlBausteine2Ueberwachungsaudit"] = ch4_config["auswahlBausteine2Ueberwachungsaudit"]
         else:
             logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")

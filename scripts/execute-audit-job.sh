@@ -38,7 +38,7 @@ BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_g
 
 # --- INTERACTIVE SELECTION: Audit Type ---
 echo "🔹 Please select the audit type."
-audit_types=("Zertifizierungsaudit" "Überwachungsaudit")
+audit_types=("Zertifizierungsaudit" "1. Überwachungsaudit" "2. Überwachungsaudit")
 PS3="Select audit type number: "
 select AUDIT_TYPE in "${audit_types[@]}"; do
   if [[ -n "$AUDIT_TYPE" ]]; then

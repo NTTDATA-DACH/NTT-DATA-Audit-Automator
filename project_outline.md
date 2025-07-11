@@ -37,9 +37,9 @@ The audit process and resulting report must be based on two key documents:
 
 **4.1. Communication Protocol**
 *   **Commit Message Format:** Start every response with a summary formatted as follows:
-    `Case: (A brief summary of my request, case is speaking)`
+    `Case: ` -> A brief summary of my request, case is speaking
     `---`
-    `Dixie: (A brief summary of your solution and key details)`
+    `Dixie: ` -> A brief summary of your solution and key details
 *   **How to test this change:** CLI or similar to test.
 *   **Explain Your Reasoning:** Briefly explain the "why" behind your code and architectural decisions.
 *   **Track Changes:** For minor code changes (under 20 lines), present them in a `diff` format. For larger changes, provide the full file content.

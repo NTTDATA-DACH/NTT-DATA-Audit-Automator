@@ -17,6 +17,7 @@ class Chapter5Runner:
     """
     STAGE_NAME = "Chapter-5"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
+    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
@@ -24,6 +25,22 @@ class Chapter5Runner:
         self.ai_client = ai_client
         self.control_catalog = ControlCatalog()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
+
+    def _load_system_structure_map(self) -> Dict[str, Any]:
+        """
+        Loads the ground-truth system structure map which contains the authoritative
+        Baustein-to-Zielobjekt mappings.
+        """
+        try:
+            system_map = self.gcs_client.read_json(self.GROUND_TRUTH_MAP_PATH)
+            logging.info(f"Successfully loaded ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
+            return system_map
+        except NotFound:
+            logging.error(f"FATAL: Ground truth map '{self.GROUND_TRUTH_MAP_PATH}' not found. Cannot generate Chapter 5 checklist. Please run Chapter 3 first.")
+            raise
+        except Exception as e:
+            logging.error(f"Failed to load or parse ground truth map: {e}", exc_info=True)
+            raise
 
     def _load_extracted_check_data(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
         """
@@ -49,25 +66,21 @@ class Chapter5Runner:
             logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)
             return {}
 
-    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
+    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], system_structure_map: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        enriching it with the high-quality, merged customer explanations that are
-        specific to the Zielobjekt selected in the audit plan.
+        using the ground-truth map to find all actual Zielobjekte for a given
+        Baustein from the audit plan.
         """
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Generating enriched and context-aware control checklist for {name} (5.5.2)...")
         
-        # Build a helper map to resolve Zielobjekt names from the plan to their Kürzel.
-        name_to_kuerzel_map = {}
-        for req_data in extracted_data_map.values():
-            zielobjekt_name = req_data.get('zielobjekt_name')
-            zielobjekt_kuerzel = req_data.get('zielobjekt_kuerzel')
-            if zielobjekt_name and zielobjekt_kuerzel:
-                # This will overwrite but should be consistent
-                name_to_kuerzel_map[zielobjekt_name] = zielobjekt_kuerzel
-        # Handle the special case for ISMS etc.
-        name_to_kuerzel_map["Gesamter Informationsverbund"] = "Informationsverbund"
+        # Build authoritative helper maps from the ground-truth data
+        baustein_to_kuerzel_list_map = system_structure_map.get("baustein_to_zielobjekt_mapping", {})
+        kuerzel_to_name_map = {
+            z['kuerzel']: z['name'] 
+            for z in system_structure_map.get('zielobjekte', [])
+        }
 
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -77,7 +90,6 @@ class Chapter5Runner:
             "auswahlBausteine2Ueberwachungsaudit"
         ]
         for section in baustein_sections:
-            # Use underscore_case key for headers now
             section_data = chapter_4_data.get(section, {})
             if isinstance(section_data, dict) and "table" in section_data:
                  selected_bausteine.extend(section_data.get("table", {}).get("rows", []))
@@ -87,52 +99,55 @@ class Chapter5Runner:
             return {name: {"einzelergebnisse": {"bausteinPruefungen": []}}}
 
         baustein_pruefungen_list = []
+        # Iterate through each Baustein selected in the high-level audit plan
         for baustein_plan_item in selected_bausteine:
             baustein_id_full = baustein_plan_item.get("Baustein", "")
-            if not baustein_id_full:
-                continue
+            if not baustein_id_full: continue
 
             baustein_id = baustein_id_full.split(" ")[0]
-            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt", "")
             
-            # Resolve the name to the short ID (Kürzel) needed for the lookup key
-            zielobjekt_kuerzel_from_plan = name_to_kuerzel_map.get(zielobjekt_name_from_plan)
-            if not zielobjekt_kuerzel_from_plan:
-                logging.warning(f"Could not resolve Zielobjekt name '{zielobjekt_name_from_plan}' to a Kürzel for Baustein '{baustein_id}'. Skipping its specific details.")
+            # Find all actual Zielobjekte this Baustein is mapped to from the ground-truth map
+            actual_zielobjekt_kuerzels = baustein_to_kuerzel_list_map.get(baustein_id, [])
+            if not actual_zielobjekt_kuerzels:
+                logging.warning(f"Baustein '{baustein_id}' from plan is not mapped to any Zielobjekt in the ground-truth map. Skipping.")
+                continue
 
-            controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
-
-            anforderungen_list = []
-            for control in controls:
-                control_id = control.get("id", "N/A")
+            # Create a separate checklist section for EACH Zielobjekt the Baustein is applied to
+            for zielobjekt_kuerzel in actual_zielobjekt_kuerzels:
+                zielobjekt_name = kuerzel_to_name_map.get(zielobjekt_kuerzel, "Unbekanntes Zielobjekt")
+                controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
                 
-                # Perform the context-aware lookup using the resolved Kürzel
-                lookup_key = (control_id, zielobjekt_kuerzel_from_plan) if zielobjekt_kuerzel_from_plan else None
-                extracted_details = extracted_data_map.get(lookup_key, {})
-                
-                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
-                bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")
+                anforderungen_list = []
+                for control in controls:
+                    control_id = control.get("id", "N/A")
+                    
+                    # Perform the context-aware lookup using the authoritative Kürzel
+                    lookup_key = (control_id, zielobjekt_kuerzel)
+                    extracted_details = extracted_data_map.get(lookup_key, {})
+                    
+                    customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
+                    bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")
 
-                anforderungen_list.append({
-                    "nummer": control_id,
-                    "anforderung": control.get("title", "N/A"),
-                    "bewertung": bewertung_status,
-                    "dokuAntragsteller": customer_explanation,
-                    "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
-                    "auditfeststellung": "", # To be filled by auditor
-                    "abweichungen": "" # To be filled by auditor
+                    anforderungen_list.append({
+                        "nummer": control_id,
+                        "anforderung": control.get("title", "N/A"),
+                        "bewertung": bewertung_status,
+                        "dokuAntragsteller": customer_explanation,
+                        "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
+                        "auditfeststellung": "", # To be filled by auditor
+                        "abweichungen": "" # To be filled by auditor
+                    })
+                
+                baustein_pruefungen_list.append({
+                    "baustein": baustein_id_full,
+                    "bezogenAufZielobjekt": zielobjekt_name, # Use the actual name
+                    "auditiertAm": "", # To be filled by auditor
+                    "auditor": "", # To be filled by auditor
+                    "befragtWurde": "", # To be filled by auditor
+                    "anforderungen": anforderungen_list
                 })
-            
-            baustein_pruefungen_list.append({
-                "baustein": baustein_id_full,
-                "bezogenAufZielobjekt": zielobjekt_name_from_plan,
-                "auditiertAm": "", # To be filled by auditor
-                "auditor": "", # To be filled by auditor
-                "befragtWurde": "", # To be filled by auditor
-                "anforderungen": anforderungen_list
-            })
 
-        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit, now filtered by selected Zielobjekt.")
+        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Baustein/Zielobjekt sections for manual audit.")
         return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
     def _generate_risikoanalyse_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -179,13 +194,16 @@ class Chapter5Runner:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
 
+        # This is also a required dependency for the new logic
+        system_structure_map = self._load_system_structure_map()
+
         # This will return a map or an empty dict if the file doesn't exist. The process can continue.
         extracted_check_data_map = self._load_extracted_check_data()
         
-        checklist_result = self._generate_control_checklist(chapter_4_data, extracted_check_data_map)
+        checklist_result = self._generate_control_checklist(chapter_4_data, system_structure_map, extracted_check_data_map)
         risiko_result = self._generate_risikoanalyse_checklist(chapter_4_data)
         
         final_result = {**checklist_result, **risiko_result}
-            
+        
         logging.info(f"Successfully prepared data for stage {self.STAGE_NAME}")
         return final_result

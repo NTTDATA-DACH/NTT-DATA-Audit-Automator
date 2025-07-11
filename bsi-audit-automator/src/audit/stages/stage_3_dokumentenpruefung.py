@@ -76,7 +76,7 @@ class Chapter3Runner:
         # 1.2 Extract Baustein mappings from Modellierung (A.3)
         modellierung_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
         mappings_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]["extract_baustein_mappings"]
-        baustein_mappings = {}
+        baustein_mappings = defaultdict(list)
         if modellierung_uris:
             mappings_res = await self.ai_client.generate_json_response(
                 prompt=mappings_config["prompt"],
@@ -85,9 +85,9 @@ class Chapter3Runner:
                 request_context_log="GT: Extract Baustein Mappings"
             )
             for mapping in mappings_res.get("mappings", []):
-                baustein_mappings[mapping["baustein_id"]] = mapping["zielobjekt_kuerzel"]
+                baustein_mappings[mapping["baustein_id"]].append(mapping["zielobjekt_kuerzel"])
         
-        # 1.2.1 Apply deterministic rules for ISMS etc.
+        # 1.2.1 Apply deterministic rules for ISMS etc., ensuring type consistency (list)
         DETERMINISTIC_PREFIXES = ("ISMS", "ORP", "CON", "OPS", "DER")
         for layer in self.control_catalog._baustein_map.keys():
              if layer.startswith(DETERMINISTIC_PREFIXES):
