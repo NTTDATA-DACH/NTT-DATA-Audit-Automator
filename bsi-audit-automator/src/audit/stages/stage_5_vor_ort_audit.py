@@ -1,7 +1,7 @@
 # file: src/audit/stages/stage_5_vor_ort_audit.py
 import logging
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -25,17 +25,22 @@ class Chapter5Runner:
         self.control_catalog = ControlCatalog()
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _load_extracted_check_data(self) -> Dict[str, Dict[str, Any]]:
+    def _load_extracted_check_data(self) -> Dict[Tuple[str, str], Dict[str, Any]]:
         """
         Loads the refined Grundschutz-Check data and creates a lookup map
-        keyed by the requirement ID for efficient access.
+        keyed by a composite tuple of (requirement_id, zielobjekt_kuerzel)
+        for efficient, context-aware access.
         """
         try:
             data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
             anforderungen_list = data.get("anforderungen", [])
-            # Create a map from requirement ID to the full object for easy lookup
-            lookup_map = {item['id']: item for item in anforderungen_list}
-            logging.info(f"Successfully loaded and mapped {len(lookup_map)} refined requirements for Chapter 5.")
+            # The key is a tuple of the requirement ID and the target object's short ID (Kürzel).
+            # This correctly handles the same requirement applied to multiple objects.
+            lookup_map = {
+                (item['id'], item['zielobjekt_kuerzel']): item 
+                for item in anforderungen_list if 'id' in item and 'zielobjekt_kuerzel' in item
+            }
+            logging.info(f"Successfully loaded and mapped {len(lookup_map)} unique requirement-object pairs for Chapter 5.")
             return lookup_map
         except NotFound:
             logging.warning(f"Refined check data file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations.")
@@ -44,13 +49,25 @@ class Chapter5Runner:
             logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)
             return {}
 
-    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        enriching it with the high-quality, merged customer explanations.
+        enriching it with the high-quality, merged customer explanations that are
+        specific to the Zielobjekt selected in the audit plan.
         """
         name = "verifikationDesITGrundschutzChecks"
-        logging.info(f"Generating enriched control checklist for {name} (5.5.2)...")
+        logging.info(f"Generating enriched and context-aware control checklist for {name} (5.5.2)...")
+        
+        # Build a helper map to resolve Zielobjekt names from the plan to their Kürzel.
+        name_to_kuerzel_map = {}
+        for req_data in extracted_data_map.values():
+            zielobjekt_name = req_data.get('zielobjekt_name')
+            zielobjekt_kuerzel = req_data.get('zielobjekt_kuerzel')
+            if zielobjekt_name and zielobjekt_kuerzel:
+                # This will overwrite but should be consistent
+                name_to_kuerzel_map[zielobjekt_name] = zielobjekt_kuerzel
+        # Handle the special case for ISMS etc.
+        name_to_kuerzel_map["Gesamter Informationsverbund"] = "Informationsverbund"
 
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -60,6 +77,7 @@ class Chapter5Runner:
             "auswahlBausteine2Ueberwachungsaudit"
         ]
         for section in baustein_sections:
+            # Use underscore_case key for headers now
             section_data = chapter_4_data.get(section, {})
             if isinstance(section_data, dict) and "table" in section_data:
                  selected_bausteine.extend(section_data.get("table", {}).get("rows", []))
@@ -69,20 +87,30 @@ class Chapter5Runner:
             return {name: {"einzelergebnisse": {"bausteinPruefungen": []}}}
 
         baustein_pruefungen_list = []
-        for baustein in selected_bausteine:
-            baustein_id_full = baustein.get("Baustein", "")
+        for baustein_plan_item in selected_bausteine:
+            baustein_id_full = baustein_plan_item.get("Baustein", "")
             if not baustein_id_full:
                 continue
 
             baustein_id = baustein_id_full.split(" ")[0]
+            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt", "")
+            
+            # Resolve the name to the short ID (Kürzel) needed for the lookup key
+            zielobjekt_kuerzel_from_plan = name_to_kuerzel_map.get(zielobjekt_name_from_plan)
+            if not zielobjekt_kuerzel_from_plan:
+                logging.warning(f"Could not resolve Zielobjekt name '{zielobjekt_name_from_plan}' to a Kürzel for Baustein '{baustein_id}'. Skipping its specific details.")
+
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
 
             anforderungen_list = []
             for control in controls:
                 control_id = control.get("id", "N/A")
-                # Use the refined data from the lookup map
-                extracted_details = extracted_data_map.get(control_id, {})
-                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine Angabe im Grundschutz-Check gefunden.")
+                
+                # Perform the context-aware lookup using the resolved Kürzel
+                lookup_key = (control_id, zielobjekt_kuerzel_from_plan) if zielobjekt_kuerzel_from_plan else None
+                extracted_details = extracted_data_map.get(lookup_key, {})
+                
+                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
                 bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")
 
                 anforderungen_list.append({
@@ -97,14 +125,14 @@ class Chapter5Runner:
             
             baustein_pruefungen_list.append({
                 "baustein": baustein_id_full,
-                "bezogenAufZielobjekt": baustein.get("Zielobjekt", ""),
+                "bezogenAufZielobjekt": zielobjekt_name_from_plan,
                 "auditiertAm": "", # To be filled by auditor
                 "auditor": "", # To be filled by auditor
                 "befragtWurde": "", # To be filled by auditor
                 "anforderungen": anforderungen_list
             })
 
-        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit.")
+        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Bausteine for manual audit, now filtered by selected Zielobjekt.")
         return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
     def _generate_risikoanalyse_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,6 +143,7 @@ class Chapter5Runner:
         name = "risikoanalyseA5"
         logging.info(f"Deterministically generating checklist for {name} (5.6.2)...")
         
+        # Use underscore_case key for headers now
         selected_measures = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("table", {}).get("rows", [])
         
         if not selected_measures:
@@ -124,7 +153,7 @@ class Chapter5Runner:
         massnahmen_pruefungen_list = []
         for measure in selected_measures:
             massnahmen_pruefungen_list.append({
-                "massnahme": measure.get("Maßnahme", "N/A"),
+                "massnahme": measure.get("Massnahme", "N/A"),
                 "zielobjekt": measure.get("Zielobjekt", "N/A"),
                 "bewertung": "",
                 "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
