@@ -62,7 +62,7 @@ class Chapter3Runner:
 
         # 1.1 Extract Zielobjekte from Strukturanalyse (A.1)
         zielobjekte_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
-        zielobjekte_config = self.prompt_config["Chapter-3-Ground-Truth"]["extract_zielobjekte"]
+        zielobjekte_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]["extract_zielobjekte"]
         zielobjekte_list = []
         if zielobjekte_uris:
             zielobjekte_res = await self.ai_client.generate_json_response(
@@ -75,7 +75,7 @@ class Chapter3Runner:
         
         # 1.2 Extract Baustein mappings from Modellierung (A.3)
         modellierung_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
-        mappings_config = self.prompt_config["Chapter-3-Ground-Truth"]["extract_baustein_mappings"]
+        mappings_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]["extract_baustein_mappings"]
         baustein_mappings = {}
         if modellierung_uris:
             mappings_res = await self.ai_client.generate_json_response(

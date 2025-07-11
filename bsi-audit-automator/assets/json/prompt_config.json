@@ -39,7 +39,7 @@
       },
       "aktualitaetDerReferenzdokumente": {
         "schema_path": "assets/schemas/stage_3_1_aktualitaet_schema.json",
-        "source_categories": null
+        "source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie", "Netzplan", "Strukturanalyse", "Dienstleister-Liste", "Realisierungsplan", "Risikoanalyse", "Schutzbedarfsfeststellung"]
       },
       "sicherheitsleitlinieUndRichtlinienInA0": {
         "schema_path": "assets/schemas/stage_3_2_sicherheitsleitlinie_schema.json",
