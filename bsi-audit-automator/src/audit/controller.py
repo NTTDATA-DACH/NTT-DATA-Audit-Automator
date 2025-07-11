@@ -178,7 +178,7 @@ class AuditController:
             # Pass the force_overwrite flag to the runner's run method.
             # This is critical for stages like Chapter 3 that have their own
             # internal caching logic (e.g., for the ground-truth map).
-            result_data = await stage_runner.run(force_overwrite=force_overwrite)
+            result_data = await stage_runner.run()
 
             self.gcs_client.upload_from_string(
                 content=json.dumps(result_data, indent=2, ensure_ascii=False),
