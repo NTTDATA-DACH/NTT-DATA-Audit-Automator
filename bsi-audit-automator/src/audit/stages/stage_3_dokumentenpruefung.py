@@ -190,6 +190,12 @@ class Chapter3Runner:
         
         # 1. Assign by Page Number
         unique_headings = {f"{h.get('kuerzel', '')}-{h.get('pagenumber', 0)}": h for h in all_headings if h.get('kuerzel')}.values()
+        
+        # New Logging for Test Mode
+        if self.config.is_test_mode:
+            found_kuerzel = sorted(list(set(h.get('kuerzel') for h in unique_headings if h.get('kuerzel'))))
+            logging.info(f"[TEST MODE] Found unique Zielobjekt Kürzel in document: {found_kuerzel}")
+
         sorted_headings = sorted(list(unique_headings), key=lambda x: x.get('pagenumber', 0))
 
         for anforderung in all_anforderungen:
@@ -238,6 +244,13 @@ class Chapter3Runner:
 
             final_list.append(best_item)
             
+        # 3. Final Deterministic Override
+        DETERMINISTIC_PREFIXES = ("ISMS.", "ORP.", "CON.", "OPS.", "DER.")
+        for item in final_list:
+            if item.get('id', '').startswith(DETERMINISTIC_PREFIXES):
+                item['zielobjekt_kuerzel'] = "Informationsverbund"
+                item['zielobjekt_name'] = "Gesamter Informationsverbund"
+
         logging.info(f"Merge & Refine complete. Final list has {len(final_list)} unique requirements.")
         return final_list
 
