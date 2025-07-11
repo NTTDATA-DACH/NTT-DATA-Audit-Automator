@@ -621,15 +621,10 @@
                         tableData.headers.forEach(header => {
                             const cell = row.insertCell();
                             const cellPath = `${rowPath}.${header}`;
-                            // The "Nummer" column should always be read-only text
-                            if (header === 'Nummer') {
-                                cell.textContent = getValueByPath(reportData, cellPath) || '';
-                            } else {
-                                const input = document.createElement('textarea');
-                                input.dataset.path = cellPath;
-                                input.value = getValueByPath(reportData, cellPath) || '';
-                                cell.appendChild(input);
-                            }
+                            const input = document.createElement('textarea');
+                            input.dataset.path = cellPath;
+                            input.value = getValueByPath(reportData, cellPath) || '';
+                            cell.appendChild(input);
                         });
                         if (isEditable) {
                             const actionCell = row.insertCell();

@@ -237,10 +237,6 @@
         "stichprobenDokuStrukturanalyse": {
             "title": "Stichprobendokumentation der Strukturanalyse",
             "subchapterNumber": "3.3.8",
-            "table": {
-                "headers": ["Nummer", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"],
-                "rows": []
-            },
             "content": [
               {"type": "finding", "label": "Feststellung:", "findingText": ""}
             ]
