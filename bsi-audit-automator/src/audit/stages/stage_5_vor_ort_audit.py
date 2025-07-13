@@ -69,19 +69,16 @@ class Chapter5Runner:
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], system_structure_map: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        using the ground-truth map to find all actual Zielobjekte for a given
-        Baustein from the audit plan.
+        using the specific Zielobjekt Kürzel from the audit plan (Chapter 4)
+        to select the exact instance to audit and populate with customer data.
         """
         name = "verifikationDesITGrundschutzChecks"
-        logging.info(f"Generating enriched and context-aware control checklist for {name} (5.5.2)...")
-        
-        # Build authoritative helper maps from the ground-truth data
-        baustein_to_kuerzel_list_map = system_structure_map.get("baustein_to_zielobjekt_mapping", {})
-        kuerzel_to_name_map = {
-            z['kuerzel']: z['name'] 
-            for z in system_structure_map.get('zielobjekte', [])
-        }
+        logging.info(f"Generating control checklist for {name} based on the specific audit plan...")
 
+        # Build the one helper map we need: Kürzel -> Name for display purposes.
+        zielobjekte_list = system_structure_map.get('zielobjekte', [])
+        kuerzel_to_name_map = {z['kuerzel']: z['name'] for z in zielobjekte_list}
+        
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
         baustein_sections = [
@@ -99,55 +96,63 @@ class Chapter5Runner:
             return {name: {"einzelergebnisse": {"bausteinPruefungen": []}}}
 
         baustein_pruefungen_list = []
-        # Iterate through each Baustein selected in the high-level audit plan
         for baustein_plan_item in selected_bausteine:
             baustein_id_full = baustein_plan_item.get("Baustein", "")
             if not baustein_id_full: continue
-
             baustein_id = baustein_id_full.split(" ")[0]
-            
-            # Find all actual Zielobjekte this Baustein is mapped to from the ground-truth map
-            actual_zielobjekt_kuerzels = baustein_to_kuerzel_list_map.get(baustein_id, [])
-            if not actual_zielobjekt_kuerzels:
-                logging.warning(f"Baustein '{baustein_id}' from plan is not mapped to any Zielobjekt in the ground-truth map. Skipping.")
+
+            # Directly get the Kürzel from the plan. The 'Zielobjekt' column now contains the ID.
+            planned_zielobjekt_kuerzel = baustein_plan_item.get("Zielobjekt")
+
+            if not planned_zielobjekt_kuerzel:
+                logging.warning(f"Skipping planned Baustein '{baustein_id_full}' because its Zielobjekt is empty.")
                 continue
 
-            # Create a separate checklist section for EACH Zielobjekt the Baustein is applied to
-            for zielobjekt_kuerzel in actual_zielobjekt_kuerzels:
-                zielobjekt_name = kuerzel_to_name_map.get(zielobjekt_kuerzel, "Unbekanntes Zielobjekt")
-                controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
-                
-                anforderungen_list = []
-                for control in controls:
-                    control_id = control.get("id", "N/A")
-                    
-                    # Perform the context-aware lookup using the authoritative Kürzel
-                    lookup_key = (control_id, zielobjekt_kuerzel)
-                    extracted_details = extracted_data_map.get(lookup_key, {})
-                    
-                    customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
-                    bewertung_status = extracted_details.get("umsetzungsstatus", "N/A")
+            # Get the human-readable name for display in the report
+            zielobjekt_name_for_display = kuerzel_to_name_map.get(planned_zielobjekt_kuerzel, planned_zielobjekt_kuerzel)
 
-                    anforderungen_list.append({
-                        "nummer": control_id,
-                        "anforderung": control.get("title", "N/A"),
-                        "bewertung": bewertung_status,
-                        "dokuAntragsteller": customer_explanation,
-                        "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
-                        "auditfeststellung": "", # To be filled by auditor
-                        "abweichungen": "" # To be filled by auditor
-                    })
+            controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
+            
+            anforderungen_list = []
+            for control in controls:
+                control_id = control.get("id", "N/A")
                 
-                baustein_pruefungen_list.append({
-                    "baustein": baustein_id_full,
-                    "bezogenAufZielobjekt": zielobjekt_name, # Use the actual name
-                    "auditiertAm": "", # To be filled by auditor
-                    "auditor": "", # To be filled by auditor
-                    "befragtWurde": "", # To be filled by auditor
-                    "anforderungen": anforderungen_list
+                # Use the Kürzel from the plan for a direct, precise lookup.
+                lookup_key = (control_id, planned_zielobjekt_kuerzel)
+                extracted_details = extracted_data_map.get(lookup_key, {})
+                
+                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
+                bewertung_status_raw = extracted_details.get("umsetzungsstatus", "N/A")
+
+                # Deterministically map the raw status to the final report status text
+                status_map = {
+                    "Ja": "Umgesetzt",
+                    "Nein": "Nicht umgesetzt",
+                    "teilweise": "Teilweise umgesetzt",
+                    "entbehrlich": "Entbehrlich"
+                }
+                final_bewertung_status = status_map.get(bewertung_status_raw, bewertung_status_raw) # Fallback to raw value if not in map
+
+                anforderungen_list.append({
+                    "nummer": control_id,
+                    "anforderung": control.get("title", "N/A"),
+                    "bewertung": final_bewertung_status,
+                    "dokuAntragsteller": customer_explanation,
+                    "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
+                    "auditfeststellung": "",
+                    "abweichungen": ""
                 })
+            
+            baustein_pruefungen_list.append({
+                "baustein": baustein_id_full,
+                "bezogenAufZielobjekt": zielobjekt_name_for_display, # Use the human-readable name here
+                "auditiertAm": "",
+                "auditor": "",
+                "befragtWurde": "",
+                "anforderungen": anforderungen_list
+            })
 
-        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} Baustein/Zielobjekt sections for manual audit.")
+        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} specific Baustein/Zielobjekt sections for manual audit.")
         return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
     def _generate_risikoanalyse_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -91,7 +91,7 @@ class Chapter3Runner:
         DETERMINISTIC_PREFIXES = ("ISMS", "ORP", "CON", "OPS", "DER")
         for layer in self.control_catalog._baustein_map.keys():
              if layer.startswith(DETERMINISTIC_PREFIXES):
-                 baustein_mappings[layer] = "Informationsverbund"
+                 baustein_mappings[layer] = ["Informationsverbund"]
         
         # Add the special Zielobjekt if it was used
         if "Informationsverbund" not in [z['kuerzel'] for z in zielobjekte_list]:

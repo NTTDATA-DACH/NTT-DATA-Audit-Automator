@@ -6,6 +6,8 @@ from google.cloud.exceptions import NotFound
 from typing import Dict, Any, List
 from jsonschema import validate, ValidationError
 
+from datetime import datetime
+
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 
@@ -190,18 +192,15 @@ class ReportGenerator:
             logging.error(f"CRITICAL: Final report failed schema validation. Report will not be saved. Error: {e.message}")
             return
 
-        final_report_path = f"{self.config.output_prefix}final_audit_report.json"
+        today = datetime.now()
+        date_str = today.strftime("%y%m%d")
+        final_report_path = f"{self.config.output_prefix}report-{date_str}.json"
         await self.gcs_client.upload_from_string_async(
             content=json.dumps(report, indent=2, ensure_ascii=False),
             destination_blob_name=final_report_path
         )
         logging.info(f"Final report assembled and saved to: gs://{self.config.bucket_name}/{final_report_path}")
         
-        await self.gcs_client.copy_blob_async(
-            source_blob_name=final_report_path,
-            destination_blob_name=self.gcs_report_path
-        )
-        logging.info(f"Updated master report state on GCS via copy: gs://{self.config.bucket_name}/{self.gcs_report_path}")
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 3 (Dokumentenprüfung) content into the report."""
