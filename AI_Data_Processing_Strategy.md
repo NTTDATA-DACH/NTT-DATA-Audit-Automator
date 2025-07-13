@@ -62,6 +62,21 @@ Together, these files allow the audit process to be modified and extended by sim
 
 ---
 
+### **Phase 1.5: Ground-Truth-Driven Audit Planning**
+**Objective:** To create a realistic, accurate, and compliant audit plan that is based on the customer's actual, documented system structure, rather than a plausible hallucination.
+
+1.  **Prerequisite:** This phase runs *after* the Ground Truth Map (`system_structure_map.json`) has been created by Phase 2, Step 1.
+2.  **Load Ground Truth:** The `Chapter4Runner` loads the complete `system_structure_map.json` from GCS. This map contains the authoritative list of which `Bausteine` are applied to which `Zielobjekte`.
+3.  **Inject Context into Prompt:** The entire ground-truth JSON map is serialized and injected directly into the prompt for the AI.
+4.  **Constrained Instruction:** The prompt is explicitly updated with a critical instruction for the AI: it **MUST** create a plan where every selected `Baustein` is paired with a `Zielobjekt Kürzel` that it is actually mapped to in the provided ground-truth context.
+5.  **Accurate Output:** The result is an audit plan (for Chapter 4.1.1, 4.1.2, etc.) that is guaranteed to be consistent with the customer's `Modellierung` document. This prevents downstream errors in Chapter 5, where the system looks up implementation details for the planned items.
+
+This step is a crucial bridge between deep analysis (Chapter 3) and planning (Chapter 4), ensuring the entire audit process remains factually grounded.
+
+
+---
+
+
 ### **Phase 2:  Ground-Truth-Driven Semantic Chunking**
 
 This strategy establishes a definitive "ground truth" map of the customer's environment *first*, then uses that map to intelligently dissect and process the main `Grundschutz-Check` document.

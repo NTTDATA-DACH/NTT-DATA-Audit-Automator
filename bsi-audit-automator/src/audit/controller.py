@@ -40,7 +40,7 @@ class AuditController:
             "Scan-Report": (self.config, self.ai_client, self.rag_client),
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
-            "Chapter-4": (self.config, self.ai_client),
+            "Chapter-4": (self.config, self.gcs_client, self.ai_client),
             "Chapter-5": (self.config, self.gcs_client, self.ai_client),
             "Chapter-7": (self.config, self.gcs_client),
         }
@@ -120,34 +120,25 @@ class AuditController:
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
         Runs all defined audit stages in a dependency-aware order.
-        Chapter 4 is run first, followed by other parallelizable stages.
         """
-        # Step 0: Run the Report Scanning first, as it's a prerequisite for everything else
-        logging.info("Step 0: Scan old Report")
-        await self.run_single_stage("Scan-Report", force_overwrite=force_overwrite)
-        logging.info("Completed stage: Scan-Report")
+        # Step 0: Run initial independent stages in parallel.
+        # Chapter-3 is a critical prerequisite for Chapters 4 and 5.
+        initial_parallel_stages = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-7"]
+        logging.info(f"Step 0: Starting parallel execution for initial stages: {initial_parallel_stages}")
+        await asyncio.gather(
+            *(self.run_single_stage(stage_name, force_overwrite=force_overwrite) for stage_name in initial_parallel_stages)
+        )
+        logging.info("Completed initial parallel stages.")
 
-        # Step 1: Run Chapter 4 first, as it's a prerequisite for planning.
-        logging.info("Step 1: Running prerequisite stage Chapter-4...")
+        # Step 1: Run Chapter 4, which depends on Chapter 3's ground-truth map.
+        logging.info("Step 1: Running stage Chapter-4...")
         await self.run_single_stage("Chapter-4", force_overwrite=force_overwrite)
         logging.info("Completed stage Chapter-4.")
 
-        # Step 2: Run independent stages in parallel.
-        parallel_stages_after_4 = ["Chapter-1", "Chapter-3"]
-        logging.info(f"Step 2: Starting parallel execution for stages: {parallel_stages_after_4}")
-        parallel_tasks = [
-            self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-            for stage_name in parallel_stages_after_4
-        ]
-        await asyncio.gather(*parallel_tasks)
-        logging.info("Completed parallel execution of independent stages.")
-
-        # Step 3: Run remaining dependent stages sequentially.
-        final_sequential_stages = ["Chapter-5", "Chapter-7"]
-        logging.info(f"Step 3: Starting sequential execution for dependent stages: {final_sequential_stages}")
-        for stage_name in final_sequential_stages:
-            await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-        logging.info("Completed sequential execution of dependent stages.")
+        # Step 2: Run Chapter 5, which depends on Chapter 4's plan and Chapter 3's data.
+        logging.info("Step 2: Running stage Chapter-5...")
+        await self.run_single_stage("Chapter-5", force_overwrite=force_overwrite)
+        logging.info("Completed stage Chapter-5.")
         
         self._save_all_findings()
         logging.info("All audit stages completed.")

@@ -32,31 +32,53 @@
         "auditierteInstitution": {
             "type": "object",
             "properties": {
-                "table": {
+                "kontaktinformationenAntragsteller": {
                     "type": "object",
                     "properties": {
-                        "rows": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "Institution": { "type": "string" },
-                                    "Straße / Hausnummer": { "type": "string" },
-                                    "PLZ / Ort": { "type": "string" },
-                                    "E-Mail": { "type": "string" }
-                                },
-                                "required": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"]
-                            }
+                        "table": {
+                            "type": "object",
+                            "properties": {
+                                "rows": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Institution": { "type": "string" },
+                                            "Straße / Hausnummer": { "type": "string" },
+                                            "PLZ / Ort": { "type": "string" },
+                                            "E-Mail": { "type": "string" }
+                                        },
+                                        "required": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"]
+                                    }
+                                }
+                            },
+                            "required": ["rows"]
                         }
                     },
-                    "required": ["rows"]
+                    "required": ["table"]
+                },
+                "ansprechpartnerZertifizierung": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                            "properties": {
+                                "rows": {
+                                    "type": "array",
+                                    "items": { "type": "object" }
+                                }
+                            },
+                            "required": ["rows"]
+                        }
+                    },
+                    "required": ["table"]
                 }
             },
-            "required": ["table"]
+            "required": ["kontaktinformationenAntragsteller", "ansprechpartnerZertifizierung"]
         },
         "auditteam": {
             "type": "object",
-            "description": "Contains all sub-tables related to the audit team.",
+            "description": "Contains all sub-tables related to the audit team. Properties are optional.",
             "properties": {
                 "auditteamleiter": {
                     "type": "object",
@@ -68,21 +90,7 @@
                             },
                             "required": ["rows"]
                         }
-                    },
-                    "required": ["table"]
-                },
-                "auditor": {
-                    "type": "object",
-                    "properties": {
-                        "table": {
-                            "type": "object",
-                             "properties": {
-                                "rows": { "type": "array", "items": { "type": "object" } }
-                            },
-                            "required": ["rows"]
-                        }
-                    },
-                    "required": ["table"]
+                    }
                 },
                 "fachexperte": {
                     "type": "object",
@@ -94,11 +102,21 @@
                             },
                             "required": ["rows"]
                         }
-                    },
-                    "required": ["table"]
+                    }
+                },
+                "auditor": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                             "properties": {
+                                "rows": { "type": "array", "items": { "type": "object" } }
+                            },
+                            "required": ["rows"]
+                        }
+                    }
                 }
-            },
-            "required": ["auditteamleiter", "auditor", "fachexperte"]
+            }
         }
     },
     "required": ["versionshistorie", "auditierteInstitution", "auditteam"]
