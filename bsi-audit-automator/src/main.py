@@ -23,6 +23,11 @@ async def main_async():
     group = parser.add_mutually_exclusive_group(required=True)
     
     group.add_argument(
+        '--scan-previous-report',
+        action='store_true',
+        help='Run the new stage to scan a previous audit report.'
+    )
+    group.add_argument(
         '--run-stage',
         type=str,
         help='Run a single audit stage (e.g., --run-stage Chapter-1).'
@@ -53,6 +58,13 @@ async def main_async():
         logging.info("Starting final report assembly...")
         generator = ReportGenerator(config, gcs_client)
         await generator.assemble_report()
+        return
+        
+    if args.scan_previous_report:
+        logging.info("Starting Previous Report Scan stage...")
+        rag_client = await RagClient.create(config, gcs_client, ai_client, force_remap=args.force)
+        controller = AuditController(config, gcs_client, ai_client, rag_client)
+        await controller.run_single_stage("Scan-Report", force_overwrite=True)
         return
 
     # For audit stages, we need the RagClient (Document Finder)

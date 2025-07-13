@@ -3,7 +3,7 @@
   "stages": {
     "ETL": {
       "classify_documents": {
-        "prompt": "You are an expert BSI (German Federal Office for Information Security) audit assistant. Your task is to analyze a list of document filenames and classify each one into a single, most appropriate category from a predefined list. The filenames often contain clues like \"A.1\", \"A.4\", \"Netzplan\", \"Sicherheitsleitlinie\", etc.\n\n**Predefined Categories:**\n- \"Sicherheitsleitlinie\": The main, high-level security policy document.\n- \"Organisations-Richtlinie\": Other policies, guidelines, or organizational rules.\n- \"Informationsverbund\": Documents describing the scope and boundary of the information network.\n- \"Netzplan\": Network diagrams or topology plans.\n- \"Strukturanalyse\": The core structural analysis document (often A.1).\n- \"Schutzbedarfsfeststellung\": Protection needs assessment document (often A.2).\n- \"Modellierung\": The IT Grundschutz modeling document (often A.3).\n- \"Grundschutz-Check\": The implementation check of controls (often A.4).\n- \"Risikoanalyse\": Risk analysis documents (often A.5).\n- \"Realisierungsplan\": The risk treatment or implementation plan (often A.6).\n- \"Dienstleister-Liste\": Lists of external service providers.\n- \"Sonstiges\": Any other document that does not fit the above categories.\n\nAnalyze the following list of filenames and return a structured JSON response mapping each filename to its category.\n\n**Filenames to Classify:**\n---\n{filenames_json}\n---",
+        "prompt": "You are an expert BSI (German Federal Office for Information Security) audit assistant. Your task is to analyze a list of document filenames and classify each one into a single, most appropriate category from a predefined list. The filenames often contain clues like \"A.1\", \"A.4\", \"Netzplan\", \"Sicherheitsleitlinie\", \"Auditbericht\", etc.\n\n**Predefined Categories:**\n- \"Sicherheitsleitlinie\": The main, high-level security policy document.\n- \"Organisations-Richtlinie\": Other policies, guidelines, or organizational rules.\n- \"Informationsverbund\": Documents describing the scope and boundary of the information network.\n- \"Netzplan\": Network diagrams or topology plans.\n- \"Strukturanalyse\": The core structural analysis document (often A.1).\n- \"Schutzbedarfsfeststellung\": Protection needs assessment document (often A.2).\n- \"Modellierung\": The IT Grundschutz modeling document (often A.3).\n- \"Grundschutz-Check\": The implementation check of controls (often A.4).\n- \"Risikoanalyse\": Risk analysis documents (often A.5).\n- \"Realisierungsplan\": The risk treatment or implementation plan (often A.6).\n- \"Dienstleister-Liste\": Lists of external service providers.\n- \"Vorheriger-Auditbericht\": A previous, complete audit report.\n- \"Sonstiges\": Any other document that does not fit the above categories.\n\nAnalyze the following list of filenames and return a structured JSON response mapping each filename to its category.\n\n**Filenames to Classify:**\n---\n{filenames_json}\n---",
         "schema_path": "assets/schemas/etl_classify_documents_schema.json"
       }
     },
@@ -169,6 +169,20 @@
         "key": "4.1.5",
         "prompt": "You are a BSI Lead Auditor planning an audit. Your task is to select a small, representative sample of 2-3 additional security measures that would typically result from a risk analysis for assets with \"high\" or \"very high\" protection needs. These are measures BEYOND the standard IT-Grundschutz baseline requirements.\n\nFor each selected measure, provide a plausible and risk-oriented justification (key: 'Begründung zur Auswahl') for its inclusion in the on-site audit plan.\n\nExamples of good justifications:\n- \"To verify the effectiveness of the advanced DDoS mitigation for the public-facing web application, which is a critical business process.\"\n- \"To check the implementation of database encryption, as this measure was identified to protect highly sensitive customer PII.\"\n- \"To confirm the sandboxing of the email attachment analysis system, a key control against advanced persistent threats.\"",
         "schema_path": "assets/schemas/stage_4_1_5_auswahl_massnahmen_risiko_schema.json"
+      }
+    },
+    "Scan-Report": {
+      "extract_chapter_1": {
+        "prompt": "From the attached previous audit report, extract the complete content of the tables in subchapters 1.1 (Versionshistorie), 1.2 (Auditierte Institution), and 1.3 (Auditteam). The auditteam has multiple sub-tables; capture all of them.",
+        "schema_path": "assets/schemas/scan_report_ch1_schema.json"
+      },
+      "extract_chapter_4": {
+        "prompt": "From the attached previous audit report, extract the 'Auswahl Bausteine' tables from subchapters 4.1.1 and 4.1.2. Capture all rows from both tables.",
+        "schema_path": "assets/schemas/scan_report_ch4_schema.json"
+      },
+      "extract_chapter_7": {
+        "prompt": "From the attached previous audit report, extract all findings from the tables in subchapter 7.2. This includes 'Schwerwiegende Abweichungen', 'Geringfügige Abweichungen', and 'Empfehlungen'. Capture all rows from all three tables.",
+        "schema_path": "assets/schemas/scan_report_ch7_schema.json"
       }
     }
   }

@@ -10,6 +10,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.audit.stages.stage_previous_report_scan import PreviousReportScanner
 from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 from src.audit.stages.stage_4_pruefplan import Chapter4Runner
@@ -27,6 +28,7 @@ class AuditController:
         self.all_findings: List[Dict[str, Any]] = []
 
         self.stage_runner_classes = {
+            "Scan-Report": PreviousReportScanner,
             "Chapter-1": Chapter1Runner,
             "Chapter-3": Chapter3Runner,
             "Chapter-4": Chapter4Runner,
@@ -35,6 +37,7 @@ class AuditController:
         }
         # This defines the exact order of dependencies for each runner's constructor.
         self.runner_dependencies = {
+            "Scan-Report": (self.config, self.ai_client, self.rag_client),
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.ai_client),
@@ -119,6 +122,11 @@ class AuditController:
         Runs all defined audit stages in a dependency-aware order.
         Chapter 4 is run first, followed by other parallelizable stages.
         """
+        # Step 0: Run the Report Scanning first, as it's a prerequisite for everything else
+        logging.info("Step 0: Scan old Report")
+        await self.run_single_stage("Scan-Report", force_overwrite=force_overwrite)
+        logging.info("Completed stage: Scan-Report")
+
         # Step 1: Run Chapter 4 first, as it's a prerequisite for planning.
         logging.info("Step 1: Running prerequisite stage Chapter-4...")
         await self.run_single_stage("Chapter-4", force_overwrite=force_overwrite)

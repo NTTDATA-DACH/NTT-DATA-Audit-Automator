@@ -27,24 +27,36 @@ Together, these files allow the audit process to be modified and extended by sim
 
 ---
 
-### **Phase 0: On-Demand Document Classification (The "Retrieval" Mechanism)**
+### **Phase -1: Ingestion of Prior Audit Data**
+**Objective:** To extract structured data from a previous audit report to potentially inform the current audit. This is the new, initial step in the pipeline.
 
-**Objective:** To create a persistent, intelligent index of all source documents. This map is the foundation for the "Retrieval" part of the RAG pattern, allowing for fast, targeted document selection in later phases. This is a one-time setup step.
+1.  **Document Identification:** The process relies on the on-demand document classification (Phase 0) to find a file categorized as `Vorheriger-Auditbericht`.
+2.  **Parallel Extraction:** The `PreviousReportScanner` stage initiates three targeted AI calls in parallel to maximize efficiency. Each call is given the previous report PDF and a specific prompt to extract data from different chapters:
+    *   **Task 1 (Chapter 1):** Extracts tables for `Versionshistorie`, `Auditierte Institution`, and `Auditteam`.
+    *   **Task 2 (Chapter 4):** Extracts tables detailing the previously audited `Bausteine`.
+    *   **Task 3 (Chapter 7):** Extracts tables of all previous findings (`Abweichungen` and `Empfehlungen`).
+3.  **Structured Output:** Each extraction task uses a strict JSON schema to ensure the output is structured and reliable. The combined results are saved to `output/results/Scan-Report.json`.
+
+---
+
+### **Phase 0: On-Demand Document Classification (The Document Finder)**
+
+**Objective:** To create a persistent, intelligent index of all source documents. This map is the foundation for finding targeted documents in later phases. This is a one-time, on-demand setup step.
 
 1.  **Trigger & Idempotency Check:** The `RagClient` (acting as the "Document Finder") first checks GCS for `output/document_map.json`. If this map already exists, the entire classification phase is skipped, making the process efficient and idempotent.
 2.  **On-Demand Creation:** If the map is missing, the `RagClient` orchestrates its creation:
     *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to `gemini-2.5-pro` with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
     *   **Robust Fallback:** This step is designed for resilience. If the AI call fails for any reason (e.g., API error, invalid response), the application does not halt. Instead, the `RagClient` logs a critical warning and generates a **fallback map**, classifying every document as "Sonstiges" (Miscellaneous). This ensures the pipeline can always proceed, with the known consequence of reduced precision in document selection.
-3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous "retrieval" of document URIs for all subsequent audit tasks.
+3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous lookup of document URIs for all subsequent audit tasks.
 
 ---
 
 ### **Phase 1: Staged, Contextual AI-Driven Generation (The Standard "Analysis" Workflow)**
 
-**Objective:** To systematically execute the audit by first retrieving a focused set of documents and then providing them to the AI for deep analysis. This is the standard process for most subchapters.
+**Objective:** To systematically execute the audit by first finding a focused set of documents and then providing them to the AI for deep analysis. This is the standard process for most subchapters.
 
 1.  **Task Identification:** The `AuditController` initiates a stage runner (e.g., `Chapter3Runner`). The runner inspects its execution plan (derived from the `master_report_template.json`).
-2.  **Document Retrieval:** For a given subchapter key (e.g., `definitionDesInformationsverbundes`), the runner looks up the corresponding entry in `prompt_config.json` to find the required `source_categories`. It then asks the `RagClient` for the GCS URIs of all documents belonging to those categories.
+2.  **Document Lookup:** For a given subchapter key (e.g., `definitionDesInformationsverbundes`), the runner looks up the corresponding entry in `prompt_config.json` to find the required `source_categories`. It then asks the `RagClient` for the GCS URIs of all documents belonging to those categories.
 3.  **Focused Analysis:** The `AiClient` is invoked with the prompt, the required output schema, and the **list of retrieved GCS URIs**. This is the core of the strategy: the model is given direct, full access to a small, highly relevant set of documents, allowing it to perform a deep, focused analysis without the distraction of irrelevant information.
 4.  **Validation, Collection, and State Management:** The structured JSON response from the AI is validated against its schema. The `AuditController` extracts any findings and adds them to a central list. The result for the stage is saved to GCS (e.g., `output/results/Chapter-3.json`), ensuring the entire process is resumable.
 

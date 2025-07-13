@@ -52,7 +52,7 @@ done
 # --- INTERACTIVE SELECTION: Task/Stage ---
 echo "🔹 Please select the task to execute."
 # Removed "Run ETL (Embedding)" as it is deprecated.
-tasks=("Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
+tasks=("Scan Previous Audit Report" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
 PS3="Select task number: "
 declare TASK_ARGS=""
 declare FORCE_FLAG=""

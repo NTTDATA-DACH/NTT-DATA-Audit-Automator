@@ -1,0 +1,42 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Scanned Previous Report Data (Chapter 7)",
+    "description": "Extracts previous findings tables from Chapter 7.2.",
+    "type": "object",
+    "properties": {
+      "schwerwiegendeAbweichungen": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "type": "object",
+            "properties": { "rows": { "type": "array", "items": { "type": "object" } } },
+            "required": ["rows"]
+          }
+        },
+        "required": ["table"]
+      },
+      "geringfuegigeAbweichungen": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "type": "object",
+            "properties": { "rows": { "type": "array", "items": { "type": "object" } } },
+            "required": ["rows"]
+          }
+        },
+        "required": ["table"]
+      },
+      "empfehlungen": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "type": "object",
+            "properties": { "rows": { "type": "array", "items": { "type": "object" } } },
+            "required": ["rows"]
+          }
+        },
+        "required": ["table"]
+      }
+    },
+    "required": ["schwerwiegendeAbweichungen", "geringfuegigeAbweichungen", "empfehlungen"]
+  }
