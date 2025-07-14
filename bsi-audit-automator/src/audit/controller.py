@@ -26,6 +26,7 @@ class AuditController:
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.all_findings: List[Dict[str, Any]] = []
+        self.finding_counters = defaultdict(int)
 
         self.stage_runner_classes = {
             "Scan-Report": PreviousReportScanner,
@@ -46,49 +47,63 @@ class AuditController:
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")
 
-    def _collect_finding(self, finding: Dict[str, Any], stage_name: str) -> None:
-        """Collects a raw finding object, adding source context before appending."""
+    def _parse_finding_id(self, finding_id: str) -> Tuple[Optional[str], int]:
+        """Parses a finding ID like 'AG-12' into its category 'AG' and number 12."""
+        if not finding_id or '-' not in finding_id:
+            return None, 0
+        parts = finding_id.split('-')
+        category = parts[0]
+        try:
+            num = int(parts[-1])
+            return category, num
+        except (ValueError, IndexError):
+            return None, 0
+
+    def _process_previous_findings(self, previous_findings: List[Dict[str, Any]]):
+        """Processes findings from a previous report scan, preserving their IDs and updating counters."""
+        logging.info(f"Processing {len(previous_findings)} findings from previous audit report.")
+        for finding in previous_findings:
+            finding_id = finding.get("nummer")
+            if not finding_id:
+                continue
+
+            category, num = self._parse_finding_id(finding_id)
+            if category and num > 0:
+                # Update the counter to the highest number seen for this category
+                self.finding_counters[category] = max(self.finding_counters[category], num)
+
+            # Add the finding to the central list with its ID and details preserved
+            self.all_findings.append({
+                "id": finding_id,
+                "category": finding.get("category"),
+                "description": finding.get("beschreibung", "No description provided."),
+                "source_chapter": f"Previous Audit ({finding.get('quelle', 'N/A')})"
+            })
+
+    def _process_new_finding(self, finding: Dict[str, Any], stage_name: str):
+        """Processes a newly generated finding, adding it to the central list to await ID assignment."""
         source_ref = stage_name.replace('Chapter-', '')
-        # Handle special cases for more descriptive source
-        if stage_name == "Scan-Report":
-            source_ref = finding.get("source_chapter", "Previous Audit")
-        
+        # Add to central list without an ID, which will be assigned at the end.
         self.all_findings.append({
-            # ID is NOT assigned here. It will be assigned sequentially at the end.
-            "category": finding['category'],
-            "description": finding['description'],
+            "category": finding.get("category"),
+            "description": finding.get("description"),
             "source_chapter": source_ref
         })
-        logging.info(f"Collected finding from {stage_name}: {finding['category']}")
+        logging.info(f"Collected new finding from {stage_name}: {finding.get('category')}")
 
     def _extract_findings_recursive(self, data: Any) -> List[Dict[str, Any]]:
         """
-        Recursively traverses a data structure to find all structured `finding` objects
-        and lists of findings under the special key `all_findings`.
-        Returns a flat list of all findings discovered.
+        Recursively traverses a data structure to find all structured `finding` objects.
+        Returns a flat list of all findings discovered. This method does NOT handle
+        the `all_findings` key from Scan-Report, as that is handled separately.
         """
         found = []
         if isinstance(data, dict):
-            # Case 1: Standard structured finding `{"finding": {...}}`
             if 'finding' in data and isinstance(data['finding'], dict):
                 finding_obj = data['finding']
                 if finding_obj and finding_obj.get('category') != 'OK':
                     found.append(finding_obj)
             
-            # Case 2: Special key for lists of findings from previous reports `{"all_findings": [...]}`
-            if 'all_findings' in data and isinstance(data['all_findings'], list):
-                for item in data['all_findings']:
-                    if isinstance(item, dict) and 'category' in item:
-                        # Adapt the format to the internal standard
-                        adapted_finding = {
-                            "category": item.get("category"),
-                            "description": item.get("beschreibung", "No description provided."),
-                             # Add context that this is from a previous audit
-                            "source_chapter": f"Previous Audit ({item.get('quelle', 'N/A')})"
-                        }
-                        found.append(adapted_finding)
-
-            # Recurse into nested structures
             for value in data.values():
                 found.extend(self._extract_findings_recursive(value))
         
@@ -106,29 +121,40 @@ class AuditController:
         if not result_data:
             return
 
-        discovered_findings = self._extract_findings_recursive(result_data)
-        for finding in discovered_findings:
-            self._collect_finding(finding, stage_name)
+        # Special handling for Scan-Report which has a flat list of previous findings
+        if stage_name == "Scan-Report" and 'all_findings' in result_data:
+            self._process_previous_findings(result_data['all_findings'])
+            # We don't do a recursive search for this stage type to avoid double counting
+            return
+
+        # Standard recursive search for newly generated findings
+        newly_discovered_findings = self._extract_findings_recursive(result_data)
+        for finding in newly_discovered_findings:
+            self._process_new_finding(finding, stage_name)
 
     def _save_all_findings(self) -> None:
         """
-        Saves the centrally collected list of all non-'OK' findings. It assigns
-        a sequential, report-friendly ID to each finding just before saving.
+        Saves the centrally collected list of all findings. It preserves existing IDs
+        from previous reports and assigns new, sequential IDs for new findings.
         """
         if not self.all_findings:
             logging.info("No findings were collected during the audit. Skipping save.")
             return
 
-        # Assign sequential, category-based IDs now that all findings are collected.
         findings_with_ids = []
-        counters = defaultdict(int)
         for finding in self.all_findings:
-            category = finding['category']
-            counters[category] += 1
-            finding_id = f"{category}-{counters[category]}"
-            
-            # Create a new dict with the ID and the rest of the finding data
-            findings_with_ids.append({"id": finding_id, **finding})
+            if 'id' in finding and finding['id']:
+                # This is a finding from a previous report, ID is already set.
+                findings_with_ids.append(finding)
+            else:
+                # This is a new finding, assign a new ID.
+                category = finding['category']
+                self.finding_counters[category] += 1
+                finding_id = f"{category}-{self.finding_counters[category]}"
+                
+                # Add the new ID to the finding object
+                finding_with_id = {"id": finding_id, **finding}
+                findings_with_ids.append(finding_with_id)
 
         findings_path = f"{self.config.output_prefix}results/all_findings.json"
         self.gcs_client.upload_from_string(

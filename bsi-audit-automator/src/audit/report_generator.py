@@ -317,11 +317,15 @@ class ReportGenerator:
 
         # 1. Populate Chapter 1 tables
         self._set_value_by_path(report, 'bsiAuditReport.allgemeines.versionshistorie.table.rows', stage_data.get('versionshistorie', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.kontaktinformationenAntragsteller.table.rows', stage_data.get('auditierteInstitution', {}).get('kontaktinformationenAntragsteller', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.ansprechpartnerZertifizierung.table.rows', stage_data.get('auditierteInstitution', {}).get('ansprechpartnerZertifizierung', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditteamleiter.table.rows', stage_data.get('auditteam', {}).get('auditteamleiter', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditor.table.rows', stage_data.get('auditteam', {}).get('auditor', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.fachexperte.table.rows', stage_data.get('auditteam', {}).get('fachexperte', {}).get('table', {}).get('rows', []))
+        
+        audit_institution_data = stage_data.get('auditierteInstitution', {})
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.kontaktinformationenAntragsteller.table.rows', audit_institution_data.get('kontaktinformationenAntragsteller', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.ansprechpartnerZertifizierung.table.rows', audit_institution_data.get('ansprechpartnerZertifizierung', {}).get('table', {}).get('rows', []))
+        
+        auditteam_data = stage_data.get('auditteam', {})
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditteamleiter.table.rows', auditteam_data.get('auditteamleiter', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditor.table.rows', auditteam_data.get('auditor', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.fachexperte.table.rows', auditteam_data.get('fachexperte', {}).get('table', {}).get('rows', []))
         
         # 2. Populate Chapter 4 tables as a fallback/baseline
         self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteineErstRezertifizierung.table.rows', stage_data.get('auswahlBausteineErstRezertifizierung', {}).get('table', {}).get('rows', []))
@@ -333,7 +337,6 @@ class ReportGenerator:
         """Router function to call the correct population logic for a given stage."""
         logging.info(f"Populating report with data from stage: {stage_name}")
         population_map = {
-            "Scan-Report": self._populate_from_scan_report,
             "Chapter-1": self._populate_chapter_1,
             "Chapter-3": self._populate_chapter_3,
             "Chapter-4": self._populate_chapter_4,
@@ -343,8 +346,6 @@ class ReportGenerator:
         
         populate_func = population_map.get(stage_name)
         if populate_func:
-            # We call the special Scan-Report populator separately now
-            if stage_name != "Scan-Report":
-                populate_func(report, stage_data)
+            populate_func(report, stage_data)
         else:
             logging.warning(f"No population logic defined for stage: {stage_name}")
