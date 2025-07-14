@@ -33,9 +33,23 @@
           "pagenumber": {
             "type": "integer",
             "description": "The page number where this requirement was found."
+          },
+          "zielobjekt_kuerzel": {
+            "type": "string",
+            "description": "The Kürzel of the Zielobjekt, if directly associated on the same page by the AI."
+          },
+          "zielobjekt_name": {
+            "type": "string",
+            "description": "The Name of the Zielobjekt, if directly associated on the same page by the AI."
           }
         },
-        "required": ["id", "titel", "umsetzungsstatus", "umsetzungserlaeuterung", "datumLetztePruefung", "pagenumber"]
+        "required": [
+          "id",
+          "umsetzungsstatus",
+          "umsetzungserlaeuterung",
+          "datumLetztePruefung",
+          "pagenumber"
+        ]
       }
     },
     "chapter_headings": {

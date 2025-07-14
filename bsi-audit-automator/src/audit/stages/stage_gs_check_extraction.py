@@ -87,12 +87,17 @@ class GrundschutzCheckExtractionRunner:
         logging.info(f"Successfully created and saved ground truth map to {self.GROUND_TRUTH_MAP_PATH}")
         return final_map
 
-    async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any]) -> Tuple[List, List]:
+    async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any], zielobjekte_list: List[Dict]) -> Tuple[List, List]:
         """Runs a single data extraction pass, returning raw anforderungen and headings."""
         logging.info(f"Starting extraction pass with chunk size: {chunk_size} pages.")
         total_pages = len(doc)
         if total_pages == 0: return [], []
-            
+
+
+        # Prepare the context for the prompt
+        zielobjekte_list_json = json.dumps(zielobjekte_list, indent=2, ensure_ascii=False)
+        prompt_with_context = prompt_template.format(zielobjekte_list_json=zielobjekte_list_json)
+
         start_page = 0
         if self.config.is_test_mode:
             start_page = 1100
@@ -111,7 +116,7 @@ class GrundschutzCheckExtractionRunner:
             temp_blob_names.append(chunk_blob_name)
 
             task = self.ai_client.generate_json_response(
-                prompt=prompt_template, json_schema=schema, gcs_uris=[f"gs://{self.config.bucket_name}/{chunk_blob_name}"],
+                prompt=prompt_with_context, json_schema=schema, gcs_uris=[f"gs://{self.config.bucket_name}/{chunk_blob_name}"],
                 request_context_log=f"GS-Check-Extraction (ChunkSize: {chunk_size}, Pages: {i}-{i+chunk_size-1})"
             )
             tasks.append(task)
@@ -141,14 +146,25 @@ class GrundschutzCheckExtractionRunner:
 
         sorted_headings = sorted(list(unique_headings), key=lambda x: x.get('pagenumber', 0))
 
+        # --- Two-Tier Assignment Logic ---
         for anforderung in all_anforderungen:
-            page = anforderung.get('pagenumber', 0)
-            assigned_kuerzel = "Unassigned"
-            for heading in reversed(sorted_headings):
-                if page >= heading.get('pagenumber', 0):
-                    assigned_kuerzel = heading['kuerzel']
-                    break
-            anforderung['zielobjekt_kuerzel'] = assigned_kuerzel
+            # Tier 1: Check if the AI made a direct, same-page assignment.
+            # If so, we trust it and continue to the next anforderung.
+            if anforderung.get('zielobjekt_kuerzel'):
+                # Also populate the name from the direct assignment for consistency
+                anforderung['zielobjekt_name'] = zielobjekte_map.get(anforderung['zielobjekt_kuerzel'], "Name not in map")
+                continue
+
+            # Tier 2: If no direct assignment, use the deterministic fallback logic.
+            else:
+                page = anforderung.get('pagenumber', 0)
+                assigned_kuerzel = "Unassigned"
+                for heading in reversed(sorted_headings):
+                    # Use strict '>' to associate with the context from a *previous* page.
+                    if page > heading.get('pagenumber', 0):
+                        assigned_kuerzel = heading['kuerzel']
+                        break
+                anforderung['zielobjekt_kuerzel'] = assigned_kuerzel
         
         grouped_anforderungen = defaultdict(list)
         for a in all_anforderungen:
@@ -215,7 +231,11 @@ class GrundschutzCheckExtractionRunner:
         prompt = config["prompt"]
         schema = self._load_asset_json(config["schema_path"])
 
-        pass_tasks = [self._run_extraction_pass(doc, cs, prompt, schema) for cs in self.CHUNK_SIZES]
+        # Pass the ground truth Zielobjekte list to each extraction pass
+        pass_tasks = [
+            self._run_extraction_pass(doc, cs, prompt, schema, ground_truth_map.get('zielobjekte', [])) 
+            for cs in self.CHUNK_SIZES
+        ]
         pass_results = await asyncio.gather(*pass_tasks)
         
         all_anforderungen = [item for res_tuple in pass_results for item in res_tuple[0]]
