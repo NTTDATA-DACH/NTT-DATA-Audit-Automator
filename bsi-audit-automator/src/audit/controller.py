@@ -49,6 +49,10 @@ class AuditController:
     def _collect_finding(self, finding: Dict[str, Any], stage_name: str) -> None:
         """Collects a raw finding object, adding source context before appending."""
         source_ref = stage_name.replace('Chapter-', '')
+        # Handle special cases for more descriptive source
+        if stage_name == "Scan-Report":
+            source_ref = finding.get("source_chapter", "Previous Audit")
+        
         self.all_findings.append({
             # ID is NOT assigned here. It will be assigned sequentially at the end.
             "category": finding['category'],
@@ -59,16 +63,32 @@ class AuditController:
 
     def _extract_findings_recursive(self, data: Any) -> List[Dict[str, Any]]:
         """
-        Recursively traverses a data structure to find all structured `finding` objects.
+        Recursively traverses a data structure to find all structured `finding` objects
+        and lists of findings under the special key `all_findings`.
         Returns a flat list of all findings discovered.
         """
         found = []
         if isinstance(data, dict):
+            # Case 1: Standard structured finding `{"finding": {...}}`
             if 'finding' in data and isinstance(data['finding'], dict):
                 finding_obj = data['finding']
                 if finding_obj and finding_obj.get('category') != 'OK':
                     found.append(finding_obj)
             
+            # Case 2: Special key for lists of findings from previous reports `{"all_findings": [...]}`
+            if 'all_findings' in data and isinstance(data['all_findings'], list):
+                for item in data['all_findings']:
+                    if isinstance(item, dict) and 'category' in item:
+                        # Adapt the format to the internal standard
+                        adapted_finding = {
+                            "category": item.get("category"),
+                            "description": item.get("beschreibung", "No description provided."),
+                             # Add context that this is from a previous audit
+                            "source_chapter": f"Previous Audit ({item.get('quelle', 'N/A')})"
+                        }
+                        found.append(adapted_finding)
+
+            # Recurse into nested structures
             for value in data.values():
                 found.extend(self._extract_findings_recursive(value))
         

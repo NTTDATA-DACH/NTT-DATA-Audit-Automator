@@ -14,12 +14,11 @@ from src.clients.gcs_client import GcsClient
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
     LOCAL_MASTER_TEMPLATE_PATH = "assets/json/master_report_template.json"
-    STAGES_TO_AGGREGATE = ["Chapter-1", "Chapter-3", "Chapter-4", "Chapter-5", "Chapter-7"]
+    STAGES_TO_AGGREGATE = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-4", "Chapter-5", "Chapter-7"]
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
         self.gcs_client = gcs_client
-        self.gcs_report_path = "report/master_report_template.json"
         self.report_schema = self._load_report_schema()
         logging.info("Report Generator initialized.")
     
@@ -80,28 +79,24 @@ class ReportGenerator:
             
         return current_level
 
-    async def _initialize_report_on_gcs(self) -> dict:
+    def _load_local_report_template(self) -> dict:
         """
-        Loads the report template. It first tries to load from a working copy on GCS,
-        falling back to the local `master_report_template.json` if it doesn't exist.
+        Loads the pristine report template from the local assets folder and
+        injects initial configuration like the audit type.
         """
+        logging.info(f"Loading pristine report template from local asset: {self.LOCAL_MASTER_TEMPLATE_PATH}")
         try:
-            report = await self.gcs_client.read_json_async(self.gcs_report_path)
-            logging.info(f"Loaded existing report template from GCS: {self.gcs_report_path}")
-            return report
-        except NotFound:
-            logging.info("No report template found on GCS. Initializing from local asset.")
             with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
                 report = json.load(f)
             
+            # Inject dynamic configuration into the fresh template
             self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', self.config.audit_type)
             
-            await self.gcs_client.upload_from_string_async(
-                content=json.dumps(report, indent=2, ensure_ascii=False),
-                destination_blob_name=self.gcs_report_path
-            )
-            logging.info(f"Saved initial report template to GCS: {self.gcs_report_path}")
+            logging.info("Successfully loaded and configured local report template.")
             return report
+        except Exception as e:
+            logging.error(f"FATAL: Could not load the master report template from {self.LOCAL_MASTER_TEMPLATE_PATH}. Error: {e}")
+            raise
 
     def _populate_chapter_1(self, report: dict, stage_data: dict) -> None:
         """Populates the 'Allgemeines' (Chapter 1) of the report defensively."""
@@ -164,7 +159,7 @@ class ReportGenerator:
         """
         Main method to assemble the final report.
         """
-        report = await self._initialize_report_on_gcs()
+        report = self._load_local_report_template()
 
         stage_read_tasks = [self.gcs_client.read_json_async(f"{self.config.output_prefix}results/{s}.json") for s in self.STAGES_TO_AGGREGATE]
         stage_results = await asyncio.gather(*stage_read_tasks, return_exceptions=True)
@@ -180,9 +175,16 @@ class ReportGenerator:
             else:
                 stage_data_map[stage_name] = result
 
+        # The order of population matters. Populate from Scan-Report first as a baseline.
+        if "Scan-Report" in stage_data_map:
+            self._populate_from_scan_report(report, stage_data_map["Scan-Report"])
+
+        # Then, let the other stages overwrite with fresher, generated data.
         for stage_name, stage_data in stage_data_map.items():
-            self._populate_report(report, stage_name, stage_data)
+            if stage_name != "Scan-Report": # Avoid running it twice
+                self._populate_report(report, stage_name, stage_data)
         
+        # Populate the final aggregated findings last.
         self._populate_chapter_7_findings(report)
 
         try:
@@ -309,10 +311,29 @@ class ReportGenerator:
             path = "bsiAuditReport.anhang.referenzdokumente.table.rows"
             self._set_value_by_path(report, path, ref_docs_data['table'].get('rows', []))
 
+    def _populate_from_scan_report(self, report: dict, stage_data: dict) -> None:
+        """Populates the report with baseline data from a scanned previous report."""
+        logging.info("Populating baseline data from Scan-Report stage...")
+
+        # 1. Populate Chapter 1 tables
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.versionshistorie.table.rows', stage_data.get('versionshistorie', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.kontaktinformationenAntragsteller.table.rows', stage_data.get('auditierteInstitution', {}).get('kontaktinformationenAntragsteller', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.ansprechpartnerZertifizierung.table.rows', stage_data.get('auditierteInstitution', {}).get('ansprechpartnerZertifizierung', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditteamleiter.table.rows', stage_data.get('auditteam', {}).get('auditteamleiter', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditor.table.rows', stage_data.get('auditteam', {}).get('auditor', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.fachexperte.table.rows', stage_data.get('auditteam', {}).get('fachexperte', {}).get('table', {}).get('rows', []))
+        
+        # 2. Populate Chapter 4 tables as a fallback/baseline
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteineErstRezertifizierung.table.rows', stage_data.get('auswahlBausteineErstRezertifizierung', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteine1Ueberwachungsaudit.table.rows', stage_data.get('auswahlBausteine1Ueberwachungsaudit', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlStandorte.table.rows', stage_data.get('auswahlStandorte', {}).get('table', {}).get('rows', []))
+
+
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict) -> None:
         """Router function to call the correct population logic for a given stage."""
         logging.info(f"Populating report with data from stage: {stage_name}")
         population_map = {
+            "Scan-Report": self._populate_from_scan_report,
             "Chapter-1": self._populate_chapter_1,
             "Chapter-3": self._populate_chapter_3,
             "Chapter-4": self._populate_chapter_4,
@@ -322,6 +343,8 @@ class ReportGenerator:
         
         populate_func = population_map.get(stage_name)
         if populate_func:
-            populate_func(report, stage_data)
+            # We call the special Scan-Report populator separately now
+            if stage_name != "Scan-Report":
+                populate_func(report, stage_data)
         else:
             logging.warning(f"No population logic defined for stage: {stage_name}")

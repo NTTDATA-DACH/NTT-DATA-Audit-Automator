@@ -69,15 +69,17 @@ class Chapter5Runner:
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], system_structure_map: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        using the specific Zielobjekt Kürzel from the audit plan (Chapter 4)
+        using the specific Zielobjekt selected in the audit plan (Chapter 4)
         to select the exact instance to audit and populate with customer data.
         """
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Generating control checklist for {name} based on the specific audit plan...")
 
-        # Build the one helper map we need: Kürzel -> Name for display purposes.
+        # Build an authoritative map to resolve Zielobjekt names to their Kürzel (IDs).
         zielobjekte_list = system_structure_map.get('zielobjekte', [])
-        kuerzel_to_name_map = {z['kuerzel']: z['name'] for z in zielobjekte_list}
+        name_to_kuerzel_map = {z['name']: z['kuerzel'] for z in zielobjekte_list}
+        # Add the special case for the overall information network.
+        name_to_kuerzel_map["Gesamter Informationsverbund"] = "Informationsverbund"
         
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -101,15 +103,14 @@ class Chapter5Runner:
             if not baustein_id_full: continue
             baustein_id = baustein_id_full.split(" ")[0]
 
-            # Directly get the Kürzel from the plan. The 'Zielobjekt' column now contains the ID.
-            planned_zielobjekt_kuerzel = baustein_plan_item.get("Zielobjekt")
+            # The plan contains the human-readable name, e.g., "Active Directory".
+            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt")
+
+            # Resolve the name to the short ID (Kürzel) needed for the lookup key.
+            planned_zielobjekt_kuerzel = name_to_kuerzel_map.get(zielobjekt_name_from_plan)
 
             if not planned_zielobjekt_kuerzel:
-                logging.warning(f"Skipping planned Baustein '{baustein_id_full}' because its Zielobjekt is empty.")
-                continue
-
-            # Get the human-readable name for display in the report
-            zielobjekt_name_for_display = kuerzel_to_name_map.get(planned_zielobjekt_kuerzel, planned_zielobjekt_kuerzel)
+                logging.warning(f"Could not resolve Zielobjekt name '{zielobjekt_name_from_plan}' to a Kürzel for Baustein '{baustein_id}'. Specific details for its controls will be missing.")
 
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
             
@@ -117,8 +118,8 @@ class Chapter5Runner:
             for control in controls:
                 control_id = control.get("id", "N/A")
                 
-                # Use the Kürzel from the plan for a direct, precise lookup.
-                lookup_key = (control_id, planned_zielobjekt_kuerzel)
+                # Use the resolved Kürzel for a direct, precise lookup.
+                lookup_key = (control_id, planned_zielobjekt_kuerzel) if planned_zielobjekt_kuerzel else None
                 extracted_details = extracted_data_map.get(lookup_key, {})
                 
                 customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
@@ -145,7 +146,7 @@ class Chapter5Runner:
             
             baustein_pruefungen_list.append({
                 "baustein": baustein_id_full,
-                "bezogenAufZielobjekt": zielobjekt_name_for_display, # Use the human-readable name here
+                "bezogenAufZielobjekt": zielobjekt_name_from_plan,
                 "auditiertAm": "",
                 "auditor": "",
                 "befragtWurde": "",
@@ -173,7 +174,7 @@ class Chapter5Runner:
         massnahmen_pruefungen_list = []
         for measure in selected_measures:
             massnahmen_pruefungen_list.append({
-                "massnahme": measure.get("Massnahme", "N/A"),
+                "massnahme": measure.get("Maßnahme", "N/A"),
                 "zielobjekt": measure.get("Zielobjekt", "N/A"),
                 "bewertung": "",
                 "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
