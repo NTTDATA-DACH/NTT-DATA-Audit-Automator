@@ -93,10 +93,16 @@ class GrundschutzCheckExtractionRunner:
         total_pages = len(doc)
         if total_pages == 0: return [], []
             
+        start_page = 0
+        if self.config.is_test_mode:
+            start_page = 1100
+            if total_pages > start_page:
+                logging.warning(f"TEST MODE: Starting Grundschutz-Check extraction from page {start_page}.")
+            else:
+                logging.warning(f"TEST MODE: Start page {start_page} is beyond document length ({total_pages}). No pages will be processed.")
+
         tasks, temp_blob_names = [], []
-        for chunk_index, i in enumerate(range(0, total_pages, chunk_size)):
-            if self.config.is_test_mode and chunk_index >= 2: break
-            
+        for chunk_index, i in enumerate(range(start_page, total_pages, chunk_size)):
             chunk_doc = fitz.open()
             chunk_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
             
