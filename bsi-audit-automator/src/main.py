@@ -23,6 +23,16 @@ async def main_async():
     group = parser.add_mutually_exclusive_group(required=True)
     
     group.add_argument(
+        '--scan-previous-report',
+        action='store_true',
+        help='Run the stage to scan a previous audit report.'
+    )
+    group.add_argument(
+        '--run-gs-check-extraction',
+        action='store_true',
+        help='Run only the Grundschutz-Check data extraction and mapping stage.'
+    )
+    group.add_argument(
         '--run-stage',
         type=str,
         help='Run a single audit stage (e.g., --run-stage Chapter-1).'
@@ -54,8 +64,8 @@ async def main_async():
         generator = ReportGenerator(config, gcs_client)
         await generator.assemble_report()
         return
-
-    # For audit stages, we need the RagClient (Document Finder)
+        
+    # For all other tasks, we need the RagClient (Document Finder)
     logging.info("Initializing Document Finder Client...")
     try:
         rag_client = await RagClient.create(config, gcs_client, ai_client, force_remap=args.force)
@@ -65,8 +75,13 @@ async def main_async():
 
     controller = AuditController(config, gcs_client, ai_client, rag_client)
 
-    if args.run_stage:
+    if args.scan_previous_report:
         # For single stage runs, we always overwrite the stage result.
+        await controller.run_single_stage("Scan-Report", force_overwrite=True)
+    elif args.run_gs_check_extraction:
+        # For single stage runs, we always overwrite the stage result.
+        await controller.run_single_stage("Grundschutz-Check-Extraction", force_overwrite=True)
+    elif args.run_stage:
         # The --force flag will have already re-mapped the documents if it was passed.
         await controller.run_single_stage(args.run_stage, force_overwrite=True)
     elif args.run_all_stages:

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Scanned Previous Report Findings (Chapter 7.2)",
+  "description": "Extracts a single, flat list of all findings (AS, AG, E) from tables in or around Chapter 7.2 of a previous audit report.",
+  "type": "object",
+  "properties": {
+    "all_findings": {
+      "type": "array",
+      "description": "A single, flat list of all findings extracted from the report.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "The determined category of the finding.",
+            "enum": ["AS", "AG", "E"]
+          },
+          "nummer": { "type": "string", "description": "The finding's number or ID." },
+          "beschreibung": { "type": "string", "description": "The full description of the finding." },
+          "quelle": { "type": "string", "description": "The source chapter or reference." },
+          "behebungsfrist": { "type": "string", "description": "The deadline for correction." },
+          "status": { "type": "string", "description": "The current status of the finding." }
+        },
+        "required": ["category", "nummer", "beschreibung"]
+      }
+    }
+  },
+  "required": ["all_findings"]
+}

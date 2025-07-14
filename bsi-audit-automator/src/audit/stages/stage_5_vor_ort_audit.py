@@ -36,7 +36,7 @@ class Chapter5Runner:
             logging.info(f"Successfully loaded ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
             return system_map
         except NotFound:
-            logging.error(f"FATAL: Ground truth map '{self.GROUND_TRUTH_MAP_PATH}' not found. Cannot generate Chapter 5 checklist. Please run Chapter 3 first.")
+            logging.error(f"FATAL: Ground truth map '{self.GROUND_TRUTH_MAP_PATH}' not found. Cannot generate Chapter 5 checklist. Please run the 'Grundschutz-Check-Extraction' stage first.")
             raise
         except Exception as e:
             logging.error(f"Failed to load or parse ground truth map: {e}", exc_info=True)
@@ -60,7 +60,7 @@ class Chapter5Runner:
             logging.info(f"Successfully loaded and mapped {len(lookup_map)} unique requirement-object pairs for Chapter 5.")
             return lookup_map
         except NotFound:
-            logging.warning(f"Refined check data file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations.")
+            logging.warning(f"Refined check data file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations. Please run the 'Grundschutz-Check-Extraction' stage first.")
             return {}
         except Exception as e:
             logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)
@@ -69,15 +69,17 @@ class Chapter5Runner:
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], system_structure_map: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
-        using the specific Zielobjekt Kürzel from the audit plan (Chapter 4)
+        using the specific Zielobjekt selected in the audit plan (Chapter 4)
         to select the exact instance to audit and populate with customer data.
         """
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Generating control checklist for {name} based on the specific audit plan...")
 
-        # Build the one helper map we need: Kürzel -> Name for display purposes.
+        # Build authoritative maps for resolving names and Kürzel from the ground truth.
         zielobjekte_list = system_structure_map.get('zielobjekte', [])
         kuerzel_to_name_map = {z['kuerzel']: z['name'] for z in zielobjekte_list}
+        name_to_kuerzel_map = {z['name']: z['kuerzel'] for z in zielobjekte_list}
+        name_to_kuerzel_map["Gesamter Informationsverbund"] = "Informationsverbund" # Special case
         
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -96,20 +98,16 @@ class Chapter5Runner:
             return {name: {"einzelergebnisse": {"bausteinPruefungen": []}}}
 
         baustein_pruefungen_list = []
-        for baustein_plan_item in selected_bausteine:
+        for i, baustein_plan_item in enumerate(selected_bausteine):
             baustein_id_full = baustein_plan_item.get("Baustein", "")
             if not baustein_id_full: continue
             baustein_id = baustein_id_full.split(" ")[0]
 
-            # Directly get the Kürzel from the plan. The 'Zielobjekt' column now contains the ID.
-            planned_zielobjekt_kuerzel = baustein_plan_item.get("Zielobjekt")
+            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt")
+            planned_zielobjekt_kuerzel = name_to_kuerzel_map.get(zielobjekt_name_from_plan)
 
             if not planned_zielobjekt_kuerzel:
-                logging.warning(f"Skipping planned Baustein '{baustein_id_full}' because its Zielobjekt is empty.")
-                continue
-
-            # Get the human-readable name for display in the report
-            zielobjekt_name_for_display = kuerzel_to_name_map.get(planned_zielobjekt_kuerzel, planned_zielobjekt_kuerzel)
+                logging.warning(f"Could not resolve Zielobjekt name '{zielobjekt_name_from_plan}' to a Kürzel for Baustein '{baustein_id}'. Specific details for its controls will be missing.")
 
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
             
@@ -117,21 +115,14 @@ class Chapter5Runner:
             for control in controls:
                 control_id = control.get("id", "N/A")
                 
-                # Use the Kürzel from the plan for a direct, precise lookup.
-                lookup_key = (control_id, planned_zielobjekt_kuerzel)
+                lookup_key = (control_id, planned_zielobjekt_kuerzel) if planned_zielobjekt_kuerzel else None
                 extracted_details = extracted_data_map.get(lookup_key, {})
                 
                 customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
                 bewertung_status_raw = extracted_details.get("umsetzungsstatus", "N/A")
 
-                # Deterministically map the raw status to the final report status text
-                status_map = {
-                    "Ja": "Umgesetzt",
-                    "Nein": "Nicht umgesetzt",
-                    "teilweise": "Teilweise umgesetzt",
-                    "entbehrlich": "Entbehrlich"
-                }
-                final_bewertung_status = status_map.get(bewertung_status_raw, bewertung_status_raw) # Fallback to raw value if not in map
+                status_map = {"Ja": "Umgesetzt", "Nein": "Nicht umgesetzt", "teilweise": "Teilweise umgesetzt", "entbehrlich": "Entbehrlich"}
+                final_bewertung_status = status_map.get(bewertung_status_raw, bewertung_status_raw)
 
                 anforderungen_list.append({
                     "nummer": control_id,
@@ -143,16 +134,19 @@ class Chapter5Runner:
                     "abweichungen": ""
                 })
             
+            # Create the new subchapter structure
             baustein_pruefungen_list.append({
+                "subchapterNumber": f"5.5.2.{i+1}",
+                "title": f"Prüfung für Baustein: {baustein_id_full}",
                 "baustein": baustein_id_full,
-                "bezogenAufZielobjekt": zielobjekt_name_for_display, # Use the human-readable name here
+                "bezogenAufZielobjekt": zielobjekt_name_from_plan,
                 "auditiertAm": "",
                 "auditor": "",
                 "befragtWurde": "",
                 "anforderungen": anforderungen_list
             })
 
-        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} specific Baustein/Zielobjekt sections for manual audit.")
+        logging.info(f"Generated checklist with {len(baustein_pruefungen_list)} specific Baustein/Zielobjekt subchapters for manual audit.")
         return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
     def _generate_risikoanalyse_checklist(self, chapter_4_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,7 +157,6 @@ class Chapter5Runner:
         name = "risikoanalyseA5"
         logging.info(f"Deterministically generating checklist for {name} (5.6.2)...")
         
-        # Use underscore_case key for headers now
         selected_measures = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("table", {}).get("rows", [])
         
         if not selected_measures:
@@ -173,18 +166,18 @@ class Chapter5Runner:
         massnahmen_pruefungen_list = []
         for measure in selected_measures:
             massnahmen_pruefungen_list.append({
-                "massnahme": measure.get("Massnahme", "N/A"),
+                "massnahme": measure.get("Maßnahme", "N/A"),
                 "zielobjekt": measure.get("Zielobjekt", "N/A"),
                 "bewertung": "",
                 "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
-                "auditfeststellung": "", # To be filled by auditor
-                "abweichungen": "" # To be filled by auditor
+                "auditfeststellung": "",
+                "abweichungen": ""
             })
             
         logging.info(f"Generated checklist with {len(massnahmen_pruefungen_list)} risk analysis measures.")
         return {name: {"einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": massnahmen_pruefungen_list}}}
 
-    async def run(self) -> dict:
+    async def run(self, force_overwrite: bool = False) -> dict:
         """
         Executes the generation logic for Chapter 5.
         """
@@ -199,10 +192,7 @@ class Chapter5Runner:
             logging.error(f"Could not load Chapter 4 results, which are required for Chapter 5. Aborting stage. Error: {e}")
             raise
 
-        # This is also a required dependency for the new logic
         system_structure_map = self._load_system_structure_map()
-
-        # This will return a map or an empty dict if the file doesn't exist. The process can continue.
         extracted_check_data_map = self._load_extracted_check_data()
         
         checklist_result = self._generate_control_checklist(chapter_4_data, system_structure_map, extracted_check_data_map)

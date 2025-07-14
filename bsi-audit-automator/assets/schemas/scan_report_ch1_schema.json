@@ -1,0 +1,123 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Scanned Previous Report Data (Chapter 1)",
+    "description": "Extracts key informational tables from Chapter 1 of a previous audit report.",
+    "type": "object",
+    "properties": {
+        "versionshistorie": {
+            "type": "object",
+            "properties": {
+                "table": {
+                    "type": "object",
+                    "properties": {
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "Datum": { "type": "string" },
+                                    "Version": { "type": "string" },
+                                    "Verfasser": { "type": "string" },
+                                    "Bemerkungen": { "type": "string" }
+                                },
+                                "required": ["Datum", "Version", "Verfasser", "Bemerkungen"]
+                            }
+                        }
+                    },
+                    "required": ["rows"]
+                }
+            },
+            "required": ["table"]
+        },
+        "auditierteInstitution": {
+            "type": "object",
+            "properties": {
+                "kontaktinformationenAntragsteller": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                            "properties": {
+                                "rows": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Institution": { "type": "string" },
+                                            "Straße / Hausnummer": { "type": "string" },
+                                            "PLZ / Ort": { "type": "string" },
+                                            "E-Mail": { "type": "string" }
+                                        },
+                                        "required": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"]
+                                    }
+                                }
+                            },
+                            "required": ["rows"]
+                        }
+                    },
+                    "required": ["table"]
+                },
+                "ansprechpartnerZertifizierung": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                            "properties": {
+                                "rows": {
+                                    "type": "array",
+                                    "items": { "type": "object" }
+                                }
+                            },
+                            "required": ["rows"]
+                        }
+                    },
+                    "required": ["table"]
+                }
+            },
+            "required": ["kontaktinformationenAntragsteller", "ansprechpartnerZertifizierung"]
+        },
+        "auditteam": {
+            "type": "object",
+            "description": "Contains all sub-tables related to the audit team. Properties are optional.",
+            "properties": {
+                "auditteamleiter": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                             "properties": {
+                                "rows": { "type": "array", "items": { "type": "object" } }
+                            },
+                            "required": ["rows"]
+                        }
+                    }
+                },
+                "fachexperte": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                             "properties": {
+                                "rows": { "type": "array", "items": { "type": "object" } }
+                            },
+                            "required": ["rows"]
+                        }
+                    }
+                },
+                "auditor": {
+                    "type": "object",
+                    "properties": {
+                        "table": {
+                            "type": "object",
+                             "properties": {
+                                "rows": { "type": "array", "items": { "type": "object" } }
+                            },
+                            "required": ["rows"]
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "required": ["versionshistorie", "auditierteInstitution", "auditteam"]
+}

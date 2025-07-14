@@ -165,8 +165,8 @@ class RagClient:
 
         uris = [f"gs://{self.config.bucket_name}/{fname}" for fname in sorted(list(selected_filenames))]
         
-        if self.config.is_test_mode and len(uris) > MAX_FILES_TEST_MODE:
-            logging.warning(f"TEST MODE: Limiting context files from {len(uris)} to {MAX_FILES_TEST_MODE}.")
-            return uris[:MAX_FILES_TEST_MODE]
+#        if self.config.is_test_mode and len(uris) > MAX_FILES_TEST_MODE:
+#            logging.warning(f"TEST MODE: Limiting context files from {len(uris)} to {MAX_FILES_TEST_MODE}.")
+#            return uris[:MAX_FILES_TEST_MODE]
             
         return uris

@@ -10,11 +10,13 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.audit.stages.stage_previous_report_scan import PreviousReportScanner
 from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 from src.audit.stages.stage_4_pruefplan import Chapter4Runner
 from src.audit.stages.stage_5_vor_ort_audit import Chapter5Runner
 from src.audit.stages.stage_7_anhang import Chapter7Runner
+from src.audit.stages.stage_gs_check_extraction import GrundschutzCheckExtractionRunner
 
 class AuditController:
     """Orchestrates the entire staged audit process with lazy initialization of runners."""
@@ -28,6 +30,8 @@ class AuditController:
         self.finding_counters = defaultdict(int)
 
         self.stage_runner_classes = {
+            "Scan-Report": PreviousReportScanner,
+            "Grundschutz-Check-Extraction": GrundschutzCheckExtractionRunner,
             "Chapter-1": Chapter1Runner,
             "Chapter-3": Chapter3Runner,
             "Chapter-4": Chapter4Runner,
@@ -36,9 +40,11 @@ class AuditController:
         }
         # This defines the exact order of dependencies for each runner's constructor.
         self.runner_dependencies = {
+            "Scan-Report": (self.config, self.ai_client, self.rag_client),
+            "Grundschutz-Check-Extraction": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
-            "Chapter-4": (self.config, self.ai_client),
+            "Chapter-4": (self.config, self.gcs_client, self.ai_client),
             "Chapter-5": (self.config, self.gcs_client, self.ai_client),
             "Chapter-7": (self.config, self.gcs_client),
         }
@@ -124,6 +130,10 @@ class AuditController:
             # We don't do a recursive search for this stage type to avoid double counting
             return
 
+        # For the extraction stage, there are no findings to process.
+        if stage_name == "Grundschutz-Check-Extraction":
+            return
+
         # Standard recursive search for newly generated findings
         newly_discovered_findings = self._extract_findings_recursive(result_data)
         for finding in newly_discovered_findings:
@@ -163,29 +173,29 @@ class AuditController:
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
         Runs all defined audit stages in a dependency-aware order.
-        Chapter 4 is run first, followed by other parallelizable stages.
         """
-        # Step 1: Run Chapter 4 first, as it's a prerequisite for planning.
-        logging.info("Step 1: Running prerequisite stage Chapter-4...")
+        # Step 0: Run the critical pre-processing step first.
+        logging.info("Step 0: Running pre-processing stage 'Grundschutz-Check-Extraction'...")
+        await self.run_single_stage("Grundschutz-Check-Extraction", force_overwrite=force_overwrite)
+        logging.info("Completed pre-processing.")
+
+        # Step 1: Run initial independent stages in parallel. Chapter-3 now depends on Step 0.
+        initial_parallel_stages = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-7"]
+        logging.info(f"Step 1: Starting parallel execution for initial stages: {initial_parallel_stages}")
+        await asyncio.gather(
+            *(self.run_single_stage(stage_name, force_overwrite=force_overwrite) for stage_name in initial_parallel_stages)
+        )
+        logging.info("Completed initial parallel stages.")
+
+        # Step 2: Run Chapter 4, which depends on Chapter 3's ground-truth map.
+        logging.info("Step 2: Running stage Chapter-4...")
         await self.run_single_stage("Chapter-4", force_overwrite=force_overwrite)
         logging.info("Completed stage Chapter-4.")
 
-        # Step 2: Run independent stages in parallel.
-        parallel_stages_after_4 = ["Chapter-1", "Chapter-3"]
-        logging.info(f"Step 2: Starting parallel execution for stages: {parallel_stages_after_4}")
-        parallel_tasks = [
-            self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-            for stage_name in parallel_stages_after_4
-        ]
-        await asyncio.gather(*parallel_tasks)
-        logging.info("Completed parallel execution of independent stages.")
-
-        # Step 3: Run remaining dependent stages sequentially.
-        final_sequential_stages = ["Chapter-5", "Chapter-7"]
-        logging.info(f"Step 3: Starting sequential execution for dependent stages: {final_sequential_stages}")
-        for stage_name in final_sequential_stages:
-            await self.run_single_stage(stage_name, force_overwrite=force_overwrite)
-        logging.info("Completed sequential execution of dependent stages.")
+        # Step 3: Run Chapter 5, which depends on Chapter 4's plan and Chapter 3's data.
+        logging.info("Step 3: Running stage Chapter-5...")
+        await self.run_single_stage("Chapter-5", force_overwrite=force_overwrite)
+        logging.info("Completed stage Chapter-5.")
         
         self._save_all_findings()
         logging.info("All audit stages completed.")
@@ -200,14 +210,20 @@ class AuditController:
 
         stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
         
-        # For full runs, we check for existing results unless `force` is specified.
-        # For single runs (`--run-stage`), force_overwrite is True by default.
         if not force_overwrite:
             try:
-                existing_data = self.gcs_client.read_json(stage_output_path)
-                logging.info(f"Stage '{stage_name}' already completed. Skipping generation.")
-                self._extract_and_store_findings(stage_name, existing_data)
-                return existing_data
+                # The extraction stage does not produce a reportable JSON, its output is the intermediate file.
+                # So we check for the intermediate file's existence to determine if we can skip.
+                if stage_name == "Grundschutz-Check-Extraction":
+                    if self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.INTERMEDIATE_CHECK_RESULTS_PATH) and \
+                       self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.GROUND_TRUTH_MAP_PATH):
+                        logging.info(f"Stage '{stage_name}' already completed (intermediate files exist). Skipping.")
+                        return {"status": "skipped", "reason": "intermediate files found"}
+                else:
+                    existing_data = self.gcs_client.read_json(stage_output_path)
+                    logging.info(f"Stage '{stage_name}' already completed. Skipping generation.")
+                    self._extract_and_store_findings(stage_name, existing_data)
+                    return existing_data
             except NotFound:
                 logging.info(f"No results for stage '{stage_name}' found. Generating...")
             except Exception as e:
@@ -221,16 +237,17 @@ class AuditController:
         logging.info(f"Initialized runner for stage: {stage_name}")
 
         try:
-            # Pass the force_overwrite flag to the runner's run method.
-            # This is critical for stages like Chapter 3 that have their own
-            # internal caching logic (e.g., for the ground-truth map).
-            result_data = await stage_runner.run()
+            # Pass the force_overwrite flag down to the runner.
+            result_data = await stage_runner.run(force_overwrite=force_overwrite)
 
-            self.gcs_client.upload_from_string(
-                content=json.dumps(result_data, indent=2, ensure_ascii=False),
-                destination_blob_name=stage_output_path
-            )
-            logging.info(f"Successfully saved results for stage '{stage_name}'.")
+            # The extraction stage does not produce a reportable result, so we don't save a stage JSON.
+            if stage_name != "Grundschutz-Check-Extraction":
+                self.gcs_client.upload_from_string(
+                    content=json.dumps(result_data, indent=2, ensure_ascii=False),
+                    destination_blob_name=stage_output_path
+                )
+                logging.info(f"Successfully saved results for stage '{stage_name}'.")
+            
             self._extract_and_store_findings(stage_name, result_data)
             return result_data
         except Exception as e:

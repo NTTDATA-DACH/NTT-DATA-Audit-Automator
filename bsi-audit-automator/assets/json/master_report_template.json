@@ -19,9 +19,19 @@
       "auditierteInstitution": {
         "title": "Auditierte Institution",
         "subchapterNumber": "1.2",
-        "table": {
-          "headers": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"],
-          "rows": []
+        "kontaktinformationenAntragsteller": {
+          "title": "Kontaktinformationen des Antragstellers (auditierte Institution):",
+          "table": {
+              "headers": ["Institution", "Straße / Hausnummer", "PLZ / Ort", "E-Mail"],
+              "rows": []
+          }
+      },
+      "ansprechpartnerZertifizierung": {
+          "title": "Ansprechpartner für die Zertifizierung beim Antragsteller:",
+          "table": {
+              "headers": ["Name", "Funktion", "Telefon", "E-Mail", "Optional: Abweichende Anschrift"],
+              "rows": []
+          }
         }
       },
       "auditteam": {
@@ -558,6 +568,8 @@
           "subchapterNumber": "5.5.2",
           "bausteinPruefungen": [
             {
+              "subchapterNumber": "5.5.2.1",
+              "title": "Prüfung für Baustein: [Baustein-Name]",
               "baustein": "",
               "bezogenAufZielobjekt": "",
               "auditiertAm": "",
