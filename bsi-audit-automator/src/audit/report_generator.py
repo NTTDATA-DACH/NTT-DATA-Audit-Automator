@@ -309,6 +309,28 @@ class ReportGenerator:
             path = "bsiAuditReport.anhang.referenzdokumente.table.rows"
             self._set_value_by_path(report, path, ref_docs_data['table'].get('rows', []))
 
+    def _populate_from_scan_report(self, report: dict, stage_data: dict) -> None:
+        """Populates the report with baseline data from a scanned previous report."""
+        logging.info("Populating baseline data from Scan-Report stage...")
+
+        # 1. Populate Chapter 1 tables
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.versionshistorie.table.rows', stage_data.get('versionshistorie', {}).get('table', {}).get('rows', []))
+        
+        audit_institution_data = stage_data.get('auditierteInstitution', {})
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.kontaktinformationenAntragsteller.table.rows', audit_institution_data.get('kontaktinformationenAntragsteller', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditierteInstitution.ansprechpartnerZertifizierung.table.rows', audit_institution_data.get('ansprechpartnerZertifizierung', {}).get('table', {}).get('rows', []))
+        
+        auditteam_data = stage_data.get('auditteam', {})
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditteamleiter.table.rows', auditteam_data.get('auditteamleiter', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditor.table.rows', auditteam_data.get('auditor', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.fachexperte.table.rows', auditteam_data.get('fachexperte', {}).get('table', {}).get('rows', []))
+        
+        # 2. Populate Chapter 4 tables as a fallback/baseline
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteineErstRezertifizierung.table.rows', stage_data.get('auswahlBausteineErstRezertifizierung', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteine1Ueberwachungsaudit.table.rows', stage_data.get('auswahlBausteine1Ueberwachungsaudit', {}).get('table', {}).get('rows', []))
+        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlStandorte.table.rows', stage_data.get('auswahlStandorte', {}).get('table', {}).get('rows', []))
+
+
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict) -> None:
         """Router function to call the correct population logic for a given stage."""
         logging.info(f"Populating report with data from stage: {stage_name}")
