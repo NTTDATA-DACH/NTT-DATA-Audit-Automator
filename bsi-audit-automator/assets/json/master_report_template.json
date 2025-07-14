@@ -568,6 +568,8 @@
           "subchapterNumber": "5.5.2",
           "bausteinPruefungen": [
             {
+              "subchapterNumber": "5.5.2.1",
+              "title": "Prüfung für Baustein: [Baustein-Name]",
               "baustein": "",
               "bezogenAufZielobjekt": "",
               "auditiertAm": "",
