@@ -1,75 +1,40 @@
-### **Project Improvement Roadmap**
+# Tasks for Improvement After MVP-1
 
-This document tracks completed enhancements and the prioritized backlog of features and technical debt to address.
-
----
-
-### **Completed Milestones (as of this review)**
-
-*   **[✅] Implemented Full RAG Pipeline:** The `RagClient` is functional and integrated into all relevant stages (Chapters 1 & 3) to provide evidence-based context to prompts.
-*   **[✅] Implemented Centralized Finding Collection:** The `AuditController` now systematically collects structured findings from all stages, and the `ReportGenerator` populates them into Chapter 7.2.
-*   **[✅] Implemented Conditional Audit Planning (Stage 4):** The `Chapter4Runner` now correctly loads different prompts and schemas based on the `AUDIT_TYPE`, supporting both "Zertifizierungsaudit" and "Überwachungsaudit".
-*   **[✅] Refactored Chapter 5 for Manual Audit:** The `Chapter5Runner` no longer simulates the audit for 5.5.2. Instead, it deterministically generates a control checklist for the human auditor using the `ControlCatalog`. Automated generation for 5.1 has been removed.
-*   **[✅] Refactored Chapter 1 for Accuracy:** The `Chapter1Runner` now uses a stricter prompt for 1.2 to prevent hallucination and includes finding-generation logic. Processing for 1.4 has been correctly removed.
-*   **[✅] Bugfix - Chapter 3 Aggregation:** Fixed the aggregation logic in the `Chapter3Runner` to correctly parse the new structured `finding` object.
-*   **[✅] Bugfix - Report Editor Table Functionality:** Fixed the JavaScript logic to allow adding/deleting rows in all tables, including the nested findings tables in Chapter 7.
-*   **[✅] Implemented Idempotent & Robust ETL:** The ETL processor in `src/etl/processor.py` now creates `.success` and `.failed` status markers, ensuring resilience and preventing reprocessing of files.
-*   **[✅] Critical Bugfix - ReportGenerator Stability:** Systematically refactored `src/audit/report_generator.py` with defensive data population logic, preventing crashes from `KeyError` or `IndexError` when merging stage results into the master template.
-*   **[✅] Code Quality - Docstrings & Type Hints:** Added comprehensive docstrings and strict type hints to public methods in core modules (`EtlProcessor`, `AuditController`) to improve maintainability and clarity.
-*   **[✅] Bugfix - Intuitive Stage Execution:** Corrected the main control flow to align with user intent. `--run-stage` now *always* overwrites its specific target. `--run-all-stages` now correctly skips completed stages by default for resumability, and can be overridden with `--force`.
-*   **[✅] Bugfix - SDK Schema Parsing (COMPLETE):** Resolved a recurring `TypeError` by refactoring all affected schemas (Chapters 1 and 3). The fix ensures the `"items"` keyword for arrays always uses a single schema object (e.g., `{"items": {"type": "..."}}`) instead of the unsupported "tuple validation" format (`{"items": [...]}`), ensuring full compatibility with the Vertex AI SDK's schema parser.
-*   **[✅] Corrected Chapter 7.2 Findings Tables (TODO 15):** Restructured the findings tables in `master_report_template.json` to match the BSI standard (`Nr.`, `Beschreibung`, `Quelle`, `Behebungsfrist`, `Status`). The `ReportGenerator` now correctly populates these tables with default deadlines and status, ensuring the final report is compliant.
-*   **[✅] Added Missing Report Chapters & Generation Logic (TODO 13 & 14):** Significantly expanded the application's scope to align with the official BSI template.
-    *   Updated `master_report_template.json` with structures for all missing chapters and subchapters (e.g., 1.4, 3.3.2, 3.3.3, 3.4, 3.5, 3.6, 5.6.2).
-    *   Created a comprehensive set of new prompts and schemas to drive AI generation for these new sections.
-    *   Enhanced `Chapter3Runner`, `Chapter5Runner`, and `ReportGenerator` to process and populate this new content.
-*   **[✅] Improved RAG Context and Traceability (TODO 12):** Refactored the `RagClient` to include the source document filename in the context provided to the AI. This replaces generic chunk IDs with clear document references (e.g., `CONTEXT FROM DOCUMENT: ...`), improving the traceability and clarity of AI-generated findings.
+This document lists prioritized tasks for improving the BSI Audit Automator codebase after its initial functional state.
 
 ---
 
-### **New Prioritized TODO List**
+### **High Priority (Bugs & Inconsistencies)**
 
-*   **[ ] TODO 2: Optimize RagClient Memory Usage.**
+1.  **[BUG] Re-enable Test Mode File Limiting in RagClient**
     *   **File:** `src/clients/rag_client.py`
-    *   **Action:** Currently, the `RagClient` loads the full text of every chunk from every document into memory at startup. This could exhaust the Cloud Run instance's memory on very large audits. Refactor `_load_chunk_lookup_map` to be more memory-efficient. For example, it could map `chunk_id -> source_document_name` only. When a lookup is needed, it would then open only the required source document's embedding file to retrieve the text, drastically reducing the initial memory footprint.
+    *   **Issue:** The logic to limit the number of GCS files sent to the AI model when `TEST="true"` is currently commented out. This violates the requirement in the project brief (Section 4.6) to limit processing in test mode.
+    *   **Action:** Uncomment the block that limits the `uris` list based on `self.config.is_test_mode`. This is crucial for rapid, cost-effective testing.
 
-*   **[ ] TODO 3: Implement "Two-Plus-One" Verification.**
+---
+
+### **Medium Priority (Maintainability & Clarity)**
+
+2.  **[REFACTOR] Simplify CLI Arguments in `main.py`**
+    *   **File:** `src/main.py`
+    *   **Issue:** The CLI has redundant arguments: `--scan-previous-report` and `--run-gs-check-extraction`. Their functionality is already covered by the more generic `--run-stage` argument (e.g., `--run-stage Scan-Report`).
+    *   **Action:** Remove the two redundant `group.add_argument` calls and update the `if/elif` block to only use `args.run_stage`. This will simplify the CLI, reduce code, and make the entry point easier to maintain.
+
+3.  **[CLARITY] Clean Up Confusing Comment in `ai_client.py`**
     *   **File:** `src/clients/ai_client.py`
-    *   **Action:** Refactor the `generate_json_response` function. Instead of making a single AI call, it should make two parallel calls for the initial prompt, then construct a new "synthesis prompt" to have the AI review and merge the two initial results into a final, higher-quality response. This enhances accuracy and reliability.
+    *   **Issue:** The comment for `max_output_tokens` is self-contradictory and confusing (`Increased from 65k to 8k as 65k is invalid...`). The code now correctly uses the value from the brief (`65536`), but the comment creates confusion about the model's actual capabilities.
+    *   **Action:** Replace the old, confusing comment with a clear and concise one explaining the parameter's purpose, aligning with the current code.
 
-*   **[ ] TODO (Feature): Enhance Chapter 5 Checklist Generation.**
-    *   **Files:** `src/audit/stages/stage_5_vor_ort_audit.py`, `src/audit/stages/control_catalog.py`
-    *   **Action:** The current on-site checklist in 5.5.2 is basic. Enhance it by leveraging the detailed maturity level descriptions (M1-M5) in the BSI OSCAL catalog. For each required control, use the AI to generate specific, maturity-level-targeted interview questions and evidence requests for the human auditor.
-    *   **Example:** Instead of just "Check ISMS.1.A1", the output would be a list like: `["[M3] Show me the signed security policy.", "[M4] Provide minutes from the last risk committee meeting.", "[M5] How are security KPIs tracked and reported in management dashboards?"]`. This would make the on-site audit significantly more effective.
+---
 
-*   **[ ] TODO 4: Implement Location Audit Planning (Standortauswahl).**
-    *   **File:** `src/audit/stages/stage_4_pruefplan.py`
-    *   **Action:** Add a new subchapter processor within the `Chapter4Runner` to handle section 4.1.4 ("Auswahl Standorte"). This function will need to use RAG to list available locations and then use the formulas in the BSI `Auditierungsschema` (e.g., `sqrt(n)`) to instruct the AI to select a risk-based sample of sites to audit.
+### **Low Priority (Robustness & Future-Proofing)**
 
-*   **[ ] TODO 5: Automate Check of "Entbehrliche Bausteine" & Justifications.**
-    *   **Action:** Develop a logic that generates a list of all controls marked as "Entbehrlich" (dispensable) from the "A.4 Grundschutz-Check" document. For each item, use a focused RAG prompt to ask the AI if the provided justification ("Begründung") is sufficient and plausible according to BSI standards. This also covers checking all justifications in A.4.
+4.  **[REFACTOR] Centralize Intermediate File Path Constants**
+    *   **Files:** `src/audit/stages/stage_gs_check_extraction.py`, `src/audit/stages/stage_3_dokumentenpruefung.py`, `src/audit/stages/stage_5_vor_ort_audit.py`
+    *   **Issue:** The GCS paths for intermediate files (`GROUND_TRUTH_MAP_PATH`, `INTERMEDIATE_CHECK_RESULTS_PATH`) are hardcoded as string literals in multiple files. If a path changes, it must be updated in several places, risking inconsistency.
+    *   **Action:** Define these paths as constants in a central location, such as `src/config.py` or a new `src/audit/constants.py` file, and import them where needed. This improves maintainability and reduces "magic strings".
 
-*   **[ ] TODO 6: Automate Check of Strukturanalyse vs. Netzplan.**
-    *   **Action:** For checks if all Objects mentioned in the Strukturanalyse and the Netzplan are present in the other document, develop a logic that generates a list of all objects in each file and then compares the lists to find discrepancies.
-
-*   **[ ] TODO 7: Automate Check of Modellierung (Baustein Application).**
-    *   **Action:** Check if the correct and all required Bausteine are listed for each object in the A.4 Grundschutz-Check, cross-referencing against the BSI modeling requirements.
-
-*   **[ ] TODO 8: Automate Check of Risk Analysis & Additional Controls.**
-    *   **Action:** Check that objects identified with a 'high' or 'very high' protection requirement in the Strukturanalyse have corresponding additional security controls defined. Verify that these additional controls are correctly included in the A.4 Grundschutz-Check.
-
-*   **[ ] TODO 9: Automate Check of Risk Treatment for Unimplemented Controls (A.6).**
-    *   **Action:** For all controls listed in A.6 (Realisierungsplan) that are not yet fully implemented, verify that they are listed and that the risk treatment plan is well-explained and plausible.
-
-*   [ ] TODO 10: Implement a Comprehensive Test Suite.
-    *   **Directory:** `tests/`
-    *   **Action:** The project currently lacks automated tests. Create a testing suite using a framework like `pytest`. Add unit tests for individual functions (e.g., in `etl/processor.py`). Add integration tests for client interactions, using mock objects (`unittest.mock`) to simulate GCS and AI API calls. This is also a way to "deterministically check results" by providing fixed inputs and asserting expected outputs from business logic.
-
-*   **[ ] TODO 11: Improve Prompts and Schemas.**
-    *   **Directory:** `assets/`
-    *   **Action:** Continuously refine the prompts in `assets/prompts/` and schemas in `assets/schemas/` to improve the quality, accuracy, and consistency of the AI-generated results.
-
-*   **[ ] TODO 12: use filter for documents.**
-    *   **Directory:** `src/clients/rag_client.py`
-    *   **Action:** The code is there, but buggy, ehen filtered, no results whatsoever
-
+5.  **[REFACTOR] Encapsulate Finding Collection Logic**
+    *   **File:** `src/audit/controller.py`
+    *   **Issue:** The logic for managing findings (collecting, processing previous findings, assigning new IDs) is spread across several methods within the `AuditController` (`_process_previous_findings`, `_process_new_finding`, `_extract_and_store_findings`, `_save_all_findings`).
+    *   **Action:** Consider creating a dedicated `FindingCollector` class. This class would encapsulate all state (the list of findings, the counters) and logic for adding, processing, and saving findings. The `AuditController` would then delegate all finding-related operations to an instance of this new class, improving separation of concerns.

@@ -52,7 +52,7 @@ export OUTPUT_PREFIX="output/"
 
 # Manually set the audit type and test mode for your local run
 export AUDIT_TYPE="2. Überwachungsaudit"
-export TEST="false"
+export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
 # --- NEW: Helper function for correct execution ---
