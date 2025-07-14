@@ -55,7 +55,7 @@ class PreviousReportScanner:
             logging.error(f"Extraction task '{task_name}' failed: {e}", exc_info=True)
             return {task_name: {"error": str(e)}} # Return error structure
 
-    async def run(self) -> dict:
+    async def run(self, force_overwrite: bool = False) -> dict:
         """
         Executes the logic for scanning the previous audit report.
         """

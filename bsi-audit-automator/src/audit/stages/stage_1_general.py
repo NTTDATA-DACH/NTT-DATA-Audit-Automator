@@ -52,7 +52,7 @@ class Chapter1Runner:
             request_context_log="Chapter-1: informationsverbund"
         )
 
-    async def run(self) -> dict:
+    async def run(self, force_overwrite: bool = False) -> dict:
         """Executes the generation logic for Chapter 1."""
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         

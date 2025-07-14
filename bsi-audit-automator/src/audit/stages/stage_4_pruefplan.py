@@ -113,7 +113,7 @@ class Chapter4Runner:
             logging.error(f"Failed to generate plan for subchapter {definition.get('key', name)}: {e}", exc_info=True)
             return {name: {"table": {"rows": []}}} # Return empty structure on failure
 
-    async def run(self) -> dict:
+    async def run(self, force_overwrite: bool = False) -> dict:
         """
         Executes the planning logic for all of Chapter 4 in parallel.
         """

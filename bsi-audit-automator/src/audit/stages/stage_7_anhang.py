@@ -39,7 +39,7 @@ class Chapter7Runner:
             logging.error(f"Failed to generate Referenzdokumente table: {e}", exc_info=True)
             return {"referenzdokumente": {"table": {"rows": []}}}
 
-    async def run(self) -> dict:
+    async def run(self, force_overwrite: bool = False) -> dict:
         """Executes the generation logic for Chapter 7."""
         logging.info(f"Executing stage: {self.STAGE_NAME}")
         # Only one task remains for this chapter.
