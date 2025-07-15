@@ -41,17 +41,14 @@ class GrundschutzCheckExtractionRunner:
         with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
 
-    async def _build_system_structure_map(self, force_remap: bool) -> Dict[str, Any]:
-        """Orchestrates the creation of the ground truth map."""
-        if not force_remap:
-            try:
-                map_data = self.gcs_client.read_json(self.GROUND_TRUTH_MAP_PATH)
-                logging.info(f"Using cached ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
-                return map_data
-            except NotFound:
-                logging.info("Ground truth map not found. Generating...")
-        else:
-            logging.info("Force remapping enabled. Generating new ground truth map.")
+    async def _build_system_structure_map(self) -> Dict[str, Any]:
+        """Orchestrates the creation of the ground truth map based on file existence."""
+        try:
+            map_data = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
+            logging.info(f"Using cached ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
+            return map_data
+        except NotFound:
+            logging.info("Ground truth map not found. Generating new ground truth map.")
 
         zielobjekte_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
         zielobjekte_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]["extract_zielobjekte"]
@@ -84,7 +81,7 @@ class GrundschutzCheckExtractionRunner:
             zielobjekte_list.append({"kuerzel": "Informationsverbund", "name": "Gesamter Informationsverbund"})
             
         final_map = {"zielobjekte": zielobjekte_list, "baustein_to_zielobjekt_mapping": baustein_mappings}
-        self.gcs_client.upload_from_string(json.dumps(final_map, indent=2, ensure_ascii=False), self.GROUND_TRUTH_MAP_PATH)
+        await self.gcs_client.upload_from_string_async(json.dumps(final_map, indent=2, ensure_ascii=False), self.GROUND_TRUTH_MAP_PATH)
         logging.info(f"Successfully created and saved ground truth map to {self.GROUND_TRUTH_MAP_PATH}")
         return final_map
 
@@ -106,7 +103,7 @@ class GrundschutzCheckExtractionRunner:
             chunk_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
             
             chunk_blob_name = f"output/results/intermediate/temp_chunk_{chunk_size}_{i}.pdf"
-            self.gcs_client.bucket.blob(chunk_blob_name).upload_from_string(chunk_doc.write(), content_type="application/pdf")
+            await self.gcs_client.upload_from_string_async(chunk_doc.write(), chunk_blob_name, content_type="application/pdf")
             temp_blob_names.append(chunk_blob_name)
             
             chunk_details.append({"pass_size": chunk_size, "page_start": i})
@@ -120,11 +117,13 @@ class GrundschutzCheckExtractionRunner:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Save raw results to GCS for caching and cleanup temp PDFs
+        save_tasks = []
         for i, res in enumerate(results):
             if isinstance(res, dict):
                 details = chunk_details[i]
                 raw_blob_name = f"{self.RAW_EXTRACTION_PATH_PREFIX}pass_{details['pass_size']}_pages_{details['page_start']}.json"
-                self.gcs_client.upload_from_string(json.dumps(res, indent=2, ensure_ascii=False), raw_blob_name)
+                save_tasks.append(self.gcs_client.upload_from_string_async(json.dumps(res, indent=2, ensure_ascii=False), raw_blob_name))
+        await asyncio.gather(*save_tasks)
         
         for blob_name in temp_blob_names:
             try: self.gcs_client.bucket.blob(blob_name).delete()
@@ -205,22 +204,19 @@ class GrundschutzCheckExtractionRunner:
         logging.info(f"Merge & Refine complete. Final list has {len(final_list)} unique requirements.")
         return final_list
 
-    async def _get_all_pass_results(self, force_overwrite: bool, ground_truth_map: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _get_all_pass_results(self, ground_truth_map: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Orchestrates getting the raw extraction results, either from cache or by
-        running the AI extraction passes.
+        running the AI extraction passes, based on file existence.
         """
-        # 1. Check for cached raw files first
-        if not force_overwrite:
-            raw_blobs = self.gcs_client.list_files(prefix=self.RAW_EXTRACTION_PATH_PREFIX)
-            if raw_blobs:
-                logging.info(f"Found {len(raw_blobs)} cached raw extraction files. Loading from cache.")
-                load_tasks = [self.gcs_client.read_json_async(blob.name) for blob in raw_blobs]
-                results = await asyncio.gather(*load_tasks, return_exceptions=True)
-                return [res for res in results if isinstance(res, dict)]
+        raw_blobs = self.gcs_client.list_files(prefix=self.RAW_EXTRACTION_PATH_PREFIX)
+        if raw_blobs:
+            logging.info(f"Found {len(raw_blobs)} cached raw extraction files. Loading from cache.")
+            load_tasks = [self.gcs_client.read_json_async(blob.name) for blob in raw_blobs]
+            results = await asyncio.gather(*load_tasks, return_exceptions=True)
+            return [res for res in results if isinstance(res, dict)]
         
-        # 2. If no cache or forced, run the full extraction
-        logging.info("Running AI extraction for Grundschutz-Check. No cached files found or overwrite is forced.")
+        logging.info("Running AI extraction for Grundschutz-Check. No cached files found.")
         uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check"])
         if not uris:
             raise FileNotFoundError("Could not find document with category 'Grundschutz-Check'. This is required.")
@@ -239,29 +235,21 @@ class GrundschutzCheckExtractionRunner:
         ]
         list_of_lists = await asyncio.gather(*pass_tasks)
         
-        # Flatten the list of lists into a single list of results
         return [item for sublist in list_of_lists for item in sublist]
 
     async def run(self, force_overwrite: bool = False) -> Dict[str, Any]:
         """
-        Main execution method for the stage. It orchestrates the entire workflow:
-        1. Builds the ground-truth map.
-        2. Checks for the final merged results file and skips if present.
-        3. Gets raw extraction results (from cache or new AI run).
-        4. Merges and refines the raw data.
-        5. Saves the final merged data.
+        Main execution method for the stage. It orchestrates the entire workflow
+        based on file existence, ignoring the --force flag passed by the controller.
+        The controller is responsible for deciding IF this stage runs, this method
+        decides HOW it runs (i.e., using cache if available).
         """
-        logging.info(f"Executing stage: {self.STAGE_NAME}")
+        logging.info(f"Executing stage: {self.STAGE_NAME}. Caching is managed by manual file deletion, ignoring the --force flag.")
         
-        ground_truth_map = await self._build_system_structure_map(force_remap=force_overwrite)
+        ground_truth_map = await self._build_system_structure_map()
         
-        # Skip if the final, merged file already exists and we are not forcing.
-        if not force_overwrite and self.gcs_client.blob_exists(self.INTERMEDIATE_CHECK_RESULTS_PATH):
-            logging.info(f"Final merged file already exists at {self.INTERMEDIATE_CHECK_RESULTS_PATH}. Skipping regeneration.")
-            return {"status": "skipped", "message": f"Existing file found: {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
-
         # Get raw results from all passes (either from cache or by running the AI)
-        all_pass_results = await self._get_all_pass_results(force_overwrite, ground_truth_map)
+        all_pass_results = await self._get_all_pass_results(ground_truth_map)
         
         # Process the raw results into clean lists
         all_anforderungen = [item for res in all_pass_results for item in res.get("anforderungen", [])]
@@ -270,7 +258,7 @@ class GrundschutzCheckExtractionRunner:
         # Merge, refine, and save the final data
         final_anforderungen = self._merge_and_refine_results(all_anforderungen, all_headings, ground_truth_map)
         
-        self.gcs_client.upload_from_string(
+        await self.gcs_client.upload_from_string_async(
             json.dumps({"anforderungen": final_anforderungen}, indent=2, ensure_ascii=False),
             self.INTERMEDIATE_CHECK_RESULTS_PATH
         )
