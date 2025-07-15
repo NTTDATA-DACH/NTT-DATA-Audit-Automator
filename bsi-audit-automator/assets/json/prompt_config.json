@@ -188,7 +188,7 @@
         "schema_path": "assets/schemas/scan_report_ch4_schema.json"
       },
       "extract_chapter_7": {
-        "prompt": "From the attached previous audit report, find chapter 7.2 'Abweichungen und Empfehlungen'. Scan this chapter and its sub-chapters for any tables containing findings. These tables might be titled 'Schwerwiegende Abweichungen', 'Geringfügige Abweichungen', or 'Empfehlungen'. Extract every single finding you can identify into a single, flat list. For each finding, determine its category ('AS' for Schwerwiegend, 'AG' for Geringfügig, or 'E' for Empfehlung) and extract all its corresponding table columns like 'Nummer', 'Beschreibung', 'Quelle', 'Behebungsfrist', and 'Status'.",
+        "prompt": "From the attached audit report, find chapter 7.2 'Abweichungen und Empfehlungen'. Scan this chapter and its sub-chapters for any tables containing findings. These tables might be titled 'Abweichungen', 'Schwerwiegende Abweichungen', 'Geringfügige Abweichungen', or 'Empfehlungen'. Extract every single finding you can identify into a single, flat list. For each finding, determine its category ('AS' for Schwerwiegend, 'AG' for Geringfügig, or 'E' for Empfehlung) and extract all its corresponding table columns like 'Nummer', 'Beschreibung', 'Quelle', 'Behebungsfrist', and 'Status'.",
         "schema_path": "assets/schemas/scan_report_ch7_schema.json"
       }
     }
