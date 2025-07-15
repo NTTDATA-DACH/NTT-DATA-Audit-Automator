@@ -99,7 +99,7 @@ class Chapter3Runner:
             for item in entbehrlich_items: # Enrich with control level
                 item['level'] = self.control_catalog.get_control_level(item.get('id'))
             
-            question = targeted_prompt_config["questions"]["entbehrlich"]
+            question = self.prompt_config["stages"]["Chapter-3"]["questions"]["entbehrlich"]
             prompt = targeted_prompt_template.format(
                 question=question,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
