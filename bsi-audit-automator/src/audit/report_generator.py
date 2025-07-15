@@ -268,7 +268,7 @@ class ReportGenerator:
                     row_data["Behebungsfrist"] = finding.get('behebungsfrist', 'N/A')
                 else:
                     row_data["Status"] = "Offen"
-                    row_data["Behebungsfrist"] = "30 Tage nach Audit"
+                    row_data["Behebungsfrist"] = "Bis zum Abschluss des Audit"
                 as_table_rows.append(row_data)
             elif category == 'E':
                 row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')                
