@@ -217,6 +217,13 @@ class GrundschutzCheckExtractionRunner:
         """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
 
+        try:
+            self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
+            logging.info(f"Intermediate check results file already exists at {self.INTERMEDIATE_CHECK_RESULTS_PATH}. Skipping regeneration.")
+            return {"status": "success", "message": f"Skipped regeneration. Existing file found at: {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
+        except NotFound:
+            logging.info("Intermediate check results file not found. Proceeding with extraction.")
+
         ground_truth_map = await self._build_system_structure_map(force_remap=force_overwrite)
         
         uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check"])
