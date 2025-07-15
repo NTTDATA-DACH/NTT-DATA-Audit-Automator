@@ -17,7 +17,7 @@
     "properties": {
     "Schicht": { "type": "string" },
     "Baustein": { "type": "string" },
-    "Zielobjekt": { "type": "string" },
+    "Zielobjekt-Name": { "type": "string" },
     "Begründung zur Auswahl": { "type": "string" }
     },
     "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
@@ -41,7 +41,7 @@
     "properties": {
     "Schicht": { "type": "string" },
     "Baustein": { "type": "string" },
-    "Zielobjekt": { "type": "string" },
+    "Zielobjekt-Name": { "type": "string" },
     "Begründung zur Auswahl": { "type": "string" }
     },
     "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
