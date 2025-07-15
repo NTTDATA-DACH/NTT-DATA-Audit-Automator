@@ -74,12 +74,6 @@ class Chapter5Runner:
         """
         name = "verifikationDesITGrundschutzChecks"
         logging.info(f"Generating control checklist for {name} based on the specific audit plan...")
-
-        # Build authoritative maps for resolving names and Kürzel from the ground truth.
-        zielobjekte_list = system_structure_map.get('zielobjekte', [])
-        kuerzel_to_name_map = {z['kuerzel']: z['name'] for z in zielobjekte_list}
-        name_to_kuerzel_map = {z['name']: z['kuerzel'] for z in zielobjekte_list}
-        name_to_kuerzel_map["Gesamter Informationsverbund"] = "Informationsverbund" # Special case
         
         # Combine bausteine from all possible sections of chapter 4
         selected_bausteine = []
@@ -103,18 +97,20 @@ class Chapter5Runner:
             if not baustein_id_full: continue
             baustein_id = baustein_id_full.split(" ")[0]
 
-            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt")
-            planned_zielobjekt_kuerzel = name_to_kuerzel_map.get(zielobjekt_name_from_plan)
+            # --- ROBUSTNESS FIX (Task H) ---
+            # Directly get the name and Kürzel from the plan. No more fragile name-based lookups.
+            zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt-Name")
+            planned_zielobjekt_kuerzel = baustein_plan_item.get("Zielobjekt-Kürzel")
 
             if not planned_zielobjekt_kuerzel:
-                logging.warning(f"Could not resolve Zielobjekt name '{zielobjekt_name_from_plan}' to a Kürzel for Baustein '{baustein_id}'. Specific details for its controls will be missing.")
+                logging.warning(f"Could not find 'Zielobjekt-Kürzel' in audit plan for Baustein '{baustein_id}'. Specific details for its controls will be missing.")
 
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
             
             anforderungen_list = []
             for control in controls:
                 control_id = control.get("id", "N/A")
-                
+                # The lookup key is now robustly created using the Kürzel from the plan.
                 lookup_key = (control_id, planned_zielobjekt_kuerzel) if planned_zielobjekt_kuerzel else None
                 extracted_details = extracted_data_map.get(lookup_key, {})
                 
@@ -169,6 +165,7 @@ class Chapter5Runner:
                 "massnahme": measure.get("Maßnahme", "N/A"),
                 "zielobjekt": measure.get("Zielobjekt", "N/A"),
                 "bewertung": "",
+                "dokuAntragsteller": "",
                 "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
                 "auditfeststellung": "",
                 "abweichungen": ""

@@ -113,48 +113,6 @@ class ReportGenerator:
         audittyp_content = stage_data.get('audittyp', {}).get('content', self.config.audit_type)
         self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', audittyp_content)
 
-    def _populate_chapter_7_findings(self, report: dict) -> None:
-        """Populates the findings tables in Chapter 7.2 from the central findings file."""
-        logging.info("Populating Chapter 7.2 with collected findings...")
-        findings_path = f"{self.config.output_prefix}results/all_findings.json"
-        try:
-            all_findings = self.gcs_client.read_json(findings_path)
-        except NotFound:
-            logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
-            return
-
-        ag_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows')
-        as_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows')
-        e_table_rows = self._ensure_list_path_exists(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows')
-        
-        if ag_table_rows is None or as_table_rows is None or e_table_rows is None: return
-
-        ag_table_rows.clear(); as_table_rows.clear(); e_table_rows.clear()
-        
-        for finding in all_findings:
-            category = finding.get('category')
-            row_data = {
-                "Nummer": finding.get('id', 'N/A'),
-                "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
-            }
-            if category == 'AG':
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "30 Tage nach Audit"
-                row_data["Status"] = "Offen"
-                ag_table_rows.append(row_data)
-            elif category == 'AS':
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "30 Tage nach Audit"
-                row_data["Status"] = "Offen"
-                as_table_rows.append(row_data)
-            elif category == 'E':
-                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "N/A"
-                row_data["Status"] = "Zur Umsetzung empfohlen"
-                e_table_rows.append(row_data)
-        
-        logging.info(f"Populated Chapter 7.2 with {len(all_findings)} total findings.")
-
     async def assemble_report(self) -> None:
         """
         Main method to assemble the final report.
@@ -272,6 +230,66 @@ class ReportGenerator:
             if "table" in result and isinstance(result.get("table"), dict):
                 self._set_value_by_path(report, f"{target_path}.table.rows", result['table'].get('rows', []))
 
+    def _populate_chapter_7_findings(self, report: dict) -> None:
+        """
+        Populates the findings tables in Chapter 7.2 from the central findings file,
+        ensuring the findings are sorted numerically by their ID.
+        """
+        logging.info("Populating Chapter 7.2 with collected findings...")
+        findings_path = f"{self.config.output_prefix}results/all_findings.json"
+        try:
+            all_findings = self.gcs_client.read_json(findings_path)
+        except NotFound:
+            logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
+            return
+
+        # Use clean local lists for collection
+        ag_table_rows, as_table_rows, e_table_rows = [], [], []
+
+        for finding in all_findings:
+            category = finding.get('category')
+            row_data = {
+                "Nummer": finding.get('id', 'N/A'),
+                "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
+            }
+            if category == 'AG':
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "30 Tage nach Audit"
+                row_data["Status"] = "Offen"
+                ag_table_rows.append(row_data)
+            elif category == 'AS':
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "30 Tage nach Audit"
+                row_data["Status"] = "Offen"
+                as_table_rows.append(row_data)
+            elif category == 'E':
+                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')
+                row_data["Behebungsfrist"] = "N/A"
+                row_data["Status"] = "Zur Umsetzung empfohlen"
+                e_table_rows.append(row_data)
+
+        # --- FIX (Task J): Sort findings numerically by ID ---
+        def sort_key(finding_dict: Dict[str, Any]) -> int:
+            """Extracts the integer part of a finding ID for sorting."""
+            try:
+                # 'AG-12' -> '12' -> 12
+                return int(finding_dict.get("Nummer", "0").split('-')[-1])
+            except (ValueError, IndexError):
+                return 0  # Fallback for malformed IDs
+
+        ag_table_rows.sort(key=sort_key)
+        as_table_rows.sort(key=sort_key)
+        e_table_rows.sort(key=sort_key)
+        logging.info("Sorted all findings tables numerically by ID.")
+        # --- End of FIX ---
+
+        # Now, set the sorted lists into the report dictionary
+        self._set_value_by_path(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows', ag_table_rows)
+        self._set_value_by_path(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows', as_table_rows)
+        self._set_value_by_path(report, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows', e_table_rows)
+
+        logging.info(f"Populated Chapter 7.2 with {len(all_findings)} total findings.")
+
     def _populate_chapter_4(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 4 (Prüfplan) content into the report."""
         base_path = "bsiAuditReport.erstellungEinesPruefplans.auditplanung"
@@ -283,6 +301,15 @@ class ReportGenerator:
             "auswahlStandorte": f"{base_path}.auswahlStandorte.table.rows",
             "auswahlMassnahmenAusRisikoanalyse": f"{base_path}.auswahlMassnahmenAusRisikoanalyse.table.rows"
         }
+
+        # --- FIX (Task F): Prevent data leakage from previous reports ---
+        # Before populating, clear all possible target tables to ensure no stale data remains.
+        self._set_value_by_path(report, key_to_path_map["auswahlBausteineErstRezertifizierung"], [])
+        self._set_value_by_path(report, key_to_path_map["auswahlBausteine1Ueberwachungsaudit"], [])
+        self._set_value_by_path(report, key_to_path_map["auswahlBausteine2Ueberwachungsaudit"], [])
+        logging.debug("Cleared all Baustein selection tables in report template before population.")
+        # --- End of FIX ---
+
         for key, data in stage_data.items():
             target_path = key_to_path_map.get(key)
             if not target_path: continue
