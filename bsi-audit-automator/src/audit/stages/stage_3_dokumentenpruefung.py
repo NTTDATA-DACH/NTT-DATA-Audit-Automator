@@ -89,8 +89,10 @@ class Chapter3Runner:
         if outdated:
             findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated)} Anforderungen liegt mehr als 12 Monate zurück."})
             
-        targeted_prompt_config = self.prompt_config["stages"]["Chapter-3"]["targeted_question"]
-        targeted_prompt_template = targeted_prompt_config["prompt"]
+        # Correctly load the configuration for targeted questions
+        ch3_config = self.prompt_config["stages"]["Chapter-3"]
+        targeted_prompt_template = ch3_config["targeted_question"]["prompt"]
+        questions_config = ch3_config["questions"]
 
         # Q2: "entbehrlich" plausibel? (Targeted AI - Task D)
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
@@ -99,12 +101,15 @@ class Chapter3Runner:
             for item in entbehrlich_items: # Enrich with control level
                 item['level'] = self.control_catalog.get_control_level(item.get('id'))
             
-            question = self.prompt_config["stages"]["Chapter-3"]["questions"]["entbehrlich"]
+            question = questions_config["entbehrlich"]
             prompt = targeted_prompt_template.format(
                 question=question,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
-            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2")
+            res = await self.ai_client.generate_json_response(
+                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
+            )
             answers[1], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
         else:
             answers[1] = True
@@ -114,7 +119,7 @@ class Chapter3Runner:
         muss_anforderungen = [a for a in anforderungen if a.get("id") in level_1_ids]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
-                question=targeted_prompt_config["questions"]["muss_anforderungen"],
+                question=questions_config["muss_anforderungen"],
                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
@@ -127,10 +132,13 @@ class Chapter3Runner:
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"])
         if unmet_items and realisierungsplan_uris:
             prompt = targeted_prompt_template.format(
-                question=targeted_prompt_config["questions"]["nicht_umgesetzt"],
+                question=questions_config["nicht_umgesetzt"],
                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4")
+            res = await self.ai_client.generate_json_response(
+                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
+            )
             answers[3], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
         else:
             answers[3] = not unmet_items
