@@ -99,7 +99,7 @@ class Chapter3Runner:
             for item in entbehrlich_items: # Enrich with control level
                 item['level'] = self.control_catalog.get_control_level(item.get('id'))
             
-            question_text = "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung (insb. Level > 1) ist nur dann entbehrlich, wenn sie nicht durch die beigefügte Risikoanalyse gefordert wird."
+            question_text = "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung mit Level 5 ist immer entbehrlich, außer  wenn sie durch in der beigefügten Risikoanalyse explizit gefordert wird."
             prompt = targeted_prompt_template.format(
                 question=question_text,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False)
