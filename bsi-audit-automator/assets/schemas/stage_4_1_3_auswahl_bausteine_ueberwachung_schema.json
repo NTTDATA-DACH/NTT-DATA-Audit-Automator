@@ -1,23 +1,28 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Schema for Subchapter 4.1.3 Auswahl Bausteine 2. Überwachungsaudit",
-    "type": "object",
-    "properties": {
-      "rows": {
-        "type": "array",
-        "description": "A list of Bausteine selected for the second surveillance audit.",
-        "minItems": 3,
-        "items": {
-          "type": "object",
-          "properties": {
-            "Schicht": { "type": "string", "description": "e.g., 'ISMS', 'SYS', 'NET'" },
-            "Baustein": { "type": "string", "description": "e.g., 'ISMS.1 Sicherheitsmanagement', 'SYS.2.1 Allgemeiner Client'" },
-            "Zielobjekt": { "type": "string", "description": "The specific target object, e.g., 'Gesamtes ISMS', 'Standard-Arbeitsplatz'" },
-            "Begründung zur Auswahl": { "type": "string", "description": "Justification for selecting this Baustein for the audit." }
-          },
-          "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
-        }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Subchapter 4.1.3 Auswahl Bausteine Überwachung",
+  "type": "object",
+  "properties": {
+    "rows": {
+      "type": "array",
+      "description": "A list of Bausteine selected for the audit.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Schicht": { "type": "string", "description": "e.g., 'ISMS', 'ORP', 'INF'" },            
+          "Baustein": { "type": "string", "description": "The full Baustein ID and name, e.g., 'ISMS.1 Sicherheitsmanagement'" },
+          "Zielobjekt-Name": { "type": "string", "description": "The descriptive name of the target object, e.g., 'Gesamter Informationsverbund'" },            "Zielobjekt-Kürzel": { "type": "string", "description": "The unique ID (Kürzel) of the target object." },
+          "Begründung zur Auswahl": { "type": "string", "description": "Justification for selecting this Baustein for the audit." }
+        },
+         "required": [
+          "Schicht",
+          "Baustein",
+          "Zielobjekt-Name",
+          "Zielobjekt-Kürzel",
+          "Begründung zur Auswahl"
+        ]
       }
-    },
-    "required": ["rows"]
-  }
+    }
+  },
+  "required": ["rows"]
+}

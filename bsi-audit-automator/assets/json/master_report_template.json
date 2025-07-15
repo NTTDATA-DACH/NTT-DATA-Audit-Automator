@@ -449,7 +449,7 @@
           "title": "Auswahl Bausteine Erst-/Rezertifizierungsverfahren",
           "subchapterNumber": "4.1.1",
           "table": {
-            "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
+            "headers": ["Schicht", "Baustein", "Zielobjekt-Name", "Zielobjekt-Kürzel", "Begründung zur Auswahl"],
             "rows": []
           }
         },
@@ -457,7 +457,7 @@
             "title": "Auswahl Bausteine 1. Überwachungsaudit",
             "subchapterNumber": "4.1.2",
             "table": {
-              "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
+              "headers": ["Schicht", "Baustein", "Zielobjekt-Name", "Zielobjekt-Kürzel", "Begründung zur Auswahl"],
               "rows": []
             }
         },
@@ -465,7 +465,7 @@
             "title": "Auswahl Bausteine 2. Überwachungsaudit",
             "subchapterNumber": "4.1.3",
             "table": {
-              "headers": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"],
+              "headers": ["Schicht", "Baustein", "Zielobjekt-Name", "Zielobjekt-Kürzel", "Begründung zur Auswahl"],
               "rows": []
             }
         },
@@ -619,6 +619,7 @@
                 "massnahme": "",
                 "zielobjekt": "",
                 "bewertung": "",
+                "dokuAntragsteller": "",
                 "pruefmethode": { "D": false, "I": false, "C": false, "S": false, "A": false, "B": false },
                 "auditfeststellung": ""
               }
