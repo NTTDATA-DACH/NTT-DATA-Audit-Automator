@@ -80,7 +80,9 @@ class AuditController:
                 "id": finding_id,
                 "category": finding.get("category"),
                 "description": finding.get("beschreibung", "No description provided."),
-                "source_chapter": f"Previous Audit ({finding.get('quelle', 'N/A')})"
+                "source_chapter": f"Previous Audit ({finding.get('quelle', 'N/A')})",
+                "status": finding.get("status"),
+                "behebungsfrist": finding.get("behebungsfrist")
             })
 
     def _process_new_finding(self, finding: Dict[str, Any], stage_name: str):

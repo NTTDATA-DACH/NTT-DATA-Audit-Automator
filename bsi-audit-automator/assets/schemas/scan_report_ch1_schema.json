@@ -65,7 +65,16 @@
                             "properties": {
                                 "rows": {
                                     "type": "array",
-                                    "items": { "type": "object" }
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Name": { "type": "string" },
+                                            "Funktion": { "type": "string" },
+                                            "Telefon": { "type": "string" },
+                                            "E-Mail": { "type": "string" },
+                                            "Optional: Abweichende Anschrift": { "type": "string" }
+                                        }
+                                    }
                                 }
                             },
                             "required": ["rows"]
@@ -86,7 +95,16 @@
                         "table": {
                             "type": "object",
                              "properties": {
-                                "rows": { "type": "array", "items": { "type": "object" } }
+                                "rows": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Name": { "type": "string" },
+                                            "Institution": { "type": "string" }
+                                        }
+                                    }
+                                }
                             },
                             "required": ["rows"]
                         }
@@ -98,7 +116,16 @@
                         "table": {
                             "type": "object",
                              "properties": {
-                                "rows": { "type": "array", "items": { "type": "object" } }
+                                "rows": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Name": { "type": "string" },
+                                            "Institution": { "type": "string" }
+                                        }
+                                    }
+                                }
                             },
                             "required": ["rows"]
                         }
@@ -110,7 +137,16 @@
                         "table": {
                             "type": "object",
                              "properties": {
-                                "rows": { "type": "array", "items": { "type": "object" } }
+                                "rows": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "Name": { "type": "string" },
+                                            "Institution": { "type": "string" }
+                                        }
+                                    }
+                                }
                             },
                             "required": ["rows"]
                         }

@@ -253,19 +253,31 @@ class ReportGenerator:
                 "Quelle (Kapitel)": finding.get('source_chapter', 'N/A')
             }
             if category == 'AG':
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "30 Tage nach Audit"
-                row_data["Status"] = "Offen"
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')                
+                if finding.get('status') is not None:
+                    row_data["Status"] = finding.get('status', 'Unbekannt')
+                    row_data["Behebungsfrist"] = finding.get('behebungsfrist', 'N/A')
+                else:
+                    row_data["Status"] = "Offen"
+                    row_data["Behebungsfrist"] = "30 Tage nach Audit"
                 ag_table_rows.append(row_data)
             elif category == 'AS':
-                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "30 Tage nach Audit"
-                row_data["Status"] = "Offen"
+                row_data["Beschreibung der Abweichung"] = finding.get('description', 'N/A')                
+                if finding.get('status') is not None:
+                    row_data["Status"] = finding.get('status', 'Unbekannt')
+                    row_data["Behebungsfrist"] = finding.get('behebungsfrist', 'N/A')
+                else:
+                    row_data["Status"] = "Offen"
+                    row_data["Behebungsfrist"] = "30 Tage nach Audit"
                 as_table_rows.append(row_data)
             elif category == 'E':
-                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')
-                row_data["Behebungsfrist"] = "N/A"
-                row_data["Status"] = "Zur Umsetzung empfohlen"
+                row_data["Beschreibung der Empfehlung"] = finding.get('description', 'N/A')                
+                if finding.get('status') is not None:
+                    row_data["Status"] = finding.get('status', 'Unbekannt')
+                    row_data["Behebungsfrist"] = finding.get('behebungsfrist', 'N/A')
+                else:
+                    row_data["Status"] = "Zur Umsetzung empfohlen"
+                    row_data["Behebungsfrist"] = "N/A"
                 e_table_rows.append(row_data)
 
         # --- FIX (Task J): Sort findings numerically by ID ---
