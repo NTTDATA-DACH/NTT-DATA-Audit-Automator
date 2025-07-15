@@ -25,6 +25,21 @@ class Chapter3Runner:
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
     GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
+    SUMMARY_DEPENDENCIES = {
+        "ergebnisDerStrukturanalyse": [
+            "definitionDesInformationsverbundes", "bereinigterNetzplan", "listeDerGeschaeftsprozesse",
+            "listeDerAnwendungen", "listeDerItSysteme", "listeDerRaeumeGebaeudeStandorte",
+            "listeDerKommunikationsverbindungen", "stichprobenDokuStrukturanalyse", "listeDerDienstleister"
+        ],
+        "ergebnisDerSchutzbedarfsfeststellung": [
+            "definitionDerSchutzbedarfskategorien", "schutzbedarfGeschaeftsprozesse", "schutzbedarfAnwendungen",
+            "schutzbedarfItSysteme", "schutzbedarfRaeume", "schutzbedarfKommunikationsverbindungen",
+            "stichprobenDokuSchutzbedarf"
+        ],
+        "ergebnisDerModellierung": ["modellierungsdetails"],
+        "ergebnisItGrundschutzCheck": ["detailsZumItGrundschutzCheck", "benutzerdefinierteBausteine"],
+        # 'ergebnisDerDokumentenpruefung' is the final summary and will use all findings by default.
+    }
     
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
