@@ -327,7 +327,7 @@ class ReportGenerator:
             if not target_path: continue
             
             # The generated data now always has a consistent structure: { "table": { "rows": [...] } }
-            rows_data = data.get('table', {}).get('rows', [])
+            rows_data = data.get('rows', [])
             self._set_value_by_path(report, target_path, rows_data)
 
 

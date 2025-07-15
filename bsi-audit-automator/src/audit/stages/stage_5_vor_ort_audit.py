@@ -84,8 +84,8 @@ class Chapter5Runner:
         ]
         for section in baustein_sections:
             section_data = chapter_4_data.get(section, {})
-            if isinstance(section_data, dict) and "table" in section_data:
-                 selected_bausteine.extend(section_data.get("table", {}).get("rows", []))
+            if isinstance(section_data, dict):
+                 selected_bausteine.extend(section_data.get("rows", []))
         
         if not selected_bausteine:
             logging.warning("No Bausteine found in Chapter 4 results. Checklist for 5.5.2 will be empty.")
@@ -153,7 +153,7 @@ class Chapter5Runner:
         name = "risikoanalyseA5"
         logging.info(f"Deterministically generating checklist for {name} (5.6.2)...")
         
-        selected_measures = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("table", {}).get("rows", [])
+        selected_measures = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("rows", [])
         
         if not selected_measures:
             logging.warning("No measures from risk analysis found in Chapter 4 results. Checklist for 5.6.2 will be empty.")

@@ -107,11 +107,11 @@ class Chapter4Runner:
                 request_context_log=f"Chapter-4: {name}"
             )
             logging.info(f"Successfully generated plan for subchapter {definition.get('key', name)}")
-            # The AI response is the table content itself, but the final report expects it nested.
-            return {name: {"table": generated_data}}
+            # The AI response is the table content itself, e.g. {"rows": [...]}.
+            return {name: generated_data}
         except Exception as e:
             logging.error(f"Failed to generate plan for subchapter {definition.get('key', name)}: {e}", exc_info=True)
-            return {name: {"table": {"rows": []}}} # Return empty structure on failure
+            return {name: {"rows": []}} # Return empty structure on failure
 
     async def run(self, force_overwrite: bool = False) -> dict:
         """
