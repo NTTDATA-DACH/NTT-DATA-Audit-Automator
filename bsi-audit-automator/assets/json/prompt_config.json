@@ -142,6 +142,11 @@
         "schema_path": "assets/schemas/stage_3_7_risikoanalyse_schema.json",
         "source_categories": ["Risikoanalyse"]
       },
+      "questions": {
+        "entbehrlich": "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung mit Level 5 ist immer entbehrlich, außer  wenn sie durch in der beigefügten Risikoanalyse explizit gefordert wird.",
+        "muss_anforderungen": "Sind alle diese MUSS-Anforderungen (Level 1) mit Status 'Ja' umgesetzt?",
+        "nicht_umgesetzt": "Sind diese nicht oder teilweise umgesetzten Anforderungen im angehängten Realisierungsplan (A.6) dokumentiert?"
+      },
       "realisierungsplan": {
         "schema_path": "assets/schemas/generic_3_question_schema.json",
         "source_categories": ["Realisierungsplan"]

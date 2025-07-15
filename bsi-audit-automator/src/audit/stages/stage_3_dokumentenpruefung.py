@@ -99,10 +99,10 @@ class Chapter3Runner:
             for item in entbehrlich_items: # Enrich with control level
                 item['level'] = self.control_catalog.get_control_level(item.get('id'))
             
-            question_text = "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung mit Level 5 ist immer entbehrlich, außer  wenn sie durch in der beigefügten Risikoanalyse explizit gefordert wird."
+            question = targeted_prompt_config["questions"]["entbehrlich"]
             prompt = targeted_prompt_template.format(
-                question=question_text,
-                json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False)
+                question=question,
+                json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2")
             answers[1], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
@@ -114,7 +114,7 @@ class Chapter3Runner:
         muss_anforderungen = [a for a in anforderungen if a.get("id") in level_1_ids]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
-                question="Sind alle diese MUSS-Anforderungen (Level 1) mit Status 'Ja' umgesetzt?",
+                question=targeted_prompt_config["questions"]["muss_anforderungen"],
                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
@@ -127,7 +127,7 @@ class Chapter3Runner:
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"])
         if unmet_items and realisierungsplan_uris:
             prompt = targeted_prompt_template.format(
-                question="Sind diese nicht oder teilweise umgesetzten Anforderungen im angehängten Realisierungsplan (A.6) dokumentiert?",
+                question=targeted_prompt_config["questions"]["nicht_umgesetzt"],
                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4")
