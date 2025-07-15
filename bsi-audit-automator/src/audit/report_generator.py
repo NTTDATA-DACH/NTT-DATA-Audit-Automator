@@ -314,21 +314,15 @@ class ReportGenerator:
             "auswahlMassnahmenAusRisikoanalyse": f"{base_path}.auswahlMassnahmenAusRisikoanalyse.table.rows"
         }
 
-        # --- FIX (Task F): Prevent data leakage from previous reports ---
-        # Before populating, clear all possible target tables to ensure no stale data remains.
-        self._set_value_by_path(report, key_to_path_map["auswahlBausteineErstRezertifizierung"], [])
-        self._set_value_by_path(report, key_to_path_map["auswahlBausteine1Ueberwachungsaudit"], [])
-        self._set_value_by_path(report, key_to_path_map["auswahlBausteine2Ueberwachungsaudit"], [])
-        logging.debug("Cleared all Baustein selection tables in report template before population.")
-        # --- End of FIX ---
-
         for key, data in stage_data.items():
             target_path = key_to_path_map.get(key)
             if not target_path: continue
             
-            # The generated data now always has a consistent structure: { "table": { "rows": [...] } }
+            # Non-destructive update: Only write to the report if the stage data
+            # for this section is non-empty. This preserves the baseline from Scan-Report.
             rows_data = data.get('rows', [])
-            self._set_value_by_path(report, target_path, rows_data)
+            if rows_data:
+                self._set_value_by_path(report, target_path, rows_data)
 
 
     def _populate_chapter_5(self, report: dict, stage_data: dict) -> None:
