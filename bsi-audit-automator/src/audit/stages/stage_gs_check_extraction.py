@@ -25,6 +25,7 @@ class GrundschutzCheckExtractionRunner:
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
+    RAW_EXTRACTION_PATH_PREFIX = "output/results/intermediate/raw_extraction/"
     CHUNK_SIZES = [19, 21]
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
@@ -87,33 +88,28 @@ class GrundschutzCheckExtractionRunner:
         logging.info(f"Successfully created and saved ground truth map to {self.GROUND_TRUTH_MAP_PATH}")
         return final_map
 
-    async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any], zielobjekte_list: List[Dict]) -> Tuple[List, List]:
-        """Runs a single data extraction pass, returning raw anforderungen and headings."""
+    async def _run_extraction_pass(self, doc: fitz.Document, chunk_size: int, prompt_template: str, schema: Dict[str, Any], zielobjekte_list: List[Dict]) -> List[Dict[str, Any]]:
+        """
+        Runs a single data extraction pass, returning raw JSON results from the AI.
+        As a side-effect, it saves each raw result to GCS for caching.
+        """
         logging.info(f"Starting extraction pass with chunk size: {chunk_size} pages.")
         total_pages = len(doc)
-        if total_pages == 0: return [], []
+        if total_pages == 0: return []
 
-
-        # Prepare the context for the prompt
         zielobjekte_list_json = json.dumps(zielobjekte_list, indent=2, ensure_ascii=False)
         prompt_with_context = prompt_template.format(zielobjekte_list_json=zielobjekte_list_json)
 
-        start_page = 0
-        if self.config.is_test_mode:
-            start_page = 1100
-            if total_pages > start_page:
-                logging.warning(f"TEST MODE: Starting Grundschutz-Check extraction from page {start_page}.")
-            else:
-                logging.warning(f"TEST MODE: Start page {start_page} is beyond document length ({total_pages}). No pages will be processed.")
-
-        tasks, temp_blob_names = [], []
-        for chunk_index, i in enumerate(range(start_page, total_pages, chunk_size)):
+        tasks, temp_blob_names, chunk_details = [], [], []
+        for i in range(0, total_pages, chunk_size):
             chunk_doc = fitz.open()
             chunk_doc.insert_pdf(doc, from_page=i, to_page=min(i + chunk_size - 1, total_pages - 1))
             
             chunk_blob_name = f"output/results/intermediate/temp_chunk_{chunk_size}_{i}.pdf"
             self.gcs_client.bucket.blob(chunk_blob_name).upload_from_string(chunk_doc.write(), content_type="application/pdf")
             temp_blob_names.append(chunk_blob_name)
+            
+            chunk_details.append({"pass_size": chunk_size, "page_start": i})
 
             task = self.ai_client.generate_json_response(
                 prompt=prompt_with_context, json_schema=schema, gcs_uris=[f"gs://{self.config.bucket_name}/{chunk_blob_name}"],
@@ -122,17 +118,19 @@ class GrundschutzCheckExtractionRunner:
             tasks.append(task)
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        # Cleanup
+        
+        # Save raw results to GCS for caching and cleanup temp PDFs
+        for i, res in enumerate(results):
+            if isinstance(res, dict):
+                details = chunk_details[i]
+                raw_blob_name = f"{self.RAW_EXTRACTION_PATH_PREFIX}pass_{details['pass_size']}_pages_{details['page_start']}.json"
+                self.gcs_client.upload_from_string(json.dumps(res, indent=2, ensure_ascii=False), raw_blob_name)
+        
         for blob_name in temp_blob_names:
             try: self.gcs_client.bucket.blob(blob_name).delete()
             except Exception as e: logging.warning(f"Could not delete temp blob {blob_name}: {e}")
 
-        all_anforderungen, all_headings = [], []
-        for res in results:
-            if isinstance(res, Exception): continue
-            all_anforderungen.extend(res.get("anforderungen", []))
-            all_headings.extend(res.get("chapter_headings", []))
-        return all_anforderungen, all_headings
+        return [res for res in results if isinstance(res, dict)]
 
     def _merge_and_refine_results(self, all_anforderungen: List, all_headings: List, ground_truth_map: Dict) -> List[Dict[str, Any]]:
         """Merges and refines extracted data into a clean, de-duplicated list."""
@@ -149,9 +147,7 @@ class GrundschutzCheckExtractionRunner:
         # --- Two-Tier Assignment Logic ---
         for anforderung in all_anforderungen:
             # Tier 1: Check if the AI made a direct, same-page assignment.
-            # If so, we trust it and continue to the next anforderung.
             if anforderung.get('zielobjekt_kuerzel'):
-                # Also populate the name from the direct assignment for consistency
                 anforderung['zielobjekt_name'] = zielobjekte_map.get(anforderung['zielobjekt_kuerzel'], "Name not in map")
                 continue
 
@@ -160,7 +156,6 @@ class GrundschutzCheckExtractionRunner:
                 page = anforderung.get('pagenumber', 0)
                 assigned_kuerzel = "Unassigned"
                 for heading in reversed(sorted_headings):
-                    # Use strict '>' to associate with the context from a *previous* page.
                     if page > heading.get('pagenumber', 0):
                         assigned_kuerzel = heading['kuerzel']
                         break
@@ -210,44 +205,69 @@ class GrundschutzCheckExtractionRunner:
         logging.info(f"Merge & Refine complete. Final list has {len(final_list)} unique requirements.")
         return final_list
 
-    async def run(self, force_overwrite: bool = False) -> Dict[str, Any]:
+    async def _get_all_pass_results(self, force_overwrite: bool, ground_truth_map: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Main execution method for the stage. It creates the ground-truth map and
-        the refined Grundschutz-Check data, saving them to GCS.
+        Orchestrates getting the raw extraction results, either from cache or by
+        running the AI extraction passes.
         """
-        logging.info(f"Executing stage: {self.STAGE_NAME}")
-
-        try:
-            self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
-            logging.info(f"Intermediate check results file already exists at {self.INTERMEDIATE_CHECK_RESULTS_PATH}. Skipping regeneration.")
-            return {"status": "success", "message": f"Skipped regeneration. Existing file found at: {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
-        except NotFound:
-            logging.info("Intermediate check results file not found. Proceeding with extraction.")
-
-        ground_truth_map = await self._build_system_structure_map(force_remap=force_overwrite)
+        # 1. Check for cached raw files first
+        if not force_overwrite:
+            raw_blobs = self.gcs_client.list_files(prefix=self.RAW_EXTRACTION_PATH_PREFIX)
+            if raw_blobs:
+                logging.info(f"Found {len(raw_blobs)} cached raw extraction files. Loading from cache.")
+                load_tasks = [self.gcs_client.read_json_async(blob.name) for blob in raw_blobs]
+                results = await asyncio.gather(*load_tasks, return_exceptions=True)
+                return [res for res in results if isinstance(res, dict)]
         
+        # 2. If no cache or forced, run the full extraction
+        logging.info("Running AI extraction for Grundschutz-Check. No cached files found or overwrite is forced.")
         uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check"])
         if not uris:
-            raise FileNotFoundError("Could not find document with category 'Grundschutz-Check'. This is required for the extraction stage.")
-        
+            raise FileNotFoundError("Could not find document with category 'Grundschutz-Check'. This is required.")
+
         blob_name = uris[0].replace(f"gs://{self.config.bucket_name}/", "")
         pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(blob_name))
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
+
         config = self.prompt_config["stages"]["Chapter-3"]["detailsZumItGrundschutzCheck_extraction"]
         prompt = config["prompt"]
         schema = self._load_asset_json(config["schema_path"])
 
-        # Pass the ground truth Zielobjekte list to each extraction pass
         pass_tasks = [
-            self._run_extraction_pass(doc, cs, prompt, schema, ground_truth_map.get('zielobjekte', [])) 
+            self._run_extraction_pass(doc, cs, prompt, schema, ground_truth_map.get('zielobjekte', []))
             for cs in self.CHUNK_SIZES
         ]
-        pass_results = await asyncio.gather(*pass_tasks)
+        list_of_lists = await asyncio.gather(*pass_tasks)
         
-        all_anforderungen = [item for res_tuple in pass_results for item in res_tuple[0]]
-        all_headings = [item for res_tuple in pass_results for item in res_tuple[1]]
+        # Flatten the list of lists into a single list of results
+        return [item for sublist in list_of_lists for item in sublist]
 
+    async def run(self, force_overwrite: bool = False) -> Dict[str, Any]:
+        """
+        Main execution method for the stage. It orchestrates the entire workflow:
+        1. Builds the ground-truth map.
+        2. Checks for the final merged results file and skips if present.
+        3. Gets raw extraction results (from cache or new AI run).
+        4. Merges and refines the raw data.
+        5. Saves the final merged data.
+        """
+        logging.info(f"Executing stage: {self.STAGE_NAME}")
+        
+        ground_truth_map = await self._build_system_structure_map(force_remap=force_overwrite)
+        
+        # Skip if the final, merged file already exists and we are not forcing.
+        if not force_overwrite and self.gcs_client.blob_exists(self.INTERMEDIATE_CHECK_RESULTS_PATH):
+            logging.info(f"Final merged file already exists at {self.INTERMEDIATE_CHECK_RESULTS_PATH}. Skipping regeneration.")
+            return {"status": "skipped", "message": f"Existing file found: {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
+
+        # Get raw results from all passes (either from cache or by running the AI)
+        all_pass_results = await self._get_all_pass_results(force_overwrite, ground_truth_map)
+        
+        # Process the raw results into clean lists
+        all_anforderungen = [item for res in all_pass_results for item in res.get("anforderungen", [])]
+        all_headings = [item for res in all_pass_results for item in res.get("chapter_headings", [])]
+
+        # Merge, refine, and save the final data
         final_anforderungen = self._merge_and_refine_results(all_anforderungen, all_headings, ground_truth_map)
         
         self.gcs_client.upload_from_string(
@@ -256,6 +276,4 @@ class GrundschutzCheckExtractionRunner:
         )
         logging.info(f"Successfully created and saved refined Grundschutz-Check data to {self.INTERMEDIATE_CHECK_RESULTS_PATH}")
         
-        # This stage doesn't produce a reportable JSON, just the intermediate file.
-        # Return a status message.
-        return {"status": "success", "message": f"Successfully generated intermediate files: {self.GROUND_TRUTH_MAP_PATH} and {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
+        return {"status": "success", "message": f"Generated intermediate files: {self.GROUND_TRUTH_MAP_PATH} and {self.INTERMEDIATE_CHECK_RESULTS_PATH}"}
