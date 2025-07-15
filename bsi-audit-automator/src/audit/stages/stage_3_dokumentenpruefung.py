@@ -24,6 +24,7 @@ class Chapter3Runner:
     TEMPLATE_PATH = "assets/json/master_report_template.json"
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
+    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
     
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
@@ -34,10 +35,21 @@ class Chapter3Runner:
         self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
+        self._ground_truth_map = None # Lazy loaded
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME} with dynamic execution plan.")
 
     def _load_asset_json(self, path: str) -> dict:
         with open(path, 'r', encoding='utf-8') as f: return json.load(f)
+
+    async def _get_ground_truth_map(self) -> Dict[str, Any]:
+        """Lazy loads the ground truth map and caches it."""
+        if self._ground_truth_map is None:
+            try:
+                self._ground_truth_map = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
+            except NotFound:
+                logging.error(f"FATAL: Ground truth map not found at '{self.GROUND_TRUTH_MAP_PATH}'. Please run the extraction stage.")
+                raise
+        return self._ground_truth_map
 
     async def _process_details_zum_it_grundschutz_check(self) -> Dict[str, Any]:
         """
@@ -54,6 +66,16 @@ class Chapter3Runner:
 
         answers = [None] * 5
         findings = []
+        ground_truth_map = await self._get_ground_truth_map()
+
+        # Task E: Coverage Check
+        all_mapped_kuerzel = {k for k_list in ground_truth_map.get("baustein_to_zielobjekt_mapping", {}).values() for k in k_list}
+        all_checked_kuerzel = {a.get("zielobjekt_kuerzel") for a in anforderungen}
+        missing_in_check = all_mapped_kuerzel - all_checked_kuerzel
+        if missing_in_check:
+            desc = f"Die Zielobjekte {sorted(list(missing_in_check))} sind in der Modellierung vorhanden, aber es wurden für sie keine Anforderungen im Grundschutz-Check gefunden oder verarbeitet."
+            findings.append({"category": "AG", "description": desc})
+            logging.warning(f"Coverage Check (Task E) failed: {desc}")
 
         # Q1: Status erhoben? (Deterministic)
         answers[0] = all(a.get("umsetzungsstatus") for a in anforderungen)
@@ -70,14 +92,19 @@ class Chapter3Runner:
         targeted_prompt_config = self.prompt_config["stages"]["Chapter-3"]["targeted_question"]
         targeted_prompt_template = targeted_prompt_config["prompt"]
 
-        # Q2: "entbehrlich" plausibel? (Targeted AI)
+        # Q2: "entbehrlich" plausibel? (Targeted AI - Task D)
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
+        risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
         if entbehrlich_items:
+            for item in entbehrlich_items: # Enrich with control level
+                item['level'] = self.control_catalog.get_control_level(item.get('id'))
+            
+            question_text = "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung (insb. Level > 1) ist nur dann entbehrlich, wenn sie nicht durch die beigefügte Risikoanalyse gefordert wird."
             prompt = targeted_prompt_template.format(
-                question="Sind die Begründungen für 'entbehrlich' plausibel? Wenn sie in der Risikoanalyse nicht gezogen wurden ist das eine ausreichende Begründung!",
+                question=question_text,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q2")
+            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2")
             answers[1], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
         else:
             answers[1] = True
@@ -87,7 +114,7 @@ class Chapter3Runner:
         muss_anforderungen = [a for a in anforderungen if a.get("id") in level_1_ids]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
-                question="Sind alle diese MUSS-Anforderungen mit Status 'Ja' umgesetzt?",
+                question="Sind alle diese MUSS-Anforderungen (Level 1) mit Status 'Ja' umgesetzt?",
                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
@@ -161,11 +188,12 @@ class Chapter3Runner:
         task["schema_path"] = task_config["schema_path"]
         task["source_categories"] = task_config.get("source_categories")
 
-        if task["type"] == "ai_driven":
+        if task["type"] == "ai_driven" or key == 'modellierungsdetails':
             generic_prompt = self.prompt_config["stages"]["Chapter-3"]["generic_question"]["prompt"]
+            # For modellierungsdetails, the prompt is custom in the config
+            task['prompt'] = task_config.get('prompt', generic_prompt)
             questions = [item["questionText"] for item in data.get("content", []) if item.get("type") == "question"]
             task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
-            task["prompt"] = generic_prompt
         elif task["type"] == "summary":
             task["prompt"] = self.prompt_config["stages"]["Chapter-3"]["generic_summary"]["prompt"]
             task["summary_topic"] = data.get("title", key)
@@ -174,7 +202,16 @@ class Chapter3Runner:
     async def _process_ai_subchapter(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Generates content for a single AI-driven subchapter."""
         key, schema_path = task["key"], task["schema_path"]
-        prompt = task["prompt"].format(questions=task["questions_formatted"])
+        
+        prompt_format_args = {"questions": task.get("questions_formatted", "")}
+
+        # Task C: Inject ground truth context for modellierungsdetails
+        if key == 'modellierungsdetails':
+            ground_truth_map = await self._get_ground_truth_map()
+            zielobjekte_list = ground_truth_map.get('zielobjekte', [])
+            prompt_format_args['zielobjekte_json'] = json.dumps(zielobjekte_list, indent=2, ensure_ascii=False)
+        
+        prompt = task["prompt"].format(**prompt_format_args)
         uris = self.rag_client.get_gcs_uris_for_categories(task.get("source_categories"))
         
         if not uris and task.get("source_categories") is not None:
@@ -216,7 +253,7 @@ class Chapter3Runner:
         
         aggregated_results, processed_results = {}, []
         custom_tasks = [t for t in self.execution_plan if t and t.get("type") == "custom_logic"]
-        ai_tasks = [t for t in self.execution_plan if t and t.get("type") == "ai_driven"]
+        ai_tasks = [t for t in self.execution_plan if t and (t.get("type") == "ai_driven" or t.get("key") == "modellierungsdetails")]
         summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
 
         for task in custom_tasks:

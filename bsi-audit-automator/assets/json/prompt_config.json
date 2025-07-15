@@ -28,7 +28,7 @@
         "prompt": "The questions to answer are:\n{questions}"
       },
       "targeted_question": {
-        "prompt": "Based *only* on the following structured JSON data and, if provided, the attached context document, answer the question: {question}\n\n**JSON Data:**\n---\n{json_data}\n---"
+        "prompt": "You are a BSI auditor. Based *only* on the following structured JSON data and, if provided, the attached context document(s), answer the question: {question}\n\n**JSON Data:**\n---\n{json_data}\n---"
       },
       "generic_summary": {
         "prompt": "You are a BSI security auditor providing a final verdict on the {summary_topic}.\nBased on the summary of findings from the previous sections provided below, provide a summary verdict (\"Votum\").\n\n**Summary of Previous Findings:**\n---\n{previous_findings}\n---"
@@ -39,7 +39,8 @@
       },
       "aktualitaetDerReferenzdokumente": {
         "schema_path": "assets/schemas/stage_3_1_aktualitaet_schema.json",
-        "source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie", "Netzplan", "Strukturanalyse", "Dienstleister-Liste", "Realisierungsplan", "Risikoanalyse", "Schutzbedarfsfeststellung"]
+        "prompt": "Ignore the missing A.4 GRundschutz-Check.",
+        "source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie", "Netzplan", "Strukturanalyse", "Dienstleister-Liste", "Realisierungsplan", "Risikoanalyse", "Schutzbedarfsfeststellung", "Modellierung"]
       },
       "sicherheitsleitlinieUndRichtlinienInA0": {
         "schema_path": "assets/schemas/stage_3_2_sicherheitsleitlinie_schema.json",
@@ -119,6 +120,7 @@
       },
       "modellierungsdetails": {
         "schema_path": "assets/schemas/stage_3_5_1_modellierungsdetails_schema.json",
+        "prompt": "The questions to answer are:\n{questions}\n\nAdditionally, review the attached Modellierung document against the authoritative list of Zielobjekte provided below. Does the Modellierung correctly account for all Zielobjekte from this list that are relevant?\n\n**Authoritative List of Zielobjekte (Ground Truth):**\n---\n{zielobjekte_json}\n---",
         "source_categories": ["Modellierung"]
       },
       "ergebnisDerModellierung": {
