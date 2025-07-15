@@ -143,7 +143,7 @@
         "source_categories": ["Risikoanalyse"]
       },
       "questions": {
-        "entbehrlich": "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung mit Level 5 ist immer entbehrlich, außer  wenn sie durch in der beigefügten Risikoanalyse explizit gefordert wird.",
+        "entbehrlich": "Sind die Begründungen für 'entbehrlich' plausibel? BSI-Regel: Eine Anforderung mit Level 5 ist immer entbehrlich, außer  wenn sie durch in der beigefügten Risikoanalyse explizit gefordert wird. Eine Formulierung, dass diese Anforderung nicht von der Risikoanalyse gefordert wird, ist also für Anforderungen im Level 5 immer akzeptabel!",
         "muss_anforderungen": "Sind alle diese MUSS-Anforderungen (Level 1) mit Status 'Ja' umgesetzt?",
         "nicht_umgesetzt": "Sind diese nicht oder teilweise umgesetzten Anforderungen im angehängten Realisierungsplan (A.6) dokumentiert?"
       },
