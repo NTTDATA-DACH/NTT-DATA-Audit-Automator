@@ -76,14 +76,11 @@ async def main_async():
     controller = AuditController(config, gcs_client, ai_client, rag_client)
 
     if args.scan_previous_report:
-        # For single stage runs, we always overwrite the stage result.
-        await controller.run_single_stage("Scan-Report", force_overwrite=True)
+        await controller.run_single_stage("Scan-Report", force_overwrite=args.force)
     elif args.run_gs_check_extraction:
-        # For single stage runs, we always overwrite the stage result.
-        await controller.run_single_stage("Grundschutz-Check-Extraction", force_overwrite=True)
+        await controller.run_single_stage("Grundschutz-Check-Extraction", force_overwrite=args.force)
     elif args.run_stage:
-        # The --force flag will have already re-mapped the documents if it was passed.
-        await controller.run_single_stage(args.run_stage, force_overwrite=True)
+        await controller.run_single_stage(args.run_stage, force_overwrite=args.force)
     elif args.run_all_stages:
         await controller.run_all_stages(force_overwrite=args.force)
 

@@ -9,7 +9,8 @@ from google.cloud.documentai_v1.types import (
     BatchProcessRequest,
     DocumentOutputConfig,
     GcsDocument,
-    GcsDocuments
+    GcsDocuments,
+    GcsOutputConfig
 )
 
 from google.api_core.client_options import ClientOptions
@@ -73,8 +74,8 @@ class DocumentAiClient:
         batch_input_config = documentai.BatchDocumentsInputConfig(gcs_documents=documentai.GcsDocuments(documents=[input_config]))
         
         # Correctly construct the output configuration object
-        gcs_output_config = documentai.GcsOutputConfig(gcs_uri=gcs_output_uri)
-        output_config = documentai.DocumentOutputConfig(gcs_output_config=gcs_output_config)
+        gcs_output_config = GcsOutputConfig(gcs_uri=gcs_output_uri)
+        output_config = DocumentOutputConfig(gcs_output_config=gcs_output_config)
 
         request = documentai.BatchProcessRequest(
             name=self.processor_name,
