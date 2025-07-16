@@ -39,7 +39,8 @@ locals {
 
   # Define the predictable name for the pre-built Document AI Form Parser.
   # The processor ID is a stable value provided by Google.
-  docai_form_parser_processor_id   = "e1b714b1c73a72c1"
+  # docai_form_parser_processor_id   = "e1b714b1c73a72c1"
+  docai_form_parser_processor_id   = "8f291dd81f47f6e0"
   docai_form_parser_processor_name = "projects/${var.project_id}/locations/eu/processors/${local.docai_form_parser_processor_id}"
 }
 
