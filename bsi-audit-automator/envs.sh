@@ -36,14 +36,11 @@ echo "🔹 Fetching infrastructure details from Terraform..."
 
 # --- Dynamic Values from Terraform ---
 export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-export VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
-export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
-export INDEX_ENDPOINT_ID_FULL="$(terraform -chdir=${TERRAFORM_DIR} output -raw vertex_ai_index_endpoint_id)"
+export REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
+export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
 export GCP_PROJECT_NUMBER="$(echo "${INDEX_ENDPOINT_ID_FULL}" | cut -d'/' -f2)"
-export INDEX_ENDPOINT_ID="$(basename "${INDEX_ENDPOINT_ID_FULL}")"
+export DOC_AI_ENDPOINT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
 # NEW: Fetch the public domain if it exists, otherwise set to empty string.
-export INDEX_ENDPOINT_PUBLIC_DOMAIN="$(terraform -chdir=${TERRAFORM_DIR} output -raw public_endpoint_domain_name 2>/dev/null || echo '')"
-
 
 # --- Static Values for Local Development ---
 # These prefixes now reflect the simpler GCS layout.

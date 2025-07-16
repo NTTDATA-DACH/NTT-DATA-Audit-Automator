@@ -107,5 +107,5 @@ This is a critical architectural pattern for ensuring reliability.
 | `AUDIT_TYPE` | Yes | User Input | Specifies the audit type (e.g., "Zertifizierungsaudit"). |
 | `SOURCE_PREFIX` | Yes | Script | GCS prefix for source documents (e.g., `source_documents/`). |
 | `OUTPUT_PREFIX` | Yes | Script | GCS prefix for generated files (e.g., `output/`). |
-| `INDEX_ENDPOINT_ID`| Yes | Terraform | The numeric ID of the deployed Vertex AI Index Endpoint. |
+| `DOC_AI_ENDPOINT_ID`| Yes | Terraform | The numeric ID of the deployed Vertex AI Index Endpoint. |
 | `TEST` | No | User Input | Set to `"true"` to enable test mode. Defaults to `false`. |
