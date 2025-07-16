@@ -40,8 +40,8 @@ locals {
   # Define the predictable name for the pre-built Document AI Form Parser.
   # The processor ID is a stable value provided by Google.
   # docai_form_parser_processor_id   = "e1b714b1c73a72c1"
-  docai_form_parser_processor_id   = "8f291dd81f47f6e0"
-  docai_form_parser_processor_name = "projects/${var.project_id}/locations/eu/processors/${local.docai_form_parser_processor_id}"
+  # docai_form_parser_processor_id   = "8f291dd81f47f6e0"
+  # docai_form_parser_processor_name = "projects/${var.project_id}/locations/eu/processors/${local.docai_form_parser_processor_id}"
 }
 
 resource "google_project_service" "project_apis" {
@@ -133,4 +133,23 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_ar_writer"
   repository = google_artifact_registry_repository.bsi_repo.name
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${var.project_number}@cloudbuild.gserviceaccount.com"
+}
+
+# --- NEW/UPDATED: CREATE DOCUMENT AI LAYOUT PARSER PROCESSOR ---
+# This creates the Layout Parser processor for layout analysis and document splitting.
+resource "google_document_ai_processor" "bsi_layout_parser" {
+  location     = "eu"  # Multi-region location; use "us" if preferred (both supported for this processor)
+  display_name = "bsi-audit-layout-parser"
+  type         = "LAYOUT_PARSER_PROCESSOR"  # Type for the Layout Parser processor
+
+  depends_on = [google_project_service.project_apis]  # Ensure Document AI API is enabled first
+}
+
+# --- NEW: SET DEFAULT PROCESSOR VERSION ---
+# This sets the default version to the specified pretrained layout parser model.
+resource "google_document_ai_processor_default_version" "bsi_layout_parser_default" {
+  processor = google_document_ai_processor.bsi_layout_parser.name
+  version   = "${google_document_ai_processor.bsi_layout_parser.name}/processorVersions/pretrained-layout-parser-v1.0-2024-06-03"
+
+  depends_on = [google_document_ai_processor.bsi_layout_parser]
 }
