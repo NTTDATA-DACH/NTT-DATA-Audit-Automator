@@ -14,7 +14,8 @@ class AppConfig:
     source_prefix: str
     output_prefix: str
     audit_type: str
-    vertex_ai_region: str
+    region: str
+    doc_ai_processor_name: str
     max_concurrent_ai_requests: int
     is_test_mode: bool
     bucket_name: Optional[str] = None 
@@ -35,7 +36,7 @@ def load_config_from_env() -> AppConfig:
     load_dotenv()
 
     required_vars = [
-        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "VERTEX_AI_REGION"
+        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "REGION", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME"
     ]
     
     config_values = {}

@@ -39,7 +39,7 @@ export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_i
 export REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
 export GCP_PROJECT_NUMBER="$(echo "${INDEX_ENDPOINT_ID_FULL}" | cut -d'/' -f2)"
-export DOC_AI_ENDPOINT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
+export DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
 # NEW: Fetch the public domain if it exists, otherwise set to empty string.
 
 # --- Static Values for Local Development ---
@@ -64,6 +64,8 @@ set +e
 echo "✅ Environment variables configured successfully'."
 echo "   - GCP_PROJECT_ID: ${GCP_PROJECT_ID}"
 echo "   - BUCKET_NAME:    ${BUCKET_NAME}"
+echo "   - DOC_AI_PROC:    ${DOC_AI_PROCESSOR_NAME}"
+echo "   - AUDIT_TYPE:     ${AUDIT_TYPE}"
 echo "   - TEST mode:      ${TEST}"
 echo ""
 echo "👉 A new command 'bsi-auditor' is now available in your shell."
