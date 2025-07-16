@@ -34,13 +34,13 @@ class AiClient:
         current_date = datetime.date.today().strftime("%Y-%m-%d")
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        aiplatform.init(project=config.gcp_project_id, location=config.vertex_ai_region)
+        aiplatform.init(project=config.gcp_project_id, location=config.region)
         self.generative_model = GenerativeModel(
             GENERATIVE_MODEL_NAME, system_instruction=self.system_message
         )
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
-        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.vertex_ai_region}'.")
+        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.region}'.")
         logging.info(f"System Message Context includes today's date: {current_date}")
 
     async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None, request_context_log: str = "Generic AI Request") -> Dict[str, Any]:

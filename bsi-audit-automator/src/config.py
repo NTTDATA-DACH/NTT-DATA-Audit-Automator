@@ -49,7 +49,6 @@ def load_config_from_env() -> AppConfig:
 
     # Handle special case and boolean variables
     config_values["is_test_mode"] = os.getenv("TEST", "false").lower() == "true"
-    config_values["bucket_name"] = os.getenv("BUCKET_NAME")
     
     # Load the new concurrency limit, defaulting to 5 if not set or invalid
     max_reqs_str = os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")

@@ -38,7 +38,6 @@ echo "🔹 Fetching infrastructure details from Terraform..."
 export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
 export REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
 export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
-export GCP_PROJECT_NUMBER="$(echo "${INDEX_ENDPOINT_ID_FULL}" | cut -d'/' -f2)"
 export DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
 # NEW: Fetch the public domain if it exists, otherwise set to empty string.
 

@@ -9,6 +9,7 @@ from google.cloud.exceptions import NotFound
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
+from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.stage_previous_report_scan import PreviousReportScanner
 from src.audit.stages.stage_1_general import Chapter1Runner
@@ -41,7 +42,7 @@ class AuditController:
         # This defines the exact order of dependencies for each runner's constructor.
         self.runner_dependencies = {
             "Scan-Report": (self.config, self.ai_client, self.rag_client),
-            "Grundschutz-Check-Extraction": (self.config, self.gcs_client, self.ai_client, self.rag_client),
+            "Grundschutz-Check-Extraction": (self.config, self.gcs_client, None, self.ai_client, self.rag_client), # Placeholder for doc_ai_client
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.gcs_client, self.ai_client),
@@ -234,7 +235,14 @@ class AuditController:
             logging.info(f"Force overwrite enabled for stage '{stage_name}'. Running generation.")
 
         runner_class = self.stage_runner_classes[stage_name]
-        dependencies = self.runner_dependencies[stage_name]
+        
+        # --- DYNAMIC DEPENDENCY INJECTION ---
+        # Instantiate DocumentAiClient only if needed for the specific stage
+        if stage_name == "Grundschutz-Check-Extraction":
+            doc_ai_client = DocumentAiClient(self.config, self.gcs_client)
+            dependencies = (self.config, self.gcs_client, doc_ai_client, self.ai_client, self.rag_client)
+        else:
+            dependencies = self.runner_dependencies[stage_name]
         stage_runner = runner_class(*dependencies)
         logging.info(f"Initialized runner for stage: {stage_name}")
 

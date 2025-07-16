@@ -11,6 +11,9 @@ from google.api_core.exceptions import GoogleAPICallError
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 
+# hard path, change later
+DOC_AI_RAW_OUTPUT_PATH = "output/results/intermediate/doc_ai_raw_output.json"
+
 class DocumentAiClient:
     """A client for handling interactions with Google Cloud Document AI."""
 
@@ -78,19 +81,24 @@ class DocumentAiClient:
             logging.info("Document AI batch operation completed successfully.")
 
             # After completion, find the resulting JSON file in the output GCS path
-            output_blobs = self.gcs_client.list_files(prefix=gcs_output_uri.replace(f"gs://{self.config.bucket_name}/", ""))
+            temp_output_prefix = gcs_output_uri.replace(f"gs://{self.config.bucket_name}/", "")
+            output_blobs = self.gcs_client.list_files(prefix=temp_output_prefix)
             json_results = [blob for blob in output_blobs if blob.name.endswith(".json")]
 
             if not json_results:
                 logging.error(f"No JSON result file found in Document AI output path: {gcs_output_uri}")
                 return None
-            
-            # For a single input document, we expect a single result JSON
-            result_blob_name = json_results[0].name
-            logging.info(f"Found Document AI result file: {result_blob_name}")
 
-            # Read the file and return its content
-            document_data = self.gcs_client.read_json(result_blob_name)
+            # For a single input document, we expect a single result JSON
+            source_result_blob_name = json_results[0].name
+            logging.info(f"Found Document AI result file: {source_result_blob_name}")
+
+            # Copy the result to our standardized intermediate path for idempotency and debugging
+            logging.info(f"Copying raw result to standardized path: {DOC_AI_RAW_OUTPUT_PATH}")
+            await self.gcs_client.copy_blob_async(source_result_blob_name, DOC_AI_RAW_OUTPUT_PATH)
+
+            # Read the file from its new permanent location and return its content
+            document_data = await self.gcs_client.read_json_async(DOC_AI_RAW_OUTPUT_PATH)
             return document_data
 
         except GoogleAPICallError as e:
