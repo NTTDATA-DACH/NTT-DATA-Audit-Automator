@@ -1,4 +1,4 @@
-# bsi-audit-automator/src/clients/document_ai_client.py
+# src/clients/document_ai_client.py
 import logging
 import asyncio
 import json
@@ -18,65 +18,57 @@ from google.api_core.exceptions import GoogleAPICallError
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 
-# hard path, change later
-DOC_AI_RAW_OUTPUT_PATH = "output/results/intermediate/doc_ai_raw_output.json"
-
 class DocumentAiClient:
     """A client for handling interactions with Google Cloud Document AI."""
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
-        """
-        Initializes the Document AI client.
-
-        Args:
-            config: The application configuration object.
-            gcs_client: An instance of the GCS client for reading results.
-        """
         self.config = config
         self.gcs_client = gcs_client
 
         if not self.config.doc_ai_processor_name:
             raise ValueError("Document AI processor name is not configured.")
 
-        # The processor name is 'projects/PROJECT/locations/LOCATION/processors/PROCESSOR_ID'
-        # The client needs the location for its regional endpoint.
         try:
             self.processor_name = self.config.doc_ai_processor_name
-            self.location = "eu" # self.processor_name.split('/')[3]
+            self.location = "eu"
             opts = ClientOptions(api_endpoint="eu-documentai.googleapis.com")
             self.client = documentai.DocumentProcessorServiceClient(client_options=opts)
-            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'. processor name: {self.processor_name} ")
+            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'.")
         except (IndexError, TypeError) as e:
-            logging.error(f"Could not parse location from Document AI processor name: '{self.processor_name}'")
+            logging.error(f"Could not parse location from Document AI processor name: '{self.config.doc_ai_processor_name}'")
             raise ValueError("Invalid Document AI processor name format.") from e
 
-
-    async def process_document_async(self, gcs_input_uri: str) -> Optional[Dict[str, Any]]:
+    async def process_document_chunk_async(self, gcs_input_uri: str, gcs_output_prefix: str) -> Optional[str]:
         """
-        Processes a single document from GCS using batch processing and returns the
-        structured Document object as a dictionary.
+        Processes a single document chunk from GCS using batch processing and saves the result.
+        This method is now idempotent on a per-chunk basis.
 
         Args:
-            gcs_input_uri: The 'gs://' path to the input PDF document.
+            gcs_input_uri: The 'gs://' path to the input PDF document chunk.
+            gcs_output_prefix: The GCS prefix where the output JSON should be stored.
 
         Returns:
-            The parsed JSON content of the processed document, or None on failure.
+            The GCS path to the generated JSON result file, or None on failure.
         """
-        file_name = gcs_input_uri.split('/')[-1]
-        # Create a unique output location for this specific processing job
-        gcs_output_uri = f"gs://{self.config.bucket_name}/{self.config.output_prefix}doc_ai_results/{file_name}/"
+        input_filename = gcs_input_uri.split('/')[-1]
+        output_json_filename = input_filename.replace('.pdf', '.json')
+        gcs_output_json_path = f"{gcs_output_prefix}{output_json_filename}"
         
-        logging.info(f"Starting Document AI batch processing for '{gcs_input_uri}'.")
-        logging.info(f"Output will be stored in '{gcs_output_uri}'.")
+        # IDEMPOTENCY: Check if the result for this specific chunk already exists.
+        if self.gcs_client.blob_exists(gcs_output_json_path):
+            logging.info(f"Result for chunk '{gcs_input_uri}' already exists. Skipping processing.")
+            return gcs_output_json_path
 
-        input_config = documentai.GcsDocument(gcs_uri=gcs_input_uri, mime_type="application/pdf")
-        batch_input_config = documentai.BatchDocumentsInputConfig(gcs_documents=documentai.GcsDocuments(documents=[input_config]))
+        gcs_output_uri_for_api = f"gs://{self.config.bucket_name}/{gcs_output_prefix}"
+        logging.info(f"Starting Document AI batch processing for chunk '{gcs_input_uri}'.")
         
-        # Correctly construct the output configuration object
-        gcs_output_config = DocumentOutputConfig.GcsOutputConfig(gcs_uri=gcs_output_uri)
+        input_config = GcsDocument(gcs_uri=gcs_input_uri, mime_type="application/pdf")
+        batch_input_config = BatchDocumentsInputConfig(gcs_documents=GcsDocuments(documents=[input_config]))
+        
+        gcs_output_config = DocumentOutputConfig.GcsOutputConfig(gcs_uri=gcs_output_uri_for_api)
         output_config = DocumentOutputConfig(gcs_output_config=gcs_output_config)
 
-        request = documentai.BatchProcessRequest(
+        request = BatchProcessRequest(
             name=self.processor_name,
             input_documents=batch_input_config,
             document_output_config=output_config,
@@ -84,36 +76,31 @@ class DocumentAiClient:
 
         try:
             operation = self.client.batch_process_documents(request=request)
-            
-            # Use asyncio.to_thread to run the blocking 'result()' call in a separate thread
-            logging.info("Waiting for Document AI batch operation to complete... This may take several minutes.")
+            logging.info(f"Waiting for Document AI operation for '{input_filename}' to complete...")
             await asyncio.to_thread(operation.result)
-            logging.info("Document AI batch operation completed successfully.")
+            logging.info(f"Document AI operation for '{input_filename}' completed.")
 
-            # After completion, find the resulting JSON file in the output GCS path
-            temp_output_prefix = gcs_output_uri.replace(f"gs://{self.config.bucket_name}/", "")
-            output_blobs = self.gcs_client.list_files(prefix=temp_output_prefix)
-            json_results = [blob for blob in output_blobs if blob.name.endswith(".json")]
+            # The API creates a folder structure. We need to find the JSON inside it.
+            # e.g., output/prefix/123456789/0/chunk_0.json
+            api_result_folder_prefix = gcs_output_uri_for_api.replace(f"gs://{self.config.bucket_name}/", "")
+            output_blobs = self.gcs_client.list_files(prefix=api_result_folder_prefix)
+            
+            # Find the JSON that corresponds to our input chunk
+            source_result_blob = next((b for b in output_blobs if output_json_filename in b.name and b.name.endswith('.json')), None)
 
-            if not json_results:
-                logging.error(f"No JSON result file found in Document AI output path: {gcs_output_uri}")
+            if not source_result_blob:
+                logging.error(f"Could not find result JSON for '{input_filename}' in output path: {api_result_folder_prefix}")
                 return None
 
-            # For a single input document, we expect a single result JSON
-            source_result_blob_name = json_results[0].name
-            logging.info(f"Found Document AI result file: {source_result_blob_name}")
-
-            # Copy the result to our standardized intermediate path for idempotency and debugging
-            logging.info(f"Copying raw result to standardized path: {DOC_AI_RAW_OUTPUT_PATH}")
-            await self.gcs_client.copy_blob_async(source_result_blob_name, DOC_AI_RAW_OUTPUT_PATH)
-
-            # Read the file from its new permanent location and return its content
-            document_data = await self.gcs_client.read_json_async(DOC_AI_RAW_OUTPUT_PATH)
-            return document_data
+            # Move the result to the clean, final path for this chunk
+            await self.gcs_client.copy_blob_async(source_result_blob.name, gcs_output_json_path)
+            logging.info(f"Saved final result for chunk to: {gcs_output_json_path}")
+            
+            return gcs_output_json_path
 
         except GoogleAPICallError as e:
-            logging.error(f"Document AI batch processing failed with an API error: {e}", exc_info=True)
+            logging.error(f"Document AI processing for chunk '{gcs_input_uri}' failed with API error: {e}", exc_info=True)
             return None
         except Exception as e:
-            logging.error(f"An unexpected error occurred during Document AI processing: {e}", exc_info=True)
+            logging.error(f"An unexpected error occurred during Document AI processing for chunk '{gcs_input_uri}': {e}", exc_info=True)
             return None
