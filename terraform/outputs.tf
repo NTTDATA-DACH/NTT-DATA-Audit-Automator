@@ -47,8 +47,3 @@ output "documentai_processor_name" {
   description = "The full resource name of the pre-built Document AI Form Parser processor."
   value       = local.docai_form_parser_processor_name
 }
-
-output "gcs_bucket_name" {
-    description = "The name of the GCS bucket created for the audit data."
-    value       = google_storage_bucket.bsi_audit_bucket.name
-}
