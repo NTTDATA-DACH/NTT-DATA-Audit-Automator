@@ -6,7 +6,7 @@ This document outlines the requirements and development protocol for a Python-ba
 
 The primary goal is to develop a cloud-native application that performs a security audit based on the German BSI Grundschutz framework. The application will run as a batch job on Google Cloud Platform (GCP), processing customer-provided documents against BSI standards and generating a structured audit report.
 
-The core of the application is a hybrid pipeline combining deterministic logic with AI-driven analysis. For complex document reviews (e.g., Chapter 3), it employs a **Ground-Truth-Driven Semantic Chunking** strategy. This involves first creating an authoritative map of the customer's system structure from documents like the `Strukturanalyse` and `Modellierung`. This map is then used to perform a context-aware extraction and reconstruction of security requirements from the `Grundschutz-Check`, ensuring highly accurate, evidence-based findings. For simpler tasks, a document-finder model provides relevant source documents as context to the Gemini model.
+The core of the application is a hybrid pipeline combining deterministic logic with AI-driven analysis. It includes a dedicated **Grundschutz-Check Extraction Stage** which uses a "Ground-Truth-Driven Semantic Chunking" strategy. This involves first creating an authoritative map of the customer's system structure from documents like the `Strukturanalyse` and `Modellierung`. This map is then used to perform a context-aware extraction and reconstruction of security requirements from the `Grundschutz-Check`, ensuring highly accurate, evidence-based findings for later analysis stages. For simpler tasks, a document-finder model provides relevant source documents as context to the Gemini model.
 
 The audit process and resulting report must be based on two key documents:
 *   The relevant **BSI Grundschutz Standards** (BSI 200-1, BSI 200-2 and BSI 200-3 and the BSI Grundschutz Kompendium 2023 with its Auditierungsschema and Zertifizierungsschem).
@@ -14,21 +14,20 @@ The audit process and resulting report must be based on two key documents:
 
 **2. Core Functional Requirements**
 
-*   **Idempotent ETL Process:** A resilient ETL job processes source documents, creates vector embeddings, and uploads them for indexing. It uses status markers (`.success`, `.failed`) in GCS to prevent reprocessing and ensure robustness.
-*   **Staged Audit Process:** The audit is conducted in discrete stages corresponding to the report chapters. The application supports running all stages or single stages. Some sections (e.g., 1.4, 5.1) are intentionally placeholders for manual auditor input.
+*   **Idempotent Pre-Processing:** A dedicated, resilient pre-processing stage (`Grundschutz-Check-Extraction`) creates authoritative intermediate data from core BSI documents. It is idempotent and its outputs are consumed by later stages.
+*   **Staged Audit Process:** The audit is conducted in discrete stages corresponding to the report chapters. The application supports running the pre-processing stage, all analysis stages, or single analysis stages. Some sections (e.g., 1.4, 5.1) are intentionally placeholders for manual auditor input.
 *   **State Management & Resumability:** The application saves the results of each stage to Google Cloud Storage (GCS). For full audit runs (`--run-all-stages`), it checks for and skips previously completed stages. For single-stage runs, it overwrites existing results by default.
 *   **Centralized Finding Collection:** The application systematically collects all structured findings (deviations and recommendations with categories 'AG', 'AS', 'E') from all stages into a central `all_findings.json` file.
 *   **Audit Type Configuration:** The application is configurable for "Überwachungsaudit" or "Zertifizierungsaudit" via an environment variable, which drives different logic in the audit planning stage (Chapter 4).
 *   **Deterministic and AI-Driven Logic:** The pipeline intelligently combines AI-driven analysis with deterministic, rule-based logic.
-    *   e.g., Chapter 5 deterministically generates a control checklist from the BSI catalog, while Chapter 3 employs a sophisticated hybrid strategy.
-    *   e.g., Chapter 3 first builds a 'ground-truth' map of the system using targeted AI calls, then uses this map to deterministically reconstruct and analyze security control data from unstructured documents, and finally uses a mix of Python and targeted AI to answer audit questions.
+    *   e.g., The `Grundschutz-Check-Extraction` stage first builds a 'ground-truth' map of the system using targeted AI calls, then uses this map to deterministically reconstruct and analyze security control data from unstructured documents.
+    *   e.g., Chapter 5 deterministically generates a control checklist by consuming the data from the extraction stage and the BSI catalog.
 *   **Comprehensive Reporting:** The final output is a comprehensive JSON audit report, populated from individual stage results and the central findings file, ready for review and finalization in the `report_editor.html` tool.
 
 **3. Gemini Model and API Interaction**
 *   **Model Configuration (Imperative):**
     *   **Generative Model:** `gemini-2.5-pro`
     *   **Max Output Tokens:** 65536
-    *   **Embedding Model:** `gemini-embedding-001` (for `3072` dimension vectors, as configured in Terraform).
 *   **Robustness:** All API calls use an asynchronous, parallel-limited (`Semaphore`), and robust error-handling wrapper with an exponential backoff retry loop.
 *   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. 
 

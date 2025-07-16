@@ -46,8 +46,8 @@ Use this only if you need to start from a "scorched-earth" state, for example, f
     # This script provides an interactive menu for all tasks.
     bash ./scripts/execute-audit-job.sh
     ```
-    *   To run the entire pipeline, select **"Run All Audit Stages"**. This will execute all steps in the correct prerequisite order, starting with scanning the previous report.
-    *   To run only the report scanning feature, select **"Scan Previous Audit Report"**.
+    *   To run the entire pipeline, select **"Run All Audit Stages"**. This will execute all steps in the correct prerequisite order, starting with the Grundschutz-Check extraction.
+    *   To run only a specific part, select the desired option from the menu.
 5.  **Generate the Final Report:** After the stages are complete, this task assembles the final report from all generated components.
     ```bash
     # Select "Generate Final Report" from the menu
@@ -61,18 +61,20 @@ The audit pipeline runs in a strict, dependency-aware order.
 
 *   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/document_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages.
 
-*   **Stage: Scan Previous Report (Prerequisite)** (`audit/stages/stage_previous_report_scan.py`): This is the first operational stage in a full run. It finds the document classified as `Vorheriger-Auditbericht` and runs three parallel AI extractions to pull structured data for Chapters 1.1-1.3 (General Info), 4.1.1-4.1.2 (Previous Audit Scope), and 7.2 (Previous Findings) into `output/results/Scan-Report.json`.
+*   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis.
 
-*   **Stage: Chapter 4 - Audit Plan Creation (Prerequisite)** (`audit/stages/stage_4_pruefplan.py`): This stage runs next to generate the audit plan. It is **conditional** on the `AUDIT_TYPE` environment variable, using different prompts and rules for a "Zertifizierungsaudit" vs. a "Überwachungsaudit".
+*   **Stage: Scan Previous Report** (`audit/stages/stage_previous_report_scan.py`): This stage can run in parallel with others. It finds the document classified as `Vorheriger-Auditbericht` and runs three parallel AI extractions to pull structured data for Chapters 1.1-1.3 (General Info), 4.1.1-4.1.2 (Previous Audit Scope), and 7.2 (Previous Findings) into `output/results/Scan-Report.json`.
+
+*   **Stage: Chapter 4 - Audit Plan Creation** (`audit/stages/stage_4_pruefplan.py`): This stage runs after the prerequisite stages. It generates the audit plan and is **conditional** on the `AUDIT_TYPE` environment variable, using different prompts and rules for a "Zertifizierungsaudit" vs. a "Überwachungsaudit". It relies on the ground-truth map created by the extraction stage.
 
 *   **Stage: Chapter 1 - General Information** (`audit/stages/stage_1_general.py`): Generates introductory content for the report.
     *   **1.4 (Informationsverbund):** Uses the "Document Finder" to retrieve relevant documents and generate a description of the audit scope.
     *   Other sections are intentionally left as placeholders for manual input.
 
-*   **Stage: Chapter 3 - Document Review** (`audit/stages/stage_3_dokumentenpruefung.py`): Performs a deep analysis of core documents. For most subchapters, it uses the Document Finder to retrieve a small, relevant set of documents for the AI to analyze. For the critical `Grundschutz-Check` analysis (3.6.1), it employs a sophisticated **Ground-Truth-Driven Semantic Chunking** strategy to ensure maximum accuracy.
+*   **Stage: Chapter 3 - Document Review** (`audit/stages/stage_3_dokumentenpruefung.py`): Performs a deep analysis of core documents. For most subchapters, it uses the Document Finder to retrieve a small, relevant set of documents for the AI to analyze. For the critical `Grundschutz-Check` analysis (3.6.1), it **consumes the high-quality data prepared by the `Grundschutz-Check-Extraction` stage** to ensure maximum accuracy.
 
 *   **Stage: Chapter 5 - On-Site Audit Preparation** (`audit/stages/stage_5_vor_ort_audit.py`): Prepares materials for the human auditor.
-    *   **5.5.2 (Control Verification):** This task is **deterministic**. It reads the audit plan from Chapter 4's output, looks up all required controls from the BSI OSCAL catalog, and enriches this list with the customer's implementation details from the data generated by Chapter 3. This generates a structured checklist for the auditor and does **not** use AI.
+    *   **5.5.2 (Control Verification):** This task is **deterministic**. It reads the audit plan from Chapter 4's output, looks up all required controls from the BSI OSCAL catalog, and enriches this list with the customer's implementation details from the data generated by the `Grundschutz-Check-Extraction` stage. This generates a structured checklist for the auditor and does **not** use AI.
 
 *   **Stage: Chapter 7 - Appendix** (`audit/stages/stage_7_anhang.py`): Generates content for the report's appendix.
     *   **7.1 (Reference Documents):** A **deterministic** task that lists all files found in the source GCS folder.

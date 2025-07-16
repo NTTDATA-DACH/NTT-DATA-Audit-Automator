@@ -77,79 +77,41 @@ This step is a crucial bridge between deep analysis (Chapter 3) and planning (Ch
 ---
 
 
-### **Phase 2:  Ground-Truth-Driven Semantic Chunking**
+### **Phase 2: Ground-Truth-Driven Extraction (via Document AI & Gemini)**
 
-This strategy establishes a definitive "ground truth" map of the customer's environment *first*, then uses that map to intelligently dissect and process the main `Grundschutz-Check` document.
+This strategy replaces manual text extraction and chunking with a highly structured, two-stage process designed for maximum precision on large, formatted documents like the `Grundschutz-Check`. It leverages specialized Google Cloud services to first identify and extract only relevant information, then uses a large language model for refinement and structuring.
 
----
+#### **Stage 1: High-Fidelity Entity Extraction with Document AI Form Parser**
 
-#### **Step 1: Establish the Ground Truth (The Context Map)**
+The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, machine-readable JSON of its constituent parts, while actively discarding irrelevant noise.
 
-The goal is to create a single, authoritative `system_structure_map.json` file. This becomes the immutable reference for the rest of the process.
+1.  **Processor:** We use Google Cloud's pre-trained **Document AI Form Parser**. This processor excels at identifying labeled data (e.g., a field named "Umsetzungsstatus:" next to its value "Ja") without requiring any custom model training.
+2.  **Input:** The entire multi-hundred-page `Grundschutz-Check` PDF is submitted for batch processing.
+3.  **Action:** The Form Parser analyzes the document, identifying and extracting entities such as:
+    *   Key-Value pairs (e.g., `{"key": "Beschreibung", "value": "..."}`).
+    *   Paragraphs (for longer, multi-line values like `Umsetzungserläuterung`).
+    *   Requirement IDs (e.g., `APP.6.A2`), which it often identifies as standalone entities or keys without a value.
+4.  **Key Advantage (Noise Reduction):** This process inherently ignores non-entity text. Repetitive headers, footers, page numbers, and decorative lines are automatically filtered out, as they do not conform to the structure of a "form."
+5.  **Output:** The result is a structured JSON file containing a list of all extracted entities, their text content, page location, and a confidence score. This JSON is significantly smaller and cleaner than the raw text of the original PDF.
 
-*   **1.1. Extract `Zielobjekte` from Strukturanalyse (A.1):**
-    *   **Input:** The `Strukturanalyse` document(s).
-    *   **Action:** Use a dedicated AI prompt to parse the document and extract a complete list of all `Zielobjekte`. For each, we will capture two key fields:
-        1.  `kürzel`: The arbitrary, unique customer-defined ID (e.g., "A-001", "IT-SYS-DB-05").
-        2.  `name`: The full, descriptive name (e.g., "Main Web Server", "CRM Datenbank").
-    *   **Output:** A master dictionary mapping every `Kürzel` to its `Name`. This will be used to find the headers in the `Grundschutz-Check`.
+#### **Stage 2: Refinement and Structuring with Gemini 2.5**
 
-*   **1.2. Extract `Modellierung` and Apply Business Rules (A.3):**
-    *   **Input:** The `Modellierung` document(s) and the BSI `Baustein` structure.
-    *   **Action:** We will perform a two-part process:
-        *   **Deterministic Rule Application:** For any `Baustein` ID that starts with `ISMS`, `ORP`, `CON`, `OPS`, or `DER`, we will *deterministically* assign it to a special, system-defined `Zielobjekt` with the `Kürzel` **"Informationsverbund"**. This is a hardcoded rule based on your insight.
-        *   **AI-Driven Extraction:** For all other `Bausteine` (those typically in layers `SYS`, `INF`, `NET`, `APP`), we will use an AI prompt to parse the `Modellierung` document and extract the `Zielobjekt Kürzel` to which each `Baustein` is assigned.
-    *   **Output:** A master mapping of every `Baustein ID` to its corresponding `Zielobjekt Kürzel`.
+The entity-based JSON from Document AI is now used as high-quality input for the LLM, which performs targeted refinement tasks rather than open-ended analysis.
 
-*   **1.3. Consolidate and Save:**
-    *   **Action:** Combine the outputs of the previous steps into the single `system_structure_map.json`. This file now contains our complete ground truth: a list of all `Zielobjekte` (`Kürzel` + `Name`) and a complete mapping of every `Baustein` to its parent `Zielobjekt Kürzel`.
+1.  **Input:** The JSON output from the Form Parser, the `system_map.json` (containing mappings of `Baustein` prefixes to `Zielobjekte`), and a predefined output schema (`3.6.1_extraction_schema.json`).
+2.  **Prompting Strategy:** Gemini is given a highly specific prompt that instructs it to act as a data refiner, not a reader. The prompt includes:
+    *   **System Instruction:** "You are an expert system for refining BSI Grundschutz data. Your input is a JSON of entities extracted by a form parser. Your task is to assemble these entities into a final, structured list of requirements."
+    *   **Rules:**
+        *   "Group related entities (ID, title, status, explanation) into a single requirement object."
+        *   "Using the provided `system_map.json`, infer the correct `Zielobjekt` for each requirement based on its ID prefix (e.g., an ID starting with `SYS.1.1` belongs to the `SYS.1.1` Zielobjekt)."
+        *   "Normalize minor OCR errors (e.g., 'ertluterung' becomes 'Erläuterung')."
+        *   "Your output MUST be a single JSON object that strictly conforms to the provided `3.6.1_extraction_schema.json`."
+3.  **Output:** The LLM produces the final, clean intermediate files:
+    *   **`system_structure_map.json`**: The authoritative map of the customer's environment.
+    *   **`extracted_grundschutz_check_merged.json`**: A structured, de-duplicated, and contextually complete list of all security requirements. This file becomes the reliable source of truth for all subsequent audit analysis in Chapter 3 and Chapter 5.
 
+This hybrid approach ensures maximum accuracy and traceability by using the right tool for each job: Document AI for structured extraction and Gemini for contextual refinement and formatting.
 
----
-
-#### **Step 2: Context-Aware AI Extraction**
-
-This Step now uses AI extraction to keep the context in which chapter an Anforderung is mentioned.
-
-*   **Action:** We split the `Grundschutz-Check` document into chunks. Once in 19 Page and 21 page ones for the two runs. Call the AI on them. In parallel.
-*   **Prompt Logic:** The prompt is now extremely simple and direct:
-    > "Extract all security requirements (their Anforderungs-ID (eg "OPS.1.3.4.A1" or "SYS.1.1.A3"), the "Umsetzungsstatus" (like "Umgesetzt", "Entbehrlich, "Teilweise Umgesetzt" -> "Teilweise", "Nein" - "Nicht umgesetzt"), "Umsetzungserläuterung"(and if it exists a Date)  ) **AND** all chapter_headers form from the provided document. Important: Note the page Number for each of them. The chapter_headers are lines of text, starting at the beginning consisting a kürzel and a name of the Zielobjekt like "S-001 Windows Server" -> kürzel="S-001", name="Windows Server". Return this in JSON together with all the Anforderungen.
-*   **Schema Update:** The `stage_3_6_1_extract_check_data_schema.json` will be updated to allow for the "chapter_heading" and  require the `pagenumber` field for "Anforderungen" and "chapter_heading".
-
----
-
-#### **Step 3: Final "Merge-and-Refine" Reconstruction**
-
-This final Step assembles the resulting json of all anforderungen and which Zielobjekt they belong to.
-
-*   **3.1. Assing by Kürzel Key:**
-    *   Check the list of chapter_headings and their page numbers.
-    *   build the result array with all kürzel from chapter_headings
-    *   Find all Anforderungen with the same page numbers from both runs and add them as elements to the corresponding kürzel in the result array.
-
-
-*   **3.2. Merge (per kürzel):**
-    *   Go through all the kürzel in the result array.
-    *   Find those with the same Anforderungs-ID and merge them. 
-    *   **`titel`:** Longest and most complete.
-    *   **`umsetzungserlaeuterung`:** Combine unique sentences from all versions.
-    *   **`umsetzungsstatus`:** Highest priority (`Nein` > `teilweise` > `Ja` > `entbehrlich`).
-    *   **`datumLetztePruefung`:** Most recent valid date.
-
-*   **3.3. Final Assembly:**
-    *   The output is a clean, flat list of fully reconstructed requirements. Each object in the list is now complete, de-duplicated, and an element of the `Zielobjekt Kürzel`. This becomes our final `extracted_grundschutz_check_merged.json`.
-
-
-### **Sub-Phase 2.B: Deterministic & Targeted AI Analysis**
-This phase uses the clean, structured JSON data from the extraction to answer the five audit questions with surgical precision, using the right tool for each job.
-
-1.  **Load Extracted Data:** The runner loads the merged intermediate JSON file. The original PDF is now irrelevant for this analysis.
-2.  **Execute Hybrid Logic Question-by-Question:**
-    *   **Q1 (Status Check) & Q5 (Date Check):** These are answered with **100% deterministic Python code.** The script simply iterates the JSON list to check for the presence of the `umsetzungsstatus` field and to perform date arithmetic on the `datumLetztePruefung` field. Using Python here is infinitely faster, cheaper, and more reliable than using an LLM for a simple, non-semantic task.
-    *   **Q2 (Plausibility of 'entbehrlich'):** This requires semantic understanding, making it an AI task. However, instead of asking the AI to find these items, the script first **filters the JSON to isolate only the items marked "entbehrlich."** It then sends this tiny, focused list to the AI. The model's attention is not wasted on searching; it is entirely dedicated to analyzing the justifications' plausibility.
-    *   **Q3 (MUSS requirements):** This is another targeted AI task. The script first **deterministically queries the `ControlCatalog`** to get a definitive list of all Level 1 "MUSS" control IDs. It then filters the extracted JSON to create a small list of just these MUSS requirements and sends them to the AI to verify they are all marked "Ja".
-    *   **Q4 (Unmet requirements):** This is the pinnacle of the hybrid approach. The script filters the JSON for items marked "nein" or "teilweise". It then sends this structured list of unmet requirements to the AI **along with the unstructured GCS URI for the entire "Realisierungsplan" PDF.** The prompt instructs the model to perform a cross-referencing task: for each item in the list, verify it is documented in the attached plan. This combines structured data, unstructured data, and semantic analysis in a single, powerful call.
-3.  **Consolidate Findings:** The findings from all five questions are consolidated into one final finding for the subchapter.
 
 ---
 

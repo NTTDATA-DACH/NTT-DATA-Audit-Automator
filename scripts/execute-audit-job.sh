@@ -51,7 +51,7 @@ done
 
 # --- INTERACTIVE SELECTION: Task/Stage ---
 echo "🔹 Please select the task to execute."
-tasks=("Scan Previous Audit Report" "Run Grundschutz-Check Extraction" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
+tasks=("Run Grundschutz-Check Extraction (Prerequisite)" "Scan Previous Audit Report" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
 PS3="Select task number: "
 declare TASK_ARGS=""
 declare FORCE_FLAG=""
@@ -59,11 +59,11 @@ declare FORCE_FLAG=""
 select task in "${tasks[@]}"; do
   case $task in
     "Scan Previous Audit Report")
-      TASK_ARGS="--scan-previous-report"
+      TASK_ARGS="--run-stage,Scan-Report"
       FORCE_FLAG=",--force" # Scanning should always be forced to get latest
       break
       ;;
-    "Run Grundschutz-Check Extraction")
+    "Run Grundschutz-Check Extraction (Prerequisite)")
       TASK_ARGS="--run-gs-check-extraction"
       read -p "Force re-run? (Overwrites existing extracted data) [y/N]: " force_choice
       if [[ "$force_choice" =~ ^[Yy]$ ]]; then
@@ -83,10 +83,11 @@ select task in "${tasks[@]}"; do
           echo "Invalid stage selection. Try again."
         fi
       done
-      read -p "Force re-run? (Re-classifies documents & overwrites stage results) [y/N]: " force_choice
-      if [[ "$force_choice" =~ ^[Yy]$ ]]; then
-          FORCE_FLAG=",--force"
-      fi
+      # Single stage runs are forced by default in main.py
+      # read -p "Force re-run? (Re-classifies documents & overwrites stage results) [y/N]: " force_choice
+      # if [[ "$force_choice" =~ ^[Yy]$ ]]; then
+      #     FORCE_FLAG=",--force"
+      # fi
       break
       ;;
     "Run All Audit Stages")
@@ -122,6 +123,7 @@ echo "🚀 Executing task with args: [main.py ${FULL_TASK_ARGS//,/ }]"
 gcloud run jobs execute "bsi-audit-automator-job" \
   --region "${VERTEX_AI_REGION}" \
   --project "${GCP_PROJECT_ID}" \
+  --wait \
   --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
   --args="${FULL_TASK_ARGS}"
 
