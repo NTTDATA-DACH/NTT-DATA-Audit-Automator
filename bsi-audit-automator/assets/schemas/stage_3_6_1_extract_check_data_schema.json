@@ -51,20 +51,8 @@
           "pagenumber"
         ]
       }
-    },
-    "chapter_headings": {
-      "type": "array",
-      "description": "A list of all chapter headings found, which correspond to Zielobjekte.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "kuerzel": { "type": "string", "description": "The short ID of the Zielobjekt, e.g., 'S-001'." },
-          "name": { "type": "string", "description": "The descriptive name of the Zielobjekt, e.g., 'Windows Server'." },
-          "pagenumber": { "type": "integer", "description": "The page number where this heading was found." }
-        },
-        "required": ["kuerzel", "name", "pagenumber"]
-      }
     }
+
   },
-  "required": ["anforderungen", "chapter_headings"]
+  "required": ["anforderungen"]
 }

@@ -2,7 +2,8 @@
 import logging
 import json
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any
+from collections import defaultdict
 
 from google.cloud.exceptions import NotFound
 
@@ -42,16 +43,17 @@ class GrundschutzCheckExtractionRunner:
 
     async def _build_system_structure_map(self, force_remap: bool) -> Dict[str, Any]:
         """Orchestrates the creation of the ground truth map."""
-        if not force_remap:
+        if force_remap:
+            logging.info("Force remapping enabled. Generating new ground truth map.")
+        else:
             try:
                 map_data = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
                 logging.info(f"Using cached ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
                 return map_data
             except NotFound:
                 logging.info("Ground truth map not found. Generating...")
-        else:
-            logging.info("Force remapping enabled. Generating new ground truth map.")
 
+        # --- Generation logic only runs if force_remap is true or file not found ---
         zielobjekte_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
         zielobjekte_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]["extract_zielobjekte"]
         zielobjekte_res = await self.ai_client.generate_json_response(
@@ -71,9 +73,17 @@ class GrundschutzCheckExtractionRunner:
             request_context_log="GT: Extract Baustein Mappings"
         )
         
+        # --- IMPROVEMENT: Correctly group the mappings into a dictionary ---
+        baustein_mappings = defaultdict(list)
+        for mapping in mappings_res.get("mappings", []):
+            baustein_id = mapping.get("baustein_id")
+            zielobjekt_kuerzel = mapping.get("zielobjekt_kuerzel")
+            if baustein_id and zielobjekt_kuerzel:
+                baustein_mappings[baustein_id].append(zielobjekt_kuerzel)
+        
         final_map = {
             "zielobjekte": zielobjekte_list,
-            "baustein_to_zielobjekt_mapping": mappings_res.get("mappings", [])
+            "baustein_to_zielobjekt_mapping": baustein_mappings
         }
         
         await self.gcs_client.upload_from_string_async(

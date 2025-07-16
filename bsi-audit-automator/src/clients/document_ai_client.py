@@ -3,7 +3,14 @@ import logging
 import asyncio
 import json
 from typing import Dict, Any, Optional
-from google.cloud import documentai
+from google.cloud import documentai_v1 as documentai
+from google.cloud.documentai_v1.types import (
+    BatchDocumentsInputConfig,
+    BatchProcessRequest,
+    DocumentOutputConfig,
+    GcsDocument,
+    GcsDocuments
+)
 
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPICallError
