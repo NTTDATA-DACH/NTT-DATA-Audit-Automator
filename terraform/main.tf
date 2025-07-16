@@ -144,12 +144,3 @@ resource "google_document_ai_processor" "bsi_layout_parser" {
 
   depends_on = [google_project_service.project_apis]  # Ensure Document AI API is enabled first
 }
-
-# --- NEW: SET DEFAULT PROCESSOR VERSION ---
-# This sets the default version to the specified pretrained layout parser model.
-resource "google_document_ai_processor_default_version" "bsi_layout_parser_default" {
-  processor = google_document_ai_processor.bsi_layout_parser.name
-  version   = "${google_document_ai_processor.bsi_layout_parser.name}/processorVersions/pretrained-layout-parser-v1.0-2024-06-03"
-
-  depends_on = [google_document_ai_processor.bsi_layout_parser]
-}
