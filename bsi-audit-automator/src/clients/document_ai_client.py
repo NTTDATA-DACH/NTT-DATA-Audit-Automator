@@ -9,8 +9,7 @@ from google.cloud.documentai_v1.types import (
     BatchProcessRequest,
     DocumentOutputConfig,
     GcsDocument,
-    GcsDocuments,
-    GcsOutputConfig
+    GcsDocuments
 )
 
 from google.api_core.client_options import ClientOptions
@@ -43,10 +42,10 @@ class DocumentAiClient:
         # The client needs the location for its regional endpoint.
         try:
             self.processor_name = self.config.doc_ai_processor_name
-            self.location = self.processor_name.split('/')[3]
-            opts = ClientOptions(api_endpoint=f"{self.location}-documentai.googleapis.com")
+            self.location = "eu" # self.processor_name.split('/')[3]
+            opts = ClientOptions(api_endpoint="eu-documentai.googleapis.com")
             self.client = documentai.DocumentProcessorServiceClient(client_options=opts)
-            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'.")
+            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'. processor name: {self.processor_name} ")
         except (IndexError, TypeError) as e:
             logging.error(f"Could not parse location from Document AI processor name: '{self.processor_name}'")
             raise ValueError("Invalid Document AI processor name format.") from e
@@ -74,7 +73,7 @@ class DocumentAiClient:
         batch_input_config = documentai.BatchDocumentsInputConfig(gcs_documents=documentai.GcsDocuments(documents=[input_config]))
         
         # Correctly construct the output configuration object
-        gcs_output_config = GcsOutputConfig(gcs_uri=gcs_output_uri)
+        gcs_output_config = DocumentOutputConfig.GcsOutputConfig(gcs_uri=gcs_output_uri)
         output_config = DocumentOutputConfig(gcs_output_config=gcs_output_config)
 
         request = documentai.BatchProcessRequest(
