@@ -71,7 +71,10 @@ class DocumentAiClient:
 
         input_config = documentai.GcsDocument(gcs_uri=gcs_input_uri, mime_type="application/pdf")
         batch_input_config = documentai.BatchDocumentsInputConfig(gcs_documents=documentai.GcsDocuments(documents=[input_config]))
-        output_config = documentai.DocumentOutputConfig(gcs_output_config=documentai.GcsOutputConfig(gcs_uri=gcs_output_uri))
+        
+        # Correctly construct the output configuration object
+        gcs_output_config = documentai.GcsOutputConfig(gcs_uri=gcs_output_uri)
+        output_config = documentai.DocumentOutputConfig(gcs_output_config=gcs_output_config)
 
         request = documentai.BatchProcessRequest(
             name=self.processor_name,
