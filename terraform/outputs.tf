@@ -1,28 +1,3 @@
-output "vertex_ai_index_id" {
-  description = "The full resource ID of the created Vertex AI Index."
-  value       = google_vertex_ai_index.bsi_audit_index.id
-}
-
-output "vertex_ai_index_endpoint_id" {
-  description = "The full resource ID of the created Vertex AI Index Endpoint."
-  value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.id
-}
-
-output "vertex_ai_index_endpoint_public_domain" {
-  description = "The public domain name for querying the index endpoint. Our Python app will use this."
-  value       = google_vertex_ai_index_endpoint.bsi_audit_endpoint.public_endpoint_domain_name
-}
-
-output "next_step_gcloud_command" {
-  description = "Example gcloud command to deploy the index to the endpoint after the index is populated."
-  value       = "gcloud ai index-endpoints deploy-index ${google_vertex_ai_index_endpoint.bsi_audit_endpoint.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index --display-name=bsi_deployed_index --project=${var.project_id} --region=${var.region}"
-}
-
-output "vector_index_data_gcs_path" {
-  description = "The GCS path where the Python application must upload the embedding data files (e.g., index_data.jsonl). The Vertex AI Index automatically monitors this path."
-  value       = local.index_contents_path
-}
-
 output "service_account_email" {
   description = "The email of the custom service account created for the Cloud Run Job."
   value       = google_service_account.bsi_job_sa.email
@@ -61,4 +36,9 @@ output "vpc_network_name" {
 output "subnet_name" {
   description = "The name of the Subnet created for the Cloud Run Job to connect to."
   value       = google_compute_subnetwork.bsi_audit_subnet.name
+}
+
+output "gcs_bucket_name" {
+    description = "The name of the GCS bucket created for the audit data."
+    value       = google_storage_bucket.bsi_audit_bucket.name
 }

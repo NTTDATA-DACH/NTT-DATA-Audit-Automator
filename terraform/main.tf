@@ -28,12 +28,13 @@ locals {
     "run.googleapis.com",                 # Cloud Run Jobs
     "cloudbuild.googleapis.com",          # Cloud Build (for deploying from source)
     "artifactregistry.googleapis.com",    # Artifact Registry (to store images)
-    "aiplatform.googleapis.com",          # Vertex AI (for embeddings and Vector Search)
+    "aiplatform.googleapis.com",          # Vertex AI (for Gemini models)
     "storage.googleapis.com",             # Cloud Storage
     "cloudresourcemanager.googleapis.com", # Required by many services
     "compute.googleapis.com",            # Required for creating VPC Networks
     "servicenetworking.googleapis.com",  # Required for creating VPC Networks
-    "iam.googleapis.com"                 # Required for creating Service Accounts and IAM bindings
+    "iam.googleapis.com",                 # Required for creating Service Accounts and IAM bindings
+    "documentai.googleapis.com"           # NEW: Added for the new Document AI-based strategy
   ]
 }
 
@@ -75,27 +76,12 @@ resource "google_service_account" "bsi_job_sa" {
   depends_on = [google_project_service.project_apis]
 }
 
-# --- NEW: PLACEHOLDER FILE FOR INDEX CREATION ---
-# Create an empty, validly named JSON file in the vector index directory.
-# This is required to satisfy the API's validation check during 'terraform apply'.
-resource "google_storage_bucket_object" "json_placeholder" {
-  name         = "vector_index_data/placeholder.json"
-  bucket       = google_storage_bucket.bsi_audit_bucket.name
-  content_type = "application/json"
-  # One Dummy 
-  content      =<<EOT
-{"id": "DUMMY", "sparse_embedding": {"values": [0.1, 0.2], "dimensions": [1, 4]}}
-  EOT
-}
-
-# 1. NETWORKING: A VPC is required for the Vertex AI Index Endpoint.
+# 1. NETWORKING: A VPC and Subnet are required for the Cloud Run Job.
 resource "google_compute_network" "bsi_vpc" {
   name                    = var.vpc_network_name
   auto_create_subnetworks = false
   depends_on = [google_project_service.project_apis]
 }
-
-# Add this new resource block to terraform/main.tf
 
 resource "google_compute_subnetwork" "bsi_audit_subnet" {
   name                     = "bsi-audit-subnet"
@@ -108,95 +94,21 @@ resource "google_compute_subnetwork" "bsi_audit_subnet" {
   depends_on = [google_compute_network.bsi_vpc]
 }
 
-resource "google_compute_global_address" "peering_range" {
-  name          = "vertex-ai-peering-range"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = google_compute_network.bsi_vpc.id
-}
 
-resource "google_service_networking_connection" "vertex_vpc_connection" {
-  network                 = google_compute_network.bsi_vpc.id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.peering_range.name]
-}
-
-
-# 2. VECTOR DATABASE: The Vertex AI Index and its Endpoint.
+# 2. IAM & PERMISSIONS: Applying the Principle of Least Privilege
 # -----------------------------------------------------------------
 
-locals {
-  # --- CHANGE: DYNAMICALLY USE THE CREATED BUCKET ---
-  # This path now refers to the bucket created above, not a variable.
-  index_contents_path = "gs://${google_storage_bucket.bsi_audit_bucket.name}/vector_index_data/"
-}
-
-resource "google_vertex_ai_index" "bsi_audit_index" {
-  display_name = "bsi-audit-index"
-  description  = "Vector search index for BSI audit documents for project ${var.project_id}."
-  region       = var.region
-
-  metadata {
-    contents_delta_uri = local.index_contents_path
-    config {
-      dimensions                  = 3072
-      approximate_neighbors_count = 150
-      algorithm_config {
-        tree_ah_config {
-          leaf_node_embedding_count = 500
-        }
-      }
-    }
-  }
-
-  # --- FIX: PREVENT COSTLY INDEX REBUILDS ---
-  # Ignore changes to the metadata block after initial creation.
-  # This prevents Terraform from triggering a time-consuming index rebuild on every apply.
-  lifecycle {
-    ignore_changes = [metadata, description, display_name]
-  }
-}
-
-resource "google_vertex_ai_index_endpoint" "bsi_audit_endpoint" {
-  display_name = "bsi-audit-endpoint"
-  description  = "Endpoint for querying the BSI audit index for project ${var.project_id}."
-  region       = var.region
-  # --- FIX FOR PROJECT NUMBER ERROR ---
-  # To make the endpoint accessible from cloud shell, we enable the public endpoint.
-  # public_endpoint_enabled = true
-
-  # Ignore cosmetic changes to prevent unwanted updates.
-  lifecycle {
-    ignore_changes = [description, display_name]
-  }
-
-  # --- FIX: USE A PROVISIONER TO DEPLOY THE INDEX ---
-  # This runs the gcloud command on the local machine after the endpoint is created.
-  provisioner "local-exec" {
-    when = create
-    command = "gcloud ai index-endpoints deploy-index ${self.name} --index=${google_vertex_ai_index.bsi_audit_index.name} --deployed-index-id=bsi_deployed_index_kunde_x --display-name='BSI Deployed Index' --project=${var.project_id} --region=${var.region}"
-  }
-
-  # --- FIX: ADD A DESTROY PROVISIONER TO UNDEPLOY THE INDEX ---
-  # This runs before the resource is destroyed, ensuring the endpoint is empty.
-  # It MUST only use 'self' attributes, not 'var' attributes.
-  provisioner "local-exec" {
-    when = destroy
-    command = "gcloud ai index-endpoints undeploy-index ${self.name} --deployed-index-id=bsi_deployed_index_kunde_x --project=${self.project} --region=${self.region} --quiet"
-  }
-
-  # The endpoint depends on the index existing first.
-  depends_on = [google_vertex_ai_index.bsi_audit_index]
-}
-
-# 3. IAM & PERMISSIONS: Applying the Principle of Least Privilege
-# -----------------------------------------------------------------
-
-# Grant our new Service Account permission to use Vertex AI.
+# Grant our new Service Account permission to use Vertex AI Gemini models.
 resource "google_project_iam_member" "sa_vertex_access" {
   project = var.project_id
   role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.bsi_job_sa.email}"
+}
+
+# Grant our new Service Account permission to use Document AI.
+resource "google_project_iam_member" "sa_documentai_access" {
+  project = var.project_id
+  role    = "roles/documentai.user"
   member  = "serviceAccount:${google_service_account.bsi_job_sa.email}"
 }
 
