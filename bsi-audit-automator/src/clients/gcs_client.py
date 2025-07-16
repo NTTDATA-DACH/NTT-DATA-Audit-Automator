@@ -52,6 +52,24 @@ class GcsClient:
             None, self.upload_from_string, content, destination_blob_name, content_type
         )
 
+    def upload_from_bytes(self, content: bytes, destination_blob_name: str, content_type: str = 'application/pdf'):
+        """
+        Synchronously uploads bytes content to a specified blob in GCS.
+
+        Args:
+            content: The bytes content to upload.
+            destination_blob_name: The full path for the object in the bucket.
+            content_type: The MIME type of the content.
+        """
+        logging.info(f"Uploading bytes content to gs://{self.bucket.name}/{destination_blob_name}")
+        blob = self.bucket.blob(destination_blob_name)
+        blob.upload_from_string(content, content_type=content_type) # upload_from_string can handle bytes
+
+    async def upload_from_bytes_async(self, content: bytes, destination_blob_name: str, content_type: str = 'application/pdf'):
+        """Asynchronously uploads bytes content to a specified blob in GCS."""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.upload_from_bytes, content, destination_blob_name, content_type)
+
     def upload_from_string(self, content: str, destination_blob_name: str, content_type: str = 'application/json'):
         """
         Synchronously uploads a string content to a specified blob in GCS.
