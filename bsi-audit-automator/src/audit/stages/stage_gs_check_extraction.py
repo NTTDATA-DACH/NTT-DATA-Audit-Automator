@@ -130,8 +130,7 @@ class GrundschutzCheckExtractionRunner:
             chunk_json_path = f"{self.DOC_AI_CHUNK_RESULTS_PREFIX}chunk_{i}.json"
             if chunk_json_path not in processed_chunk_paths:
                 logging.warning(f"Result for {chunk_json_path} not found. The merged document may be incomplete.")
-                continue
-
+                raise FileNotFoundError(f"Result for {chunk_json_path} not found. Processing cannot continue.")
             logging.info(f"Merging result from: {chunk_json_path}")
             chunk_data = await self.gcs_client.read_json_async(chunk_json_path)
             blocks_to_process = chunk_data.get("documentLayout", {}).get("blocks", [])

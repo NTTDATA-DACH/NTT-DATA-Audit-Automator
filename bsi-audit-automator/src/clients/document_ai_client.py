@@ -33,7 +33,7 @@ class DocumentAiClient:
             self.location = "eu"
             opts = ClientOptions(api_endpoint="eu-documentai.googleapis.com")
             self.client = documentai.DocumentProcessorServiceClient(client_options=opts)
-            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'.")
+            logging.info(f"DocumentAI Client initialized for processor in location '{self.location}'. processor name: {self.processor_name} ")
         except (IndexError, TypeError) as e:
             logging.error(f"Could not parse location from Document AI processor name: '{self.config.doc_ai_processor_name}'")
             raise ValueError("Invalid Document AI processor name format.") from e
@@ -66,9 +66,10 @@ class DocumentAiClient:
         batch_input_config = BatchDocumentsInputConfig(gcs_documents=GcsDocuments(documents=[input_config]))
         
         gcs_output_config = DocumentOutputConfig.GcsOutputConfig(gcs_uri=gcs_output_uri_for_api)
+        # DocumentOutputConfig.GcsOutputConfig(gcs_uri=gcs_output_uri)
         output_config = DocumentOutputConfig(gcs_output_config=gcs_output_config)
 
-        request = BatchProcessRequest(
+        request = documentai.BatchProcessRequest(
             name=self.processor_name,
             input_documents=batch_input_config,
             document_output_config=output_config,
