@@ -45,5 +45,5 @@ output "gcs_bucket_name" {
 
 output "documentai_processor_name" {
   description = "The full resource name of the Document AI processor (use this in your app config/scripts)"
-  value       = "https://eu-documentai.googleapis.com/v1/projects/${data.google_project.project.number}/locations/eu/processors/${google_document_ai_processor.bsi_layout_parser.name}:process"
+  value       = "projects/${data.google_project.project.number}/locations/eu/processors/${google_document_ai_processor.bsi_layout_parser.name}"
 }

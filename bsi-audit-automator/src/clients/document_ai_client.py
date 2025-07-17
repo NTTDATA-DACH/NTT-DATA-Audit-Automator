@@ -75,6 +75,8 @@ class DocumentAiClient:
             document_output_config=output_config,
         )
 
+        # raise SystemExit(f"Full BatchProcessRequest dump:\n{request}")
+
         try:
             operation = self.client.batch_process_documents(request=request)
             logging.info(f"Waiting for Document AI operation for '{input_filename}' to complete...")
