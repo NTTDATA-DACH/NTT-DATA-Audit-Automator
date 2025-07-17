@@ -157,7 +157,6 @@ echo ""
 gcloud run jobs execute "${JOB_NAME}" \
   --region "${REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --wait \
   --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},REGION=${REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},DOC_AI_PROCESSOR_NAME=${DOC_AI_PROCESSOR_NAME}" \
   --args="${FULL_TASK_ARGS}"
 
