@@ -2,15 +2,26 @@
 set -euo pipefail
 
 # ===================================================================
-# INTERACTIVE SCRIPT TO EXECUTE ANY BSI AUDIT TASK
+# INTERACTIVE SCRIPT TO EXECUTE THE BSI AUDIT AUTOMATOR CLOUD RUN JOB
 # ===================================================================
-# NOTE: This script ASSUMES it is being run from the project root directory.
+# This script interactively prompts for the audit type and task, then
+# triggers the corresponding Google Cloud Run job with the correct
+# environment variables and arguments.
+#
+# PREREQUISITES:
+#   - You must have run 'terraform apply' in the ../terraform directory.
+#   - You must have the 'gcloud' and 'terraform' CLIs installed and authenticated.
+#
+# USAGE:
+#   Run this from the project root directory ('bsi-audit-automator'):
+#      ./run_cloud_job.sh
+# ===================================================================
 
 # --- Script Usage ---
 usage() {
   echo "Usage: $0"
-  echo "Interactively selects and executes a BSI audit task. Must be run"
-  echo "from the project root ('bsi-audit-automator')."
+  echo "Interactively selects and executes a BSI audit task as a Cloud Run job."
+  echo "Must be run from the project root ('bsi-audit-automator')."
   exit 1
 }
 
@@ -19,9 +30,9 @@ if [[ $# -ne 0 ]]; then
   usage
 fi
 
-# --- Configuration ---
-# Set to "true" to run in test mode (processes fewer files/items)
-TEST_MODE="false"
+# --- Configuration for the Cloud Run Job ---
+# Set to "false" for a production-like run. Set to "true" to process fewer files/items.
+TEST="false"
 MAX_CONCURRENT_AI_REQUESTS=5
 
 # --- Dynamic Values from Terraform ---
@@ -32,74 +43,93 @@ if [ ! -d "$TERRAFORM_DIR" ]; then
     echo "   Please run this script from the project root ('bsi-audit-automator')."
     exit 1
 fi
+
 GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-VERTEX_AI_REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
-BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw vector_index_data_gcs_path | cut -d'/' -f3)"
+REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
+BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
+DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
+JOB_NAME="bsi-audit-automator-job" # The name of the Cloud Run Job resource
+
+echo "   - GCP Project: ${GCP_PROJECT_ID}"
+echo "   - Region: ${REGION}"
+echo "   - GCS Bucket: ${BUCKET_NAME}"
+echo "   - DocAI Processor: retrieved"
+echo ""
 
 # --- INTERACTIVE SELECTION: Audit Type ---
-echo "🔹 Please select the audit type."
+echo "🔹 Please select the audit type for this run."
 audit_types=("Zertifizierungsaudit" "1. Überwachungsaudit" "2. Überwachungsaudit")
 PS3="Select audit type number: "
 select AUDIT_TYPE in "${audit_types[@]}"; do
   if [[ -n "$AUDIT_TYPE" ]]; then
-    echo "Selected audit type: $AUDIT_TYPE"
+    echo "   Selected audit type: $AUDIT_TYPE"
+    echo ""
     break
   else
-    echo "Invalid selection. Try again."
+    echo "   Invalid selection. Try again."
   fi
 done
 
 # --- INTERACTIVE SELECTION: Task/Stage ---
 echo "🔹 Please select the task to execute."
-tasks=("Run Grundschutz-Check Extraction (Prerequisite)" "Scan Previous Audit Report" "Run Single Audit Stage" "Run All Audit Stages" "Generate Final Report" "Quit")
+tasks=(
+    "Run Grundschutz-Check Extraction (Idempotent Prerequisite)"
+    "Scan Previous Audit Report"
+    "Run Single Audit Stage"
+    "Run All Audit Stages (Full Pipeline)"
+    "Generate Final Report"
+    "Quit"
+)
 PS3="Select task number: "
-declare TASK_ARGS=""
-declare FORCE_FLAG=""
+main_arg=""
+force_arg=""
 
 select task in "${tasks[@]}"; do
   case $task in
     "Scan Previous Audit Report")
-      TASK_ARGS="--run-stage,Scan-Report"
-      FORCE_FLAG=",--force" # Scanning should always be forced to get latest
+      main_arg="--scan-previous-report"
+      read -p "   Force re-run? (Overwrites existing scanned data) [y/N]: " force_choice
+      if [[ "$force_choice" =~ ^[Yy]$ ]]; then
+          force_arg=",--force"
+      fi
       break
       ;;
-    "Run Grundschutz-Check Extraction (Prerequisite)")
-      TASK_ARGS="--run-gs-check-extraction"
-      read -p "Force re-run? (Overwrites existing extracted data) [y/N]: " force_choice
+    "Run Grundschutz-Check Extraction (Idempotent Prerequisite)")
+      main_arg="--run-gs-check-extraction"
+      read -p "   Force re-run? (Overwrites existing extracted data) [y/N]: " force_choice
       if [[ "$force_choice" =~ ^[Yy]$ ]]; then
-          FORCE_FLAG=",--force"
+          force_arg=",--force"
       fi
       break
       ;;
     "Run Single Audit Stage")
-      echo "🔹 Please select the stage to run."
+      echo "   🔹 Please select the stage to run."
       stages=("Chapter-1" "Chapter-3" "Chapter-4" "Chapter-5" "Chapter-7")
-      PS3_STAGE="Select stage number: "
+      PS3_STAGE="   Select stage number: "
       select STAGE_NAME in "${stages[@]}"; do
         if [[ -n "$STAGE_NAME" ]]; then
-          TASK_ARGS="--run-stage,${STAGE_NAME}"
+          main_arg="--run-stage,${STAGE_NAME}"
           break
         else
-          echo "Invalid stage selection. Try again."
+          echo "   Invalid stage selection. Try again."
         fi
       done
-      # Single stage runs are forced by default in main.py
-      # read -p "Force re-run? (Re-classifies documents & overwrites stage results) [y/N]: " force_choice
-      # if [[ "$force_choice" =~ ^[Yy]$ ]]; then
-      #     FORCE_FLAG=",--force"
-      # fi
+      read -p "   Force re-run? (Overwrites existing stage results) [y/N]: " force_choice
+      if [[ "$force_choice" =~ ^[Yy]$ ]]; then
+          force_arg=",--force"
+      fi
       break
       ;;
-    "Run All Audit Stages")
-      TASK_ARGS="--run-all-stages"
-      read -p "Force re-run? (Re-classifies documents & overwrites all stage results) [y/N]: " force_choice
+    "Run All Audit Stages (Full Pipeline)")
+      main_arg="--run-all-stages"
+      read -p "   Force re-run? (Overwrites all existing stage results) [y/N]: " force_choice
        if [[ "$force_choice" =~ ^[Yy]$ ]]; then
-          FORCE_FLAG=",--force"
+          force_arg=",--force"
       fi
       break
       ;;
     "Generate Final Report")
-      TASK_ARGS="--generate-report"
+      main_arg="--generate-report"
       break
       ;;
     "Quit")
@@ -112,19 +142,24 @@ select task in "${tasks[@]}"; do
   esac
 done
 
-# Combine the main task arguments with the force flag
-FULL_TASK_ARGS="${TASK_ARGS}${FORCE_FLAG}"
+# The --args flag on gcloud run jobs execute wants a single comma-separated string.
+# We build it by concatenating the main argument and the optional force flag.
+FULL_TASK_ARGS="${main_arg}${force_arg}"
 
 # --- Final gcloud Execution ---
-# Using //,/ / to replace commas with spaces for a more readable display.
-echo "🚀 Executing task with args: [main.py ${FULL_TASK_ARGS//,/ }]"
+echo ""
+echo "🚀 Preparing to execute Cloud Run job '${JOB_NAME}'..."
+echo "   With args: [${FULL_TASK_ARGS//,/ }]"
+echo ""
 
 # The '--args' flag on 'gcloud run jobs execute' overrides the default command arguments.
-gcloud run jobs execute "bsi-audit-automator-job" \
-  --region "${VERTEX_AI_REGION}" \
+# A comma is used as the delimiter for arguments.
+gcloud run jobs execute "${JOB_NAME}" \
+  --region "${REGION}" \
   --project "${GCP_PROJECT_ID}" \
   --wait \
-  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},VERTEX_AI_REGION=${VERTEX_AI_REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST_MODE},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS}" \
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},REGION=${REGION},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},DOC_AI_PROCESSOR_NAME=${DOC_AI_PROCESSOR_NAME}" \
   --args="${FULL_TASK_ARGS}"
 
+echo ""
 echo "✅ Job execution finished."
