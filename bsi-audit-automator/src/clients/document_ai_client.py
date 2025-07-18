@@ -42,6 +42,25 @@ class DocumentAiClient:
         self.client = documentai.DocumentProcessorServiceClient(client_options=opts)
         logging.info(f"DocumentAI Client initialized for processor '{self.processor_name}' in location '{self.location}'.")
 
+    def _adjust_text_anchors_recursive(self, data: Any, offset: int):
+        """
+        Recursively finds and adjusts 'startIndex' and 'endIndex' in a Document AI structure
+        by adding the given offset. This is critical when merging sharded results.
+        """
+        if isinstance(data, dict):
+            if 'textAnchor' in data and data['textAnchor'].get('textSegments'):
+                for segment in data['textAnchor']['textSegments']:
+                    if segment.get('startIndex') is not None:
+                        segment['startIndex'] = str(int(segment['startIndex']) + offset)
+                    if segment.get('endIndex') is not None:
+                        segment['endIndex'] = str(int(segment['endIndex']) + offset)
+            
+            for value in data.values():
+                self._adjust_text_anchors_recursive(value, offset)
+        elif isinstance(data, list):
+            for item in data:
+                self._adjust_text_anchors_recursive(item, offset)
+
     async def process_document_chunk_async(self, gcs_input_uri: str, gcs_output_prefix: str) -> Optional[str]:
         """
         Processes a single document chunk from GCS using batch processing and saves the result.
@@ -106,13 +125,21 @@ class DocumentAiClient:
                 return None
             
             # Merge shards if multiple (sort by name for page order)
-            merged_data = {"documentLayout": {"blocks": []}}
+            merged_data = {"text": "", "documentLayout": {"blocks": []}}
+            text_offset = 0
             for blob in sorted(shard_blobs, key=lambda b: b.name):
                 shard_content = json.loads(await asyncio.to_thread(blob.download_as_text))
+                shard_text = shard_content.get("text", "")
+
                 if "documentLayout" in shard_content and "blocks" in shard_content["documentLayout"]:
-                    merged_data["documentLayout"]["blocks"].extend(shard_content["documentLayout"]["blocks"])
+                    blocks_to_process = shard_content["documentLayout"]["blocks"]
+                    self._adjust_text_anchors_recursive(blocks_to_process, text_offset)
+                    merged_data["documentLayout"]["blocks"].extend(blocks_to_process)
                 else:
                     logging.warning(f"Shard {blob.name} missing expected 'documentLayout.blocks'; skipping.")
+                
+                merged_data["text"] += shard_text
+                text_offset += len(shard_text)
             
             if not merged_data["documentLayout"]["blocks"]:
                 logging.error(f"No valid blocks found after merging shards for '{input_filename}'")

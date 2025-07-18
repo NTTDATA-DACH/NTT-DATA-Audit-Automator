@@ -23,7 +23,7 @@ def create_test_pdf():
 
     source_blob_name = "ITGS_A.4_Grundschutz-Check_HiSolutions_AG_2025-07-17.pdf"
     destination_blob_name = f"{source_prefix}ITGS_A.4_Grundschutz-Check_HiSolutions_AG_2025-07-17_test.pdf"
-    pages_to_keep = 25
+    pages_to_keep = 250
 
     print(f"🔹 Initializing GCS client for project '{project_id}'...")
     try:
