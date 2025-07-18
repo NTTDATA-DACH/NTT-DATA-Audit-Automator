@@ -189,42 +189,69 @@ class GrundschutzCheckExtractionRunner:
         return " ".join(part.strip() for part in text_parts if part.strip())
 
     async def _group_layout_blocks_by_zielobjekt(self, system_map: Dict[str, Any], force_overwrite: bool):
-        """[Step 3] Deterministically groups layout blocks by the Zielobjekt they belong to."""
+        """
+        [Step 3] Deterministically groups layout blocks by the Zielobjekt they belong to
+        using a robust two-phase "find markers, then group" algorithm.
+        """
         if not force_overwrite and self.gcs_client.blob_exists(self.GROUPED_BLOCKS_PATH):
             logging.info(f"Grouped layout blocks file already exists. Skipping grouping.")
             return
 
-        logging.info("Grouping layout blocks by Zielobjekt context...")
+        logging.info("Grouping layout blocks by Zielobjekt context using marker-based algorithm...")
         layout_data = await self.gcs_client.read_json_async(self.FINAL_MERGED_LAYOUT_PATH)
         all_blocks = layout_data.get("documentLayout", {}).get("blocks", [])
         full_text = layout_data.get("text", "")
 
+        # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
-        # Create a lookup of lowercase name/kuerzel to the canonical kuerzel
-        zielobjekt_lookup = {z['kuerzel'].lower(): z['kuerzel'] for z in zielobjekte}
-        zielobjekt_lookup.update({z['name'].lower(): z['kuerzel'] for z in zielobjekte})
+        search_term_to_kuerzel_map = {z['kuerzel'].lower(): z['kuerzel'] for z in zielobjekte}
+        search_term_to_kuerzel_map.update({z['name'].lower(): z['kuerzel'] for z in zielobjekte})
 
-        grouped_blocks = {"_UNGROUPED_": []}
-        for zo in zielobjekte: grouped_blocks[zo['kuerzel']] = []
-        
-        current_zielobjekt_kuerzel = "_UNGROUPED_"
+        markers = []
         for block in all_blocks:
             block_text = self._get_text_from_block_recursive(block, full_text).lower()
             if not block_text: continue
+            
+            for term, kuerzel in search_term_to_kuerzel_map.items():
+                if term in block_text:
+                    # Check if it's a reasonably standalone term to avoid partial matches like "in" in "firewall-information"
+                    if re.search(r'\b' + re.escape(term) + r'\b', block_text):
+                        markers.append({'kuerzel': kuerzel, 'block_id': int(block['blockId'])})
+                        logging.debug(f"Found marker: {kuerzel} in block {block['blockId']}")
+                        break # Move to next block once a marker is found
 
-            # Find a new context if the block text is a potential heading
-            found_kuerzel = None
-            for lookup_key, kuerzel_val in zielobjekt_lookup.items():
-                # A heading is likely a very close match, not just a substring
-                if re.fullmatch(r'\s*' + re.escape(lookup_key) + r'\s*', block_text, re.IGNORECASE):
-                    found_kuerzel = kuerzel_val
-                    break
+        # --- Phase 2: Sort Markers ---
+        markers.sort(key=lambda m: m['block_id'])
+        logging.info(f"Found and sorted {len(markers)} Zielobjekt markers.")
+
+        # --- Phase 3: Group Blocks by Range ---
+        grouped_blocks = {"_UNGROUPED_": []}
+        for z in zielobjekte: grouped_blocks[z['kuerzel']] = []
+
+        block_id_to_block_map = {int(b['blockId']): b for b in all_blocks}
+        
+        last_block_id = 0
+        if not markers:
+            # If no markers are found, all blocks are ungrouped
+            logging.warning("No Zielobjekt markers found in document. All blocks will be marked as ungrouped.")
+            grouped_blocks["_UNGROUPED_"] = all_blocks
+        else:
+            # Assign blocks before the first marker to _UNGROUPED_
+            first_marker_id = markers[0]['block_id']
+            for i in range(1, first_marker_id):
+                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[i])
             
-            if found_kuerzel and current_zielobjekt_kuerzel != found_kuerzel:
-                logging.info(f"Switched context to Zielobjekt: '{found_kuerzel}'")
-                current_zielobjekt_kuerzel = found_kuerzel
-            
-            grouped_blocks[current_zielobjekt_kuerzel].append(block)
+            # Iterate through markers to group blocks
+            for i, marker in enumerate(markers):
+                start_id = marker['block_id']
+                end_id = markers[i+1]['block_id'] if i + 1 < len(markers) else len(all_blocks) + 1
+                
+                kuerzel = marker['kuerzel']
+                for j in range(start_id, end_id):
+                    if j in block_id_to_block_map:
+                        grouped_blocks[kuerzel].append(block_id_to_block_map[j])
+                
+                logging.info(f"Assigned {end_id - start_id} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
 
         await self.gcs_client.upload_from_string_async(
             json.dumps({"zielobjekt_grouped_blocks": grouped_blocks}, indent=2, ensure_ascii=False),
