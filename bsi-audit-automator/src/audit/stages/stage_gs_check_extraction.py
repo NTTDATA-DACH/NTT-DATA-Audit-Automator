@@ -250,15 +250,14 @@ class GrundschutzCheckExtractionRunner:
         async def generate_and_tag(kuerzel, blocks):
             name = zielobjekt_map.get(kuerzel, "Unbekannt")
             prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(blocks, indent=2))
-            try {
+            try:
                 result = await self.ai_client.generate_json_response(
                     prompt, schema, request_context_log=f"RefineGroup: {kuerzel}"
                 )
                 return kuerzel, name, result
-            } except Exception as e: {
+            except Exception as e:
                 logging.error(f"AI refinement failed for Zielobjekt '{kuerzel}': {e}")
                 return kuerzel, name, None
-            }
 
         tasks = [generate_and_tag(kuerzel, blocks) for kuerzel, blocks in groups.items() if kuerzel != "_UNGROUPED_" and blocks]
         results = await asyncio.gather(*tasks)
