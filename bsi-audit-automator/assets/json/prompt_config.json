@@ -9,7 +9,7 @@
     },
     "Chapter-3-Ground-Truth": {
       "extract_zielobjekte": {
-        "prompt": "You are an expert data extraction system. From the attached Strukturanalyse document (A.1), extract a complete list of all Zielobjekte (target objects). For each Zielobjekt, provide its unique ID (Kürzel) and its full descriptive name (Name).",
+        "prompt": "You are an expert data extraction system. From the attached Strukturanalyse document (A.1), extract a complete list of all Zielobjekte (target objects). For each Zielobjekt, provide its unique ID (Kürzel) and its full descriptive name (Name). In the header on the first page, there is a Zielobjekt 'Informationsverbund' and a Kürzel for it as well, make sure to add that to the list as first entry!",
         "schema_path": "assets/schemas/stage_3_gt_zielobjekte_schema.json"
       },
       "extract_baustein_mappings": {
