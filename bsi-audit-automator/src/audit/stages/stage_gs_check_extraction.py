@@ -214,11 +214,9 @@ class GrundschutzCheckExtractionRunner:
             
             for term, kuerzel in search_term_to_kuerzel_map.items():
                 if term in block_text:
-                    # Check if it's a reasonably standalone term to avoid partial matches like "in" in "firewall-information"
-                    if re.search(r'\b' + re.escape(term) + r'\b', block_text):
-                        markers.append({'kuerzel': kuerzel, 'block_id': int(block['blockId'])})
-                        logging.debug(f"Found marker: {kuerzel} in block {block['blockId']}")
-                        break # Move to next block once a marker is found
+                    markers.append({'kuerzel': kuerzel, 'block_id': int(block['blockId'])})
+                    logging.debug(f"Found marker: '{kuerzel}' (from term '{term}') in block {block['blockId']}")
+                    break # Move to the next block once a marker is found for the current one
 
         # --- Phase 2: Sort Markers ---
         markers.sort(key=lambda m: m['block_id'])
