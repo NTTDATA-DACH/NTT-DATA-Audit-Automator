@@ -108,7 +108,7 @@ class GrundschutzCheckExtractionRunner:
             return
 
         check_uris = self.rag_client.get_gcs_uris_for_categories(["Grundschutz-Check", "test.pdf"])
-        if not check_uris: raise FileNotFoundError("Could not find 'Grundschutz-Check' document.")
+        if not check_uris: raise FileNotFoundError("Could not find 'Grundschutz-Check' or 'test.pdf' document.")
         
         source_blob_name = check_uris[0].replace(f"gs://{self.config.bucket_name}/", "")
         pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(source_blob_name))
@@ -147,7 +147,8 @@ class GrundschutzCheckExtractionRunner:
         
         final_layout_json = {"text": merged_text, "documentLayout": {"blocks": merged_blocks}}
         await self.gcs_client.upload_from_string_async(
-            json.dumps(final_layout_json, indent=2, ensure_ascii=False), self.FINAL_MERGED_LAYOUT_PATH
+            json.dumps(final_layout_json, indent=2, ensure_ascii=False),
+            self.FINAL_MERGED_LAYOUT_PATH
         )
         logging.info(f"Successfully merged, re-indexed, and saved final layout to {self.FINAL_MERGED_LAYOUT_PATH}")
 
