@@ -67,8 +67,15 @@ class GrundschutzCheckExtractionRunner:
         """
         if not force_overwrite and self.gcs_client.blob_exists(self.GROUND_TRUTH_MAP_PATH):
             logging.info(f"System structure map already exists. Loading from '{self.GROUND_TRUTH_MAP_PATH}'.")
-            return await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
-
+            try:
+                system_map = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
+                if not system_map.get("zielobjekte"):
+                    logging.error("Loaded system structure map has empty 'zielobjekte'. Exiting.")
+                    raise ValueError("No Zielobjekte found in loaded map. Cannot proceed.")
+                return system_map
+            except json.JSONDecodeError as e:
+                logging.error(f"Invalid JSON in system structure map: {e}")
+                raise
         logging.info("Generating new system structure map...")
         gt_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]
         
@@ -182,11 +189,14 @@ class GrundschutzCheckExtractionRunner:
             if isinstance(element, dict):
                 if 'layout' in element:
                     text_parts.append(self._get_text_from_layout(element['layout'], document_text))
+                if 'text' in element:  # Handle direct 'text' fields in your structure
+                    text_parts.append(element['text'])
                 for value in element.values(): traverse(value)
             elif isinstance(element, list):
                 for item in element: traverse(item)
         traverse(block)
         return " ".join(part.strip() for part in text_parts if part.strip())
+
 
     async def _group_layout_blocks_by_zielobjekt(self, system_map: Dict[str, Any], force_overwrite: bool):
         """
@@ -204,19 +214,28 @@ class GrundschutzCheckExtractionRunner:
 
         # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
-        search_term_to_kuerzel_map = {z['kuerzel'].lower(): z['kuerzel'] for z in zielobjekte}
-        search_term_to_kuerzel_map.update({z['name'].lower(): z['kuerzel'] for z in zielobjekte})
+        kuerzel_list = [item['kuerzel'] for item in zielobjekte]
+#        logging.info(f"kuerzel_list: {kuerzel_list}")
 
         markers = []
         for block in all_blocks:
-            block_text = self._get_text_from_block_recursive(block, full_text).lower()
-            if not block_text: continue
+            block_text = self._get_text_from_block_recursive(block, full_text).strip()
+            # logging.info(f"Processing block {block['blockId']}, extracted text: '{block_text[:100]}...'")  # Debug extracted text snippet
             
-            for term, kuerzel in search_term_to_kuerzel_map.items():
-                if term in block_text:
+            if not block_text:
+                continue
+            
+            found = False
+            for kuerzel in kuerzel_list:
+ #               logging.info(f"searching for exact: '{kuerzel}' in block {block['blockId']}")
+                if block_text == kuerzel:
                     markers.append({'kuerzel': kuerzel, 'block_id': int(block['blockId'])})
-                    logging.debug(f"Found marker: '{kuerzel}' (from term '{term}') in block {block['blockId']}")
-                    break # Move to the next block once a marker is found for the current one
+#                    logging.info(f"Found marker: '{kuerzel}' in block {block['blockId']}")
+                    found = True
+                    break  # Only add one marker per block
+            if found:
+                continue  # Optional: Skip further processing if needed, but not necessary
+
 
         # --- Phase 2: Sort Markers ---
         markers.sort(key=lambda m: m['block_id'])
@@ -227,29 +246,34 @@ class GrundschutzCheckExtractionRunner:
         for z in zielobjekte: grouped_blocks[z['kuerzel']] = []
 
         block_id_to_block_map = {int(b['blockId']): b for b in all_blocks}
-        
-        last_block_id = 0
+
         if not markers:
             # If no markers are found, all blocks are ungrouped
             logging.warning("No Zielobjekt markers found in document. All blocks will be marked as ungrouped.")
             grouped_blocks["_UNGROUPED_"] = all_blocks
         else:
-            # Assign blocks before the first marker to _UNGROUPED_
-            first_marker_id = markers[0]['block_id']
-            for i in range(1, first_marker_id):
-                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[i])
+            # --- Phase 2: Sort Markers ---
+            markers.sort(key=lambda m: m['block_id'])
+            logging.info(f"Found and sorted {len(markers)} Zielobjekt markers.")
+
+            # --- Phase 3: Group Blocks by Range ---
+            sorted_block_ids = sorted(block_id_to_block_map.keys())
             
-            # Iterate through markers to group blocks
+            first_marker_id = markers[0]['block_id']
+            ungrouped_ids = [bid for bid in sorted_block_ids if bid < first_marker_id]
+            for bid in ungrouped_ids:
+                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[bid])
+            
             for i, marker in enumerate(markers):
                 start_id = marker['block_id']
-                end_id = markers[i+1]['block_id'] if i + 1 < len(markers) else len(all_blocks) + 1
+                end_id = markers[i+1]['block_id'] if i + 1 < len(markers) else max(sorted_block_ids) + 1
                 
                 kuerzel = marker['kuerzel']
-                for j in range(start_id, end_id):
-                    if j in block_id_to_block_map:
-                        grouped_blocks[kuerzel].append(block_id_to_block_map[j])
+                group_ids = [bid for bid in sorted_block_ids if start_id <= bid < end_id]
+                for bid in group_ids:
+                    grouped_blocks[kuerzel].append(block_id_to_block_map[bid])
                 
-                logging.info(f"Assigned {end_id - start_id} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
+                logging.info(f"Assigned {len(group_ids)} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
 
         await self.gcs_client.upload_from_string_async(
             json.dumps({"zielobjekt_grouped_blocks": grouped_blocks}, indent=2, ensure_ascii=False),
