@@ -185,6 +185,16 @@ class GrundschutzCheckExtractionRunner:
         layout_data = await self.gcs_client.read_json_async(self.FINAL_MERGED_LAYOUT_PATH)
         all_blocks = layout_data.get("documentLayout", {}).get("blocks", [])
 
+        # ADD THESE MISSING IMPORTS AND VARIABLES:
+        import sys
+        from collections import defaultdict
+        
+        # Initialize grouped_blocks
+        grouped_blocks = defaultdict(list)
+        
+        # Create block mapping from TOP-LEVEL blocks (not flattened ones)
+        block_id_to_block_map = {int(b['blockId']): b for b in all_blocks}
+
         # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
         kuerzel_list = [item['kuerzel'] for item in zielobjekte]
@@ -264,7 +274,7 @@ class GrundschutzCheckExtractionRunner:
                 logging.info(f"Assigned {len(group_ids)} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
 
         await self.gcs_client.upload_from_string_async(
-            json.dumps({"zielobjekt_grouped_blocks": grouped_blocks}, indent=2, ensure_ascii=False),
+            json.dumps({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, indent=2, ensure_ascii=False),
             self.GROUPED_BLOCKS_PATH
         )
         logging.info(f"Saved grouped layout blocks to {self.GROUPED_BLOCKS_PATH}")

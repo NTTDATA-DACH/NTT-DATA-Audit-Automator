@@ -81,24 +81,37 @@ This step is a crucial bridge between deep analysis (Chapter 3) and planning (Ch
 
 This strategy replaces manual text extraction and chunking with a highly structured, two-stage process designed for maximum precision on large, formatted documents like the `Grundschutz-Check`. It leverages specialized Google Cloud services to first identify and extract only relevant information, then uses a large language model for refinement and structuring.
 
-#### **Stage 1: High-Fidelity Entity Extraction with Document AI Form Parser**
+#### **Stage 1: Ground-Truth-Driven Layout Extraction with Document AI**
 
-The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, machine-readable JSON of its constituent parts, while actively discarding irrelevant noise.
+The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, hierarchically-organized JSON structure grouped by Zielobjekte (target objects), using a robust marker-based approach.
 
-1.  **Processor:** We use Google Cloud's pre-trained **Document AI Form Parser**. This processor excels at identifying labeled data (e.g., a field named "Umsetzungsstatus:" next to its value "Ja") without requiring any custom model training.
-2.  **Input:** The entire multi-hundred-page `Grundschutz-Check` PDF is submitted for batch processing.
-3.  **Action:** The Form Parser analyzes the document, identifying and extracting entities such as:
-    *   Key-Value pairs (e.g., `{"key": "Beschreibung", "value": "..."}`).
-    *   Paragraphs (for longer, multi-line values like `Umsetzungserläuterung`).
-    *   Requirement IDs (e.g., `APP.6.A2`), which it often identifies as standalone entities or keys without a value.
-4.  **Key Advantage (Noise Reduction):** This process inherently ignores non-entity text. Repetitive headers, footers, page numbers, and decorative lines are automatically filtered out, as they do not conform to the structure of a "form."
-5.  **Output:** The result is a structured JSON file containing a list of all extracted entities, their text content, page location, and a confidence score. This JSON is significantly smaller and cleaner than the raw text of the original PDF.
+1.  **Processor:** We use Google Cloud's **Document AI Layout Parser** to extract detailed document structure including nested blocks, text positioning, and hierarchical relationships.
+
+2.  **Input:** The entire multi-hundred-page `Grundschutz-Check` PDF is processed in chunks for optimal performance and merged into a unified layout structure.
+
+3.  **Ground Truth Mapping:** Before processing the document, we extract the authoritative system structure from customer documents:
+    *   **Zielobjekte** (target objects) from the `Strukturanalyse` (A.1)
+    *   **Baustein-to-Zielobjekt mappings** from the `Modellierung` (A.3)
+    *   This creates our "Ground Truth" map of what we expect to find in the document.
+
+4.  **Marker-Based Grouping:** The system uses a deterministic three-phase algorithm:
+    *   **Phase 1:** Flatten all document blocks (including deeply nested structures) and search for exact Zielobjekt identifiers (e.g., "AC-001", "SRV-002") as section markers
+    *   **Phase 2:** Sort found markers by their position in the document 
+    *   **Phase 3:** Group all content blocks between consecutive markers, assigning them to the appropriate Zielobjekt context
+
+5.  **Key Advantages:**
+    *   **Hierarchical Structure Preservation:** Maintains the document's natural block hierarchy while enabling precise content grouping
+    *   **Deep Nested Search:** Finds markers even when buried multiple levels deep in the document structure
+    *   **Deterministic Grouping:** Uses document position to systematically assign content to the correct Zielobjekt sections
+    *   **Ground Truth Validation:** Only searches for Zielobjekte that actually exist in the customer's system architecture
+
+6.  **Output:** A structured JSON file (`zielobjekt_grouped_blocks.json`) where each Zielobjekt contains all its associated document blocks, ready for AI-powered requirement extraction. Ungrouped content is preserved in a special `_UNGROUPED_` section for manual review.
 
 #### **Stage 2: Refinement and Structuring with Gemini 2.5**
 
 The entity-based JSON from Document AI is now used as high-quality input for the LLM, which performs targeted refinement tasks rather than open-ended analysis.
 
-1.  **Input:** The JSON output from the Form Parser, the `system_map.json` (containing mappings of `Baustein` prefixes to `Zielobjekte`), and a predefined output schema (`3.6.1_extraction_schema.json`).
+1.  **Input:** For each Zielobjekt the blocks pertaining to it from Stage 1 (`zielobjekt_grouped_blocks.json`), and a predefined output schema (`3.6.1_extraction_schema.json`) are send to gemini. One request per Zielobjekt with only the context required to convert the blocks into JSON.
 2.  **Prompting Strategy:** Gemini is given a highly specific prompt that instructs it to act as a data refiner, not a reader. The prompt includes:
     *   **System Instruction:** "You are an expert system for refining BSI Grundschutz data. Your input is a JSON of entities extracted by a form parser. Your task is to assemble these entities into a final, structured list of requirements."
     *   **Rules:**
@@ -107,7 +120,6 @@ The entity-based JSON from Document AI is now used as high-quality input for the
         *   "Normalize minor OCR errors (e.g., 'ertluterung' becomes 'Erläuterung')."
         *   "Your output MUST be a single JSON object that strictly conforms to the provided `3.6.1_extraction_schema.json`."
 3.  **Output:** The LLM produces the final, clean intermediate files:
-    *   **`system_structure_map.json`**: The authoritative map of the customer's environment.
     *   **`extracted_grundschutz_check_merged.json`**: A structured, de-duplicated, and contextually complete list of all security requirements. This file becomes the reliable source of truth for all subsequent audit analysis in Chapter 3 and Chapter 5.
 
 This hybrid approach ensures maximum accuracy and traceability by using the right tool for each job: Document AI for structured extraction and Gemini for contextual refinement and formatting.
