@@ -4,76 +4,76 @@
     "description": "Extracts previous audit scope tables from Chapter 4.",
     "type": "object",
     "properties": {
-    "auswahlBausteineErstRezertifizierung": {
-    "type": "object",
-    "properties": {
-    "table": {
-    "type": "object",
-    "properties": {
-    "rows": {
-    "type": "array",
-    "items": {
-    "type": "object",
-    "properties": {
-    "Schicht": { "type": "string" },
-    "Baustein": { "type": "string" },
-    "Zielobjekt-Name": { "type": "string" },
-    "Begründung zur Auswahl": { "type": "string" }
-    },
-    "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
+        "auswahlBausteineErstRezertifizierung": {
+            "type": "object",
+            "properties": {
+                "table": {
+                    "type": "object",
+                    "properties": {
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "Schicht": { "type": "string" },
+                                    "Baustein": { "type": "string" },
+                                    "Zielobjekt": { "type": "string" },
+                                    "Begründung zur Auswahl": { "type": "string" }
+                                },
+                                "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
+                            }
+                        }
+                    },
+                    "required": ["rows"]
+                }
+            }
+        },
+        "auswahlBausteine1Ueberwachungsaudit": {
+            "type": "object",
+            "properties": {
+                "table": {
+                    "type": "object",
+                    "properties": {
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "Schicht": { "type": "string" },
+                                    "Baustein": { "type": "string" },
+                                    "Zielobjekt": { "type": "string" },
+                                    "Begründung zur Auswahl": { "type": "string" }
+                                },
+                                "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
+                            }
+                        }
+                    },
+                    "required": ["rows"]
+                }
+            }
+        },
+        "auswahlStandorte": {
+            "type": "object",
+            "properties": {
+                "table": {
+                    "type": "object",
+                    "properties": {
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "Standort": { "type": "string" },
+                                    "Erst- bzw. Rezertifizierung": { "type": "string" },
+                                    "1. Überwachungsaudit": { "type": "string" },
+                                    "2. Überwachungsaudit": { "type": "string" },
+                                    "Begründung für die Auswahl": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-    }
-    },
-    "required": ["rows"]
-    }
-    }
-    },
-    "auswahlBausteine1Ueberwachungsaudit": {
-    "type": "object",
-    "properties": {
-    "table": {
-    "type": "object",
-    "properties": {
-    "rows": {
-    "type": "array",
-    "items": {
-    "type": "object",
-    "properties": {
-    "Schicht": { "type": "string" },
-    "Baustein": { "type": "string" },
-    "Zielobjekt-Name": { "type": "string" },
-    "Begründung zur Auswahl": { "type": "string" }
-    },
-    "required": ["Schicht", "Baustein", "Zielobjekt", "Begründung zur Auswahl"]
-    }
-    }
-    },
-    "required": ["rows"]
-    }
-    }
-    },
-    "auswahlStandorte": {
-    "type": "object",
-    "properties": {
-    "table": {
-    "type": "object",
-    "properties": {
-    "rows": {
-    "type": "array",
-    "items": {
-    "type": "object",
-    "properties": {
-    "Standort": { "type": "string" },
-    "Erst- bzw. Rezertifizierung": { "type": "string" },
-    "1. Überwachungsaudit": { "type": "string" },
-    "2. Überwachungsaudit": { "type": "string" },
-    "Begründung für die Auswahl": { "type": "string" }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
-    }
+}

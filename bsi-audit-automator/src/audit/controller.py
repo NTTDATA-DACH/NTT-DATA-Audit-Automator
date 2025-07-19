@@ -154,7 +154,7 @@ class AuditController:
         findings_with_ids = []
         for finding in self.all_findings:
             if 'id' in finding and finding['id']:
-                # This is a finding from a previous report, ID is already set.
+                # This is a finding from a previous report or an earlier run, ID is already set.
                 findings_with_ids.append(finding)
             else:
                 # This is a new finding, assign a new ID.
@@ -175,14 +175,15 @@ class AuditController:
 
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
-        Runs all defined audit stages in a dependency-aware order.
+        Runs all defined audit stages in a dependency-aware order. Each stage run
+        will update and persist the central findings list.
         """
         # Step 0: Run the critical pre-processing step first.
         logging.info("Step 0: Running pre-processing stage 'Grundschutz-Check-Extraction'...")
         await self.run_single_stage("Grundschutz-Check-Extraction", force_overwrite=force_overwrite)
         logging.info("Completed pre-processing.")
 
-        # Step 1: Run initial independent stages in parallel. Chapter-3 now depends on Step 0.
+        # Step 1: Run initial independent stages in parallel.
         initial_parallel_stages = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-7"]
         logging.info(f"Step 1: Starting parallel execution for initial stages: {initial_parallel_stages}")
         await asyncio.gather(
@@ -200,66 +201,90 @@ class AuditController:
         await self.run_single_stage("Chapter-5", force_overwrite=force_overwrite)
         logging.info("Completed stage Chapter-5.")
         
-        self._save_all_findings()
         logging.info("All audit stages completed.")
 
     async def run_single_stage(self, stage_name: str, force_overwrite: bool = False) -> Dict[str, Any]:
         """
-        Runs a single, specified audit stage and collects findings from its result.
+        Runs a single, specified audit stage. It manages the central findings list by
+        loading it, removing any previous findings from this specific stage, running
+        the stage (or skipping if results exist), adding the new/existing findings
+        back, and saving the updated central list.
         """
         if stage_name not in self.stage_runner_classes:
             logging.error(f"Unknown stage '{stage_name}'. Available: {list(self.stage_runner_classes.keys())}")
             raise ValueError(f"Unknown stage: {stage_name}")
 
-        stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
+        # 1. Load and filter the central findings list
+        findings_path = f"{self.config.output_prefix}results/all_findings.json"
+        current_findings = []
+        try:
+            if self.gcs_client.blob_exists(findings_path):
+                current_findings = self.gcs_client.read_json(findings_path)
+        except Exception as e:
+            logging.warning(f"Could not load or parse existing findings file: {e}. Starting with an empty list.")
+
+        source_ref_to_remove = stage_name.replace('Chapter-', '')
         
+        if stage_name == "Scan-Report":
+            self.all_findings = [f for f in current_findings if not str(f.get("source_chapter", "")).startswith("Previous Audit")]
+        else:
+            self.all_findings = [f for f in current_findings if f.get("source_chapter") != source_ref_to_remove]
+        
+        self.finding_counters = defaultdict(int)
+        for finding in self.all_findings:
+            category, num = self._parse_finding_id(finding.get("id"))
+            if category and num > 0:
+                self.finding_counters[category] = max(self.finding_counters[category], num)
+
+        # 2. Execute the stage logic
+        stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
+        result_data = None
+
         if not force_overwrite:
             try:
-                # The extraction stage does not produce a reportable JSON, its output is the intermediate file.
-                # So we check for the intermediate file's existence to determine if we can skip.
                 if stage_name == "Grundschutz-Check-Extraction":
-                    if self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.INTERMEDIATE_CHECK_RESULTS_PATH) and \
+                    if self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.EXTRACTED_CHECK_DATA_PATH) and \
                        self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.GROUND_TRUTH_MAP_PATH):
                         logging.info(f"Stage '{stage_name}' already completed (intermediate files exist). Skipping.")
-                        return {"status": "skipped", "reason": "intermediate files found"}
+                        result_data = {"status": "skipped", "reason": "intermediate files found"}
                 else:
-                    existing_data = self.gcs_client.read_json(stage_output_path)
+                    result_data = self.gcs_client.read_json(stage_output_path)
                     logging.info(f"Stage '{stage_name}' already completed. Skipping generation.")
-                    self._extract_and_store_findings(stage_name, existing_data)
-                    return existing_data
             except NotFound:
                 logging.info(f"No results for stage '{stage_name}' found. Generating...")
             except Exception as e:
                 logging.warning(f"Could not read existing state for stage '{stage_name}': {e}. Proceeding.")
-        else:
-            logging.info(f"Force overwrite enabled for stage '{stage_name}'. Running generation.")
 
-        runner_class = self.stage_runner_classes[stage_name]
-        
-        # --- DYNAMIC DEPENDENCY INJECTION ---
-        # Instantiate DocumentAiClient only if needed for the specific stage
-        if stage_name == "Grundschutz-Check-Extraction":
-            doc_ai_client = DocumentAiClient(self.config, self.gcs_client)
-            dependencies = (self.config, self.gcs_client, doc_ai_client, self.ai_client, self.rag_client)
-        else:
-            dependencies = self.runner_dependencies[stage_name]
-        stage_runner = runner_class(*dependencies)
-        logging.info(f"Initialized runner for stage: {stage_name}")
-
-        try:
-            # Pass the force_overwrite flag down to the runner.
-            result_data = await stage_runner.run(force_overwrite=force_overwrite)
-
-            # The extraction stage does not produce a reportable result, so we don't save a stage JSON.
-            if stage_name != "Grundschutz-Check-Extraction":
-                self.gcs_client.upload_from_string(
-                    content=json.dumps(result_data, indent=2, ensure_ascii=False),
-                    destination_blob_name=stage_output_path
-                )
-                logging.info(f"Successfully saved results for stage '{stage_name}'.")
+        if result_data is None:
+            logging.info(f"Running generation for stage '{stage_name}'.")
+            runner_class = self.stage_runner_classes[stage_name]
             
-            self._extract_and_store_findings(stage_name, result_data)
-            return result_data
-        except Exception as e:
-            logging.error(f"Stage '{stage_name}' failed: {e}", exc_info=True)
-            raise
+            if stage_name == "Grundschutz-Check-Extraction":
+                doc_ai_client = DocumentAiClient(self.config, self.gcs_client)
+                dependencies = (self.config, self.gcs_client, doc_ai_client, self.ai_client, self.rag_client)
+            else:
+                dependencies = self.runner_dependencies[stage_name]
+            stage_runner = runner_class(*dependencies)
+            logging.info(f"Initialized runner for stage: {stage_name}")
+
+            try:
+                result_data = await stage_runner.run(force_overwrite=force_overwrite)
+
+                if stage_name != "Grundschutz-Check-Extraction":
+                    self.gcs_client.upload_from_string(
+                        content=json.dumps(result_data, indent=2, ensure_ascii=False),
+                        destination_blob_name=stage_output_path
+                    )
+                    logging.info(f"Successfully saved results for stage '{stage_name}'.")
+            except Exception as e:
+                logging.error(f"Stage '{stage_name}' failed: {e}", exc_info=True)
+                self._save_all_findings() # Save findings state even on failure
+                raise
+
+        # 3. Process findings from the result (either newly generated or from the skipped file)
+        self._extract_and_store_findings(stage_name, result_data)
+
+        # 4. Save the final, updated list of all findings
+        self._save_all_findings()
+        
+        return result_data
