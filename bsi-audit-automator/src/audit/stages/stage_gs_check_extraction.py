@@ -172,32 +172,6 @@ class GrundschutzCheckExtractionRunner:
                     for cell in row.get("cells", []):
                         if "blocks" in cell: self._reindex_and_prune_blocks(cell["blocks"])
     
-    def _get_text_from_layout(self, layout: Dict[str, Any], document_text: str) -> str:
-        """Helper to extract text from a single layout object using its textAnchor."""
-        text = ""
-        if layout and layout.get("textAnchor", {}).get("textSegments"):
-            for segment in layout["textAnchor"]["textSegments"]:
-                start = int(segment.get("startIndex", 0))
-                end = int(segment.get("endIndex", 0))
-                text += document_text[start:end]
-        return text
-
-    def _get_text_from_block_recursive(self, block: Dict[str, Any], document_text: str) -> str:
-        """Recursively traverses a block to get all its text content."""
-        text_parts = []
-        def traverse(element):
-            if isinstance(element, dict):
-                if 'layout' in element:
-                    text_parts.append(self._get_text_from_layout(element['layout'], document_text))
-                if 'text' in element:  # Handle direct 'text' fields in your structure
-                    text_parts.append(element['text'])
-                for value in element.values(): traverse(value)
-            elif isinstance(element, list):
-                for item in element: traverse(item)
-        traverse(block)
-        return " ".join(part.strip() for part in text_parts if part.strip())
-
-
     async def _group_layout_blocks_by_zielobjekt(self, system_map: Dict[str, Any], force_overwrite: bool):
         """
         [Step 3] Deterministically groups layout blocks by the Zielobjekt they belong to
@@ -215,71 +189,60 @@ class GrundschutzCheckExtractionRunner:
         # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
         kuerzel_list = [item['kuerzel'] for item in zielobjekte]
-#        logging.info(f"kuerzel_list: {kuerzel_list}")
+        remaining_kuerzel = kuerzel_list.copy()
 
         markers = []
-        for block in all_blocks:
-            block_text = self._get_text_from_block_recursive(block, full_text).strip()
-            # logging.info(f"Processing block {block['blockId']}, extracted text: '{block_text[:100]}...'")  # Debug extracted text snippet
+        
+        def check_all_blocks_flat(blocks):
+            """Flattens all blocks and checks each individual block's direct text."""
+            all_individual_blocks = []
             
-            if not block_text:
-                continue
+            def flatten_blocks(block_list):
+                for block in block_list:
+                    all_individual_blocks.append(block)
+                    
+                    # Check nested textBlock.blocks
+                    if 'textBlock' in block and 'blocks' in block['textBlock']:
+                        flatten_blocks(block['textBlock']['blocks'])
+                    
+                    # Check table blocks
+                    if 'tableBlock' in block:
+                        for row_type in ['headerRows', 'bodyRows']:
+                            for row in block['tableBlock'].get(row_type, []):
+                                for cell in row.get('cells', []):
+                                    if 'blocks' in cell:
+                                        flatten_blocks(cell['blocks'])
             
-            found = False
-            for kuerzel in kuerzel_list:
- #               logging.info(f"searching for exact: '{kuerzel}' in block {block['blockId']}")
-                if block_text == kuerzel:
-                    markers.append({'kuerzel': kuerzel, 'block_id': int(block['blockId'])})
-#                    logging.info(f"Found marker: '{kuerzel}' in block {block['blockId']}")
-                    found = True
-                    break  # Only add one marker per block
-            if found:
-                continue  # Optional: Skip further processing if needed, but not necessary
+            flatten_blocks(blocks)
+            return all_individual_blocks
 
-
-        # --- Phase 2: Sort Markers ---
-        markers.sort(key=lambda m: m['block_id'])
-        logging.info(f"Found and sorted {len(markers)} Zielobjekt markers.")
-
-        # --- Phase 3: Group Blocks by Range ---
-        grouped_blocks = {"_UNGROUPED_": []}
-        for z in zielobjekte: grouped_blocks[z['kuerzel']] = []
-
-        block_id_to_block_map = {int(b['blockId']): b for b in all_blocks}
-
-        if not markers:
-            # If no markers are found, all blocks are ungrouped
-            logging.warning("No Zielobjekt markers found in document. All blocks will be marked as ungrouped.")
-            grouped_blocks["_UNGROUPED_"] = all_blocks
-        else:
-            # --- Phase 2: Sort Markers ---
-            markers.sort(key=lambda m: m['block_id'])
-            logging.info(f"Found and sorted {len(markers)} Zielobjekt markers.")
-
-            # --- Phase 3: Group Blocks by Range ---
-            sorted_block_ids = sorted(block_id_to_block_map.keys())
+        # Get all individual blocks (flattened)
+        all_individual_blocks = check_all_blocks_flat(all_blocks)
+        
+        print(f"DEBUG: Total individual blocks to check: {len(all_individual_blocks)}")
+        
+        # Check each individual block's direct text
+        for block in all_individual_blocks:
+            # Get the direct text from this specific block only
+            direct_text = ""
+            if 'textBlock' in block and 'text' in block['textBlock']:
+                direct_text = block['textBlock']['text'].strip()
             
-            first_marker_id = markers[0]['block_id']
-            ungrouped_ids = [bid for bid in sorted_block_ids if bid < first_marker_id]
-            for bid in ungrouped_ids:
-                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[bid])
-            
-            for i, marker in enumerate(markers):
-                start_id = marker['block_id']
-                end_id = markers[i+1]['block_id'] if i + 1 < len(markers) else max(sorted_block_ids) + 1
-                
-                kuerzel = marker['kuerzel']
-                group_ids = [bid for bid in sorted_block_ids if start_id <= bid < end_id]
-                for bid in group_ids:
-                    grouped_blocks[kuerzel].append(block_id_to_block_map[bid])
-                
-                logging.info(f"Assigned {len(group_ids)} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
+            if direct_text:
+                for kuerzel in remaining_kuerzel.copy():
+                    if direct_text == kuerzel:
+                        block_id = int(block.get('blockId', 0))
+                        markers.append({'kuerzel': kuerzel, 'block_id': block_id})
+                        remaining_kuerzel.remove(kuerzel)
+                        print(f"FOUND: '{kuerzel}' in block {block_id}")
+                        break
 
-        await self.gcs_client.upload_from_string_async(
-            json.dumps({"zielobjekt_grouped_blocks": grouped_blocks}, indent=2, ensure_ascii=False),
-            self.GROUPED_BLOCKS_PATH
-        )
-        logging.info(f"Saved grouped layout blocks to {self.GROUPED_BLOCKS_PATH}")
+        print(f"DEBUG: Found {len(markers)} markers:")
+        print(json.dumps(markers, indent=2))
+        print(f"DEBUG: UNFOUND kuerzel ({len(remaining_kuerzel)}): {remaining_kuerzel}")
+        
+        import sys
+        sys.exit()
 
     async def _refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
         """[Step 4] Processes each group of blocks with Gemini to extract structured requirements."""
