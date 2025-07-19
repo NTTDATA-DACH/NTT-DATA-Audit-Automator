@@ -235,6 +235,40 @@ class GrundschutzCheckExtractionRunner:
         
         print(f"DEBUG: UNFOUND kuerzel ({len(remaining_kuerzel)}): {remaining_kuerzel}")
 
+        if not markers:
+            # If no markers are found, all blocks are ungrouped
+            logging.warning("No Zielobjekt markers found in document. All blocks will be marked as ungrouped.")
+            sys.exit()
+        else:
+            # --- Phase 2: Sort Markers ---
+            markers.sort(key=lambda m: m['block_id'])
+            logging.info(f"Found and sorted {len(markers)} Zielobjekt markers.")
+
+            # --- Phase 3: Group Blocks by Range ---
+            sorted_block_ids = sorted(block_id_to_block_map.keys())
+            
+            first_marker_id = markers[0]['block_id']
+            ungrouped_ids = [bid for bid in sorted_block_ids if bid < first_marker_id]
+            for bid in ungrouped_ids:
+                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[bid])
+            
+            for i, marker in enumerate(markers):
+                start_id = marker['block_id']
+                end_id = markers[i+1]['block_id'] if i + 1 < len(markers) else max(sorted_block_ids) + 1
+                
+                kuerzel = marker['kuerzel']
+                group_ids = [bid for bid in sorted_block_ids if start_id <= bid < end_id]
+                for bid in group_ids:
+                    grouped_blocks[kuerzel].append(block_id_to_block_map[bid])
+                
+                logging.info(f"Assigned {len(group_ids)} blocks to '{kuerzel}' (IDs {start_id}-{end_id-1}).")
+
+        await self.gcs_client.upload_from_string_async(
+            json.dumps({"zielobjekt_grouped_blocks": grouped_blocks}, indent=2, ensure_ascii=False),
+            self.GROUPED_BLOCKS_PATH
+        )
+        logging.info(f"Saved grouped layout blocks to {self.GROUPED_BLOCKS_PATH}")
+
     async def _refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
         """[Step 4] Processes each group of blocks with Gemini to extract structured requirements."""
         if not force_overwrite and self.gcs_client.blob_exists(self.FINAL_CHECK_RESULTS_PATH):
