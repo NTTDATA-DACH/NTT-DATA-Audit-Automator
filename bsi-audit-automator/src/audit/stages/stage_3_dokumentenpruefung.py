@@ -99,7 +99,26 @@ class Chapter3Runner:
 
         # Q5: Prüfung < 12 Monate? (Deterministic)
         one_year_ago = datetime.now() - timedelta(days=365)
-        outdated = [a for a in anforderungen if datetime.strptime(a.get("datumLetztePruefung", "1970-01-01"), "%Y-%m-%d") < one_year_ago]
+        
+        outdated = []
+        for a in anforderungen:
+            date_str = a.get("datumLetztePruefung", "1970-01-01")
+            try:
+                # Try ISO format first
+                check_date = datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                try:
+                    # Try German format DD.MM.YYYY
+                    check_date = datetime.strptime(date_str, "%d.%m.%Y")
+                except ValueError:
+                    # If both fail, use default old date
+                    check_date = datetime.strptime("1970-01-01", "%Y-%m-%d")
+                    logging.warning(f"Could not parse date '{date_str}', using default 1970-01-01")
+            
+            if check_date < one_year_ago:
+                outdated.append(a)
+
+
         answers[4] = not bool(outdated)
         if outdated:
             findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated)} Anforderungen liegt mehr als 12 Monate zurück."})
