@@ -184,7 +184,6 @@ class GrundschutzCheckExtractionRunner:
         logging.info("Grouping layout blocks by Zielobjekt context using marker-based algorithm...")
         layout_data = await self.gcs_client.read_json_async(self.FINAL_MERGED_LAYOUT_PATH)
         all_blocks = layout_data.get("documentLayout", {}).get("blocks", [])
-        full_text = layout_data.get("text", "")
 
         # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
@@ -218,9 +217,7 @@ class GrundschutzCheckExtractionRunner:
 
         # Get all individual blocks (flattened)
         all_individual_blocks = check_all_blocks_flat(all_blocks)
-        
-        print(f"DEBUG: Total individual blocks to check: {len(all_individual_blocks)}")
-        
+                
         # Check each individual block's direct text
         for block in all_individual_blocks:
             # Get the direct text from this specific block only
@@ -234,15 +231,9 @@ class GrundschutzCheckExtractionRunner:
                         block_id = int(block.get('blockId', 0))
                         markers.append({'kuerzel': kuerzel, 'block_id': block_id})
                         remaining_kuerzel.remove(kuerzel)
-                        print(f"FOUND: '{kuerzel}' in block {block_id}")
                         break
-
-        print(f"DEBUG: Found {len(markers)} markers:")
-        print(json.dumps(markers, indent=2))
-        print(f"DEBUG: UNFOUND kuerzel ({len(remaining_kuerzel)}): {remaining_kuerzel}")
         
-        import sys
-        sys.exit()
+        print(f"DEBUG: UNFOUND kuerzel ({len(remaining_kuerzel)}): {remaining_kuerzel}")
 
     async def _refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
         """[Step 4] Processes each group of blocks with Gemini to extract structured requirements."""
