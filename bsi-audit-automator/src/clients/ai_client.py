@@ -4,7 +4,7 @@ import json
 import asyncio
 import time
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from google.cloud import aiplatform
 from google.api_core import exceptions as api_core_exceptions
@@ -35,15 +35,45 @@ class AiClient:
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
         aiplatform.init(project=config.gcp_project_id, location=config.region)
+        
+        # Default model instance
         self.generative_model = GenerativeModel(
             GENERATIVE_MODEL_NAME, system_instruction=self.system_message
         )
+        
+        # Cache for alternative model instances
+        self._model_cache = {GENERATIVE_MODEL_NAME: self.generative_model}
+        
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.region}'.")
         logging.info(f"System Message Context includes today's date: {current_date}")
 
-    async def generate_json_response(self, prompt: str, json_schema: Dict[str, Any], gcs_uris: List[str] = None, request_context_log: str = "Generic AI Request") -> Dict[str, Any]:
+    def _get_model_instance(self, model_name: str) -> GenerativeModel:
+        """
+        Get or create a GenerativeModel instance for the specified model.
+        
+        Args:
+            model_name: The model name (e.g., 'gemini-2.5-pro', 'gemini-2.5-flash')
+            
+        Returns:
+            GenerativeModel instance for the specified model
+        """
+        if model_name not in self._model_cache:
+            logging.info(f"Creating new model instance for '{model_name}'")
+            self._model_cache[model_name] = GenerativeModel(
+                model_name, system_instruction=self.system_message
+            )
+        return self._model_cache[model_name]
+
+    async def generate_json_response(
+        self, 
+        prompt: str, 
+        json_schema: Dict[str, Any], 
+        gcs_uris: List[str] = None, 
+        request_context_log: str = "Generic AI Request",
+        model_override: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Generates a JSON response from the AI model, enforcing a specific schema and
         optionally providing GCS files as context. Implements an async retry loop
@@ -54,6 +84,7 @@ class AiClient:
             json_schema: The JSON schema to enforce on the model's output.
             gcs_uris: A list of 'gs://...' URIs pointing to PDF files for context.
             request_context_log: A string to identify the request source in logs.
+            model_override: Optional model name to use instead of the default.
 
         Returns:
             The parsed JSON response from the model.
@@ -68,9 +99,13 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=65536, # Increased from 65k to 8k as 65k is invalid. Standard is 2048. 8192 is a safe max.
+            max_output_tokens=65536,
             temperature=0.2,
         )
+
+        # Select the appropriate model
+        model_to_use = model_override if model_override else GENERATIVE_MODEL_NAME
+        generative_model = self._get_model_instance(model_to_use)
 
         # Build the content list. The system message is now handled by the model constructor.
         contents = [prompt]
@@ -83,8 +118,9 @@ class AiClient:
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
-                    logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
-                    response = await self.generative_model.generate_content_async(
+                    model_info = f" (using {model_to_use})" if model_override else ""
+                    logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{model_to_use}'{model_info}...")
+                    response = await generative_model.generate_content_async(
                         contents=contents,
                         generation_config=gen_config,
                     )

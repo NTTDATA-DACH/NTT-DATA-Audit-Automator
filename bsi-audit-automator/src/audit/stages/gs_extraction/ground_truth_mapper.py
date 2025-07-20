@@ -46,7 +46,8 @@ class GroundTruthMapper:
     async def create_system_structure_map(self, force_overwrite: bool) -> Dict[str, Any]:
         """
         Create the authoritative system structure map by extracting Zielobjekte (from A.1)
-        and Baustein-to-Zielobjekt mappings (from A.3). This map serves as "Ground Truth".
+        and Baustein-to-Zielobjekt mappings (from A.3).
+        This map serves as "Ground Truth".
         
         Args:
             force_overwrite: If True, regenerate even if map already exists
@@ -74,10 +75,10 @@ class GroundTruthMapper:
             z_task_config = gt_config["extract_zielobjekte"]
             z_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
             zielobjekte_result = await self.ai_client.generate_json_response(
-                z_task_config["prompt"], 
-                self._load_asset_json(z_task_config["schema_path"]), 
-                z_uris, 
-                "GT: extract_zielobjekte", 
+                prompt=z_task_config["prompt"], 
+                json_schema=self._load_asset_json(z_task_config["schema_path"]), 
+                gcs_uris=z_uris, 
+                request_context_log="GT: extract_zielobjekte",
                 model_override=self.GROUND_TRUTH_MODEL
             )
 
@@ -85,10 +86,10 @@ class GroundTruthMapper:
             m_task_config = gt_config["extract_baustein_mappings"]
             m_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
             mappings_result = await self.ai_client.generate_json_response(
-                m_task_config["prompt"], 
-                self._load_asset_json(m_task_config["schema_path"]), 
-                m_uris, 
-                "GT: extract_baustein_mappings", 
+                prompt=m_task_config["prompt"], 
+                json_schema=self._load_asset_json(m_task_config["schema_path"]), 
+                gcs_uris=m_uris, 
+                request_context_log="GT: extract_baustein_mappings",
                 model_override=self.GROUND_TRUTH_MODEL
             )
 
@@ -104,6 +105,7 @@ class GroundTruthMapper:
                 self.GROUND_TRUTH_MAP_PATH
             )
             logging.info(f"Successfully created and saved system structure map to {self.GROUND_TRUTH_MAP_PATH}.")
+            
             return system_map
             
         except Exception as e:

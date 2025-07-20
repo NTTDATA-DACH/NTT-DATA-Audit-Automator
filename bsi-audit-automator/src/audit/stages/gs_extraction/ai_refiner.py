@@ -236,7 +236,8 @@ class AiRefiner:
         try:
             # Try with flash model for faster processing
             result = await self.ai_client.generate_json_response(
-                prompt, schema, 
+                prompt=prompt,
+                json_schema=schema,
                 request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
                 model_override=self.CHUNK_PROCESSING_MODEL
             )
