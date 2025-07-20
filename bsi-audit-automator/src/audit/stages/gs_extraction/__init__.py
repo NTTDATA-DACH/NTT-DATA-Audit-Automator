@@ -10,10 +10,16 @@ from .ground_truth_mapper import GroundTruthMapper
 from .document_processor import DocumentProcessor
 from .block_grouper import BlockGrouper
 from .ai_refiner import AiRefiner
+from .cache_manager import CacheManager
+from .chunk_processor import ChunkProcessor
+from .data_processor import DataProcessor
 
 __all__ = [
     'GroundTruthMapper',
     'DocumentProcessor', 
     'BlockGrouper',
-    'AiRefiner'
+    'AiRefiner',
+    'CacheManager',
+    'ChunkProcessor',
+    'DataProcessor'
 ]

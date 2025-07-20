@@ -127,7 +127,8 @@ class AiClient:
         json_schema: Dict[str, Any], 
         gcs_uris: List[str] = None, 
         request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
+        model_override: Optional[str] = None,
+        max_retries: int = None
     ) -> Dict[str, Any]:
         """
         Generates a JSON response from the AI model, enforcing a specific schema and
@@ -140,10 +141,12 @@ class AiClient:
             gcs_uris: A list of 'gs://...' URIs pointing to PDF files for context.
             request_context_log: A string to identify the request source in logs.
             model_override: Optional model name to use instead of the default.
+            max_retries: Optional override for the number of retries (defaults to MAX_RETRIES).
 
         Returns:
             The parsed JSON response from the model.
         """
+        retries = max_retries if max_retries is not None else MAX_RETRIES
         try:
             schema_for_api = json.loads(json.dumps(json_schema))
             schema_for_api.pop("$schema", None)
@@ -173,10 +176,9 @@ class AiClient:
                 logging.info(f"Attaching {len(gcs_uris)} GCS files to the prompt.")
 
         async with self.semaphore:
-            for attempt in range(MAX_RETRIES):
+            for attempt in range(retries):
                 try:
-                    model_info = f" (using {model_to_use})" if model_override else ""
-                    logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{model_to_use}'{model_info}...")
+                    logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{retries}: Calling Gemini model '{model_to_use}'...")
                     response = await generative_model.generate_content_async(
                         contents=contents,
                         generation_config=gen_config,
@@ -195,8 +197,8 @@ class AiClient:
 
                 except (api_core_exceptions.GoogleAPICallError, Exception) as e:
                     wait_time = 2 ** attempt
-                    if attempt == MAX_RETRIES - 1:
-                        logging.critical(f"[{request_context_log}] AI generation failed after all {MAX_RETRIES} retries.", exc_info=True)
+                    if attempt == retries - 1:
+                        logging.critical(f"[{request_context_log}] AI generation failed after all {retries} retries.", exc_info=True)
                         raise
 
                     if isinstance(e, api_core_exceptions.GoogleAPICallError):
