@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
 from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL
-
+from jsonschema import validate, ValidationError
 
 class AiRefiner:
     """
@@ -246,12 +246,21 @@ class AiRefiner:
                     model_override=model_name
                 )
                 
-                if result and "anforderungen" in result:
-                    if model_name != CHUNK_PROCESSING_MODEL:
-                        logging.info(f"Successfully processed chunk with {model_desc} after flash-lite failed")
-                    return result
+                # Validate the result against the schema
+                if result:
+                    try:
+                        validate(instance=result, schema=schema)
+                        if "anforderungen" in result:
+                            if model_name != CHUNK_PROCESSING_MODEL:
+                                logging.info(f"Successfully processed chunk with {model_desc} after flash-lite failed")
+                            return result
+                        else:
+                            logging.warning(f"{model_desc} returned valid JSON but missing 'anforderungen' key for {kuerzel} chunk {chunk_idx + 1}")
+                    except ValidationError as ve:
+                        logging.warning(f"{model_desc} returned JSON that failed schema validation for {kuerzel} chunk {chunk_idx + 1}: {ve.message}")
+                        # Continue to next model or splitting logic
                 else:
-                    logging.warning(f"{model_desc} returned invalid result structure for {kuerzel} chunk {chunk_idx + 1}")
+                    logging.warning(f"{model_desc} returned empty result for {kuerzel} chunk {chunk_idx + 1}")
                     
             except Exception as e:
                 error_msg = str(e).lower()
