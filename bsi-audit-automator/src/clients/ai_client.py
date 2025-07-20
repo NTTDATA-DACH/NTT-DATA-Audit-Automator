@@ -117,7 +117,12 @@ class AiClient:
         if finish_reason not in ["STOP", "MAX_TOKENS"]:
             raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
 
-        response_json = json.loads(response.text)
+        try:
+            response_json = json.loads(response.text)
+        except json.JSONDecodeError as e:
+            # Clean JSON error without the full traceback
+            raise ValueError(f"Failed to parse model response as JSON: {str(e).split(':')[0]}")
+        
         logging.info(f"[{request_context_log}] Successfully generated JSON response.")
         return response_json
 
@@ -191,7 +196,12 @@ class AiClient:
                     if finish_reason not in ["STOP", "MAX_TOKENS"]:
                         raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
 
-                    response_json = json.loads(response.text)
+                    try:
+                        response_json = json.loads(response.text)
+                    except json.JSONDecodeError as e:
+                        # Clean JSON error without the full traceback
+                        raise ValueError(f"Failed to parse model response as JSON: {str(e).split(':')[0]}")
+                    
                     logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
