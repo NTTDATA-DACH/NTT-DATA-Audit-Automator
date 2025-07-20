@@ -102,9 +102,9 @@ class GroundTruthMapper:
             # Save to GCS
             await self.gcs_client.upload_from_string_async(
                 json.dumps(system_map, indent=2, ensure_ascii=False), 
-                self.GROUND_TRUTH_MAP_PATH
+                GROUND_TRUTH_MAP_PATH
             )
-            logging.info(f"Successfully created and saved system structure map to {self.GROUND_TRUTH_MAP_PATH}.")
+            logging.info(f"Successfully created and saved system structure map to {GROUND_TRUTH_MAP_PATH}.")
             
             return system_map
             
