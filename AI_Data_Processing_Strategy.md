@@ -49,134 +49,56 @@ Together, these files allow the audit process to be modified and extended by sim
     *   **Robust Fallback:** This step is designed for resilience. If the AI call fails for any reason (e.g., API error, invalid response), the application does not halt. Instead, the `RagClient` logs a critical warning and generates a **fallback map**, classifying every document as "Sonstiges" (Miscellaneous). This ensures the pipeline can always proceed, with the known consequence of reduced precision in document selection.
 3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous lookup of document URIs for all subsequent audit tasks.
 
----
+## **Phase 2: Ground-Truth-Driven Semantic Chunking (Document AI + Gemini)**
 
-### **Phase 1: Staged, Contextual AI-Driven Generation (The Standard "Analysis" Workflow)**
+The goal is to convert the semi-structured `Grundschutz-Check` PDF into structured JSON requirements grouped by Zielobjekte, using a four-phase pipeline that combines deterministic logic with AI-powered semantic analysis.
 
-**Objective:** To systematically execute the audit by first finding a focused set of documents and then providing them to the AI for deep analysis. This is the standard process for most subchapters.
-
-1.  **Task Identification:** The `AuditController` initiates a stage runner (e.g., `Chapter3Runner`). The runner inspects its execution plan (derived from the `master_report_template.json`).
-2.  **Document Lookup:** For a given subchapter key (e.g., `definitionDesInformationsverbundes`), the runner looks up the corresponding entry in `prompt_config.json` to find the required `source_categories`. It then asks the `RagClient` for the GCS URIs of all documents belonging to those categories.
-3.  **Focused Analysis:** The `AiClient` is invoked with the prompt, the required output schema, and the **list of retrieved GCS URIs**. This is the core of the strategy: the model is given direct, full access to a small, highly relevant set of documents, allowing it to perform a deep, focused analysis without the distraction of irrelevant information.
-4.  **Validation, Collection, and State Management:** The structured JSON response from the AI is validated against its schema. The `AuditController` extracts any findings and adds them to a central list. The result for the stage is saved to GCS (e.g., `output/results/Chapter-3.json`), ensuring the entire process is resumable.
-
----
-
-### **Phase 1.5: Ground-Truth-Driven Audit Planning**
-**Objective:** To create a realistic, accurate, and compliant audit plan that is based on the customer's actual, documented system structure, rather than a plausible hallucination.
-
-1.  **Prerequisite:** This phase runs *after* the Ground Truth Map (`system_structure_map.json`) has been created by Phase 2, Step 1.
-2.  **Load Ground Truth:** The `Chapter4Runner` loads the complete `system_structure_map.json` from GCS. This map contains the authoritative list of which `Bausteine` are applied to which `Zielobjekte`.
-3.  **Inject Context into Prompt:** The entire ground-truth JSON map is serialized and injected directly into the prompt for the AI.
-4.  **Constrained Instruction:** The prompt is explicitly updated with a critical instruction for the AI: it **MUST** create a plan where every selected `Baustein` is paired with a `Zielobjekt Kürzel` that it is actually mapped to in the provided ground-truth context.
-5.  **Accurate Output:** The result is an audit plan (for Chapter 4.1.1, 4.1.2, etc.) that is guaranteed to be consistent with the customer's `Modellierung` document. This prevents downstream errors in Chapter 5, where the system looks up implementation details for the planned items.
-
-This step is a crucial bridge between deep analysis (Chapter 3) and planning (Chapter 4), ensuring the entire audit process remains factually grounded.
-
-
----
-
-
-### **Phase 2: Ground-Truth-Driven Extraction (via Document AI & Gemini)**
-
-The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, hierarchically-organized JSON structure grouped by Zielobjekte (target objects), using a robust four-phase approach combining deterministic logic with AI-powered analysis.
-
-**Architecture:** The stage is implemented as a modular pipeline with four specialized components:
+**Architecture:** Modular pipeline with specialized processors:
 - **GroundTruthMapper**: Creates authoritative system structure from customer documents
-- **DocumentProcessor**: Handles Document AI workflow for PDF processing  
-- **BlockGrouper**: Groups content blocks by Zielobjekt using marker-based algorithm
-- **AiRefiner**: Extracts structured requirements using AI with intelligent chunking
+- **DocumentProcessor**: Handles Document AI Layout Parser workflow
+- **BlockGrouper**: Groups layout blocks by Zielobjekt using marker-based algorithm  
+- **AiRefiner**: Extracts structured requirements with intelligent chunking and model fallback
 
 ---
 
-#### **Phase 2.1: Ground Truth Establishment**
-**Processor:** The **GroundTruthMapper** uses targeted AI calls to extract the authoritative system structure from customer documents.
+### **Phase 2.1: Ground Truth Establishment**
+**GroundTruthMapper** extracts authoritative system structure using targeted AI calls:
+- **Zielobjekte** from `Strukturanalyse` (A.1) 
+- **Baustein-to-Zielobjekt mappings** from `Modellierung` (A.3)
 
-**Ground Truth Sources:**
-- **Zielobjekte** (target objects) from the `Strukturanalyse` (A.1)
-- **Baustein-to-Zielobjekt mappings** from the `Modellierung` (A.3)
+**Output:** `system_structure_map.json` - the foundation for all subsequent processing.
 
-**Output:** Creates a "Ground Truth" map (`system_structure_map.json`) of what we expect to find in the document, serving as the foundation for all subsequent processing.
+### **Phase 2.2: Document Layout Extraction** 
+**DocumentProcessor** uses Document AI Layout Parser:
+1. **PDF Chunking:** Split into 100-page chunks for optimal processing
+2. **Parallel Processing:** All chunks processed simultaneously
+3. **Intelligent Merging:** Global block re-indexing with structure preservation
 
----
+**Output:** `merged_layout_parser_result.json` with consistent block hierarchy.
 
-#### **Phase 2.2: Document Layout Extraction**
-**Processor:** The **DocumentProcessor** uses Google Cloud's **Document AI Layout Parser** to extract detailed document structure.
+### **Phase 2.3: Semantic Block Grouping**
+**BlockGrouper** uses deterministic marker-based algorithm:
+1. **Marker Detection:** Finds exact Zielobjekt identifiers as section markers
+2. **Position-Based Assignment:** Content between markers assigned to appropriate Zielobjekt
+3. **Hierarchical Preservation:** Maintains document's natural block structure
 
-**Workflow:**
-1. **PDF Chunking:** Large PDFs are split into manageable chunks (100 pages each) for optimal processing
-2. **Parallel Processing:** All chunks are processed simultaneously with Document AI
-3. **Intelligent Merging:** Results are merged with global block re-indexing and cleanup
-4. **Structure Preservation:** Maintains nested blocks, text positioning, and hierarchical relationships
+**Output:** `zielobjekt_grouped_blocks.json` with content organized by context.
 
-**Output:** Unified layout structure (`doc_ai_layout_parser_merged.json`) with globally consistent block IDs.
+### **Phase 2.4: AI-Powered Semantic Extraction**
+**AiRefiner** transforms grouped blocks into structured requirements:
 
----
+**Smart Chunking:**
+- **Adaptive Sizing:** Auto-splits large groups (>200 blocks) with 10% overlap
+- **Context Continuity:** Overlap prevents requirement fragmentation at boundaries
+- **Model Fallback:** Flash-lite → Ground Truth model on JSON parsing failures
 
-#### **Phase 2.2: Context-Aware Block Grouping**
-**Processor:** The **BlockGrouper** uses a deterministic three-step algorithm to assign content to Zielobjekt contexts.
+**Robust Processing:**
+- **Per-Zielobjekt Caching:** Individual results cached for efficient reruns
+- **Content Preprocessing:** Cleans problematic characters, truncates oversized blocks  
+- **Deduplication:** Quality-based selection when overlapping chunks create duplicates
+- **Parallel Processing:** Multiple Zielobjekte processed concurrently
 
-**Algorithm:**
-1. **Block Flattening:** All document blocks (including deeply nested structures) are flattened for consistent processing
-2. **Marker Detection:** Searches for exact Zielobjekt identifiers (e.g., "AC-001", "SRV-002") as section markers
-3. **Position-Based Grouping:** Content blocks between consecutive markers are systematically assigned to the appropriate Zielobjekt
-
-**Key Advantages:**
-- **Hierarchical Structure Preservation:** Maintains document's natural block hierarchy while enabling precise content grouping
-- **Deep Nested Search:** Finds markers even when buried multiple levels deep in document structure
-- **Deterministic Logic:** Uses document position to systematically assign content to correct sections
-- **Ground Truth Validation:** Only searches for Zielobjekte that actually exist in the customer's system
-
-**Output:** Grouped blocks file (`zielobjekt_grouped_blocks.json`) with content organized by Zielobjekt context.
-
----
-
-#### **Phase 2.3: AI-Powered Requirement Extraction**
-**Processor:** The **AiRefiner** transforms grouped raw layout blocks into structured security requirements using advanced AI processing with intelligent chunking.
-
-**Smart Chunking Strategy:**
-- **Adaptive Sizing:** Automatically splits large block groups (>300 blocks) into manageable chunks
-- **Context Preservation:** 8% overlap between chunks maintains semantic continuity at boundaries
-- **Dynamic Overlap:** Overlap size scales with chunk size (2-20 blocks) for optimal context retention
-- **Boundary Optimization:** Prevents requirement fragmentation across chunk boundaries
-
-**Robust Processing Features:**
-- **Per-Kürzel Caching:** Individual results are cached to enable efficient reruns and recovery
-- **Content Preprocessing:** Cleans problematic characters and truncates oversized text blocks
-- **Automatic Recovery:** Failed chunks are automatically split and reprocessed
-- **JSON Validation:** Built-in validation and repair for malformed AI responses
-- **Parallel Processing:** Multiple Zielobjekt groups processed concurrently for speed
-
-**Error Handling & Recovery:**
-- **Token Limit Detection:** Automatically detects and handles token limit errors
-- **Recursive Splitting:** Oversized chunks are recursively split until processable
-- **Graceful Degradation:** Failed extractions don't block overall pipeline progress
-- **Comprehensive Logging:** Detailed progress tracking for debugging and monitoring
-
-**Performance Optimizations:**
-- **Test Mode Limiting:** Processes only subset of data during development/testing
-- **Efficient Caching:** Skips already-processed Zielobjekte in incremental runs
-- **Memory Management:** Optimized for large document processing
-
-**Output:** Structured requirements file (`extracted_grundschutz_check_merged.json`) containing all security requirements with Zielobjekt context, ready for downstream analysis stages.
-
-#### **Phase 2.4 : Refinement and Structuring with Gemini 2.5**
-
-The entity-based JSON from Document AI is now used as high-quality input for the LLM, which performs targeted refinement tasks rather than open-ended analysis.
-
-1.  **Input:** For each Zielobjekt the blocks pertaining to it from Stage 1 (`zielobjekt_grouped_blocks.json`), and a predefined output schema (`3.6.1_extraction_schema.json`) are send to gemini. One request per Zielobjekt with only the context required to convert the blocks into JSON.
-2.  **Prompting Strategy:** Gemini is given a highly specific prompt that instructs it to act as a data refiner, not a reader. The prompt includes:
-    *   **System Instruction:** "You are an expert system for refining BSI Grundschutz data. Your input is a JSON of entities extracted by a form parser. Your task is to assemble these entities into a final, structured list of requirements."
-    *   **Rules:**
-        *   "Group related entities (ID, title, status, explanation) into a single requirement object."
-        *   "Using the provided `system_map.json`, infer the correct `Zielobjekt` for each requirement based on its ID prefix (e.g., an ID starting with `SYS.1.1` belongs to the `SYS.1.1` Zielobjekt)."
-        *   "Normalize minor OCR errors (e.g., 'ertluterung' becomes 'Erläuterung')."
-        *   "Your output MUST be a single JSON object that strictly conforms to the provided `3.6.1_extraction_schema.json`."
-3.  **Output:** The LLM produces the final, clean intermediate files:
-    *   **`extracted_grundschutz_check_merged.json`**: A structured, de-duplicated, and contextually complete list of all security requirements. This file becomes the reliable source of truth for all subsequent audit analysis in Chapter 3 and Chapter 5.
-
-This hybrid approach ensures maximum accuracy and traceability by using the right tool for each job: Document AI for structured extraction and Gemini for contextual refinement and formatting.
-
+**Output:** `extracted_grundschutz_check_merged.json` - structured, deduplicated requirements ready for audit analysis in Chapters 3 and 5.
 
 ---
 
@@ -188,3 +110,118 @@ This hybrid approach ensures maximum accuracy and traceability by using the righ
 2.  **Merge and Populate:** It systematically traverses the master template's structure and injects the content from the corresponding stage results.
 3.  **Populate Findings Tables:** It specifically populates the deviation and recommendation tables in Chapter 7.2 by iterating through the `all_findings.json` file.
 4.  **Save Final Report:** The fully assembled, validated JSON report is saved to `output/final_audit_report.json`.
+
+## **Phase 1: Staged AI-Driven Analysis & Report Generation**
+
+The audit generation follows a structured approach where each chapter has specialized logic combining AI analysis with deterministic processing.
+
+---
+
+### **Chapter 3: Dokumentenprüfung (Document Review)**
+
+**Approach:** Dynamic execution plan with hybrid AI/deterministic logic and custom processing for complex analysis.
+
+**Key Features:**
+- **Template-Driven Planning:** Execution plan auto-generated from `master_report_template.json` structure
+- **Multi-Modal Processing:** 
+  - **AI-Driven Subchapters:** Standard document analysis with source category filtering
+  - **Custom Logic:** Complex analysis for IT-Grundschutz-Check using pre-computed data
+  - **Summary Sections:** Consolidates findings from dependent subchapters
+
+**IT-Grundschutz-Check Analysis (3.6.1):**
+- **Data Source:** Uses pre-extracted `extracted_grundschutz_check_merged.json` from Phase 2
+- **Hybrid Logic:** Combines deterministic checks with targeted AI analysis
+- **Coverage Validation:** Ensures all modeled Zielobjekte have corresponding requirements
+- **Quality Assessments:** 
+  - Status coverage completeness
+  - MUSS-requirement compliance (using BSI Control Catalog)
+  - Date recency validation (<12 months)
+  - Cross-reference with Risikoanalyse and Realisierungsplan
+
+**Output:** Comprehensive document review with structured findings and compliance assessment.
+
+---
+
+### **Chapter 4: Erstellung eines Prüfplans (Audit Planning)**
+
+**Approach:** Ground-truth constrained AI planning with audit-type-specific logic.
+
+**Key Features:**
+- **Audit Type Configuration:** Different Baustein selection based on `AUDIT_TYPE` environment variable
+  - `Zertifizierungsaudit` → 4.1.1 (Initial certification, minimum 6 Bausteine)
+  - `1. Überwachungsaudit` → 4.1.2 (First surveillance, minimum 3 Bausteine) 
+  - `2. Überwachungsaudit` → 4.1.3 (Second surveillance, avoid repeats from first)
+- **Ground Truth Integration:** Injects complete `system_structure_map.json` into AI prompts
+- **Compliance Enforcement:** AI instructed to only select valid Baustein-Zielobjekt combinations
+- **Mixed Generation:** 
+  - **AI-Driven:** Baustein selection and risk analysis measures
+  - **Deterministic:** Standard location selection
+
+**Critical Constraint:** Every selected Baustein must be paired with a Zielobjekt Kürzel that it's actually mapped to in the ground truth, preventing downstream errors in Chapter 5.
+
+**Output:** Realistic, compliant audit plan based on customer's actual system structure.
+
+---
+
+### **Chapter 5: Vor-Ort-Audit (On-Site Audit)**
+
+**Approach:** Deterministic checklist generation consuming data from previous stages.
+
+**Key Features:**
+- **Data Integration:** Combines Chapter 4 plan + ground truth map + extracted check data
+- **Robust Zielobjekt Mapping:** Uses Kürzel from audit plan (not fragile name lookups)
+- **Control Checklist Generation (5.5.2):**
+  - Loads BSI Control Catalog for each planned Baustein
+  - Enriches with customer implementation details from extracted data
+  - Creates structured audit checklist with empty fields for manual completion
+- **Risk Analysis Checklist (5.6.2):** 
+  - Processes measures selected in Chapter 4.1.5
+  - Generates verification checklist for additional risk controls
+
+**Data Flow:**
+1. **Chapter 4 Results** → Selected Bausteine and Zielobjekte for audit
+2. **BSI Control Catalog** → Standard requirements for each Baustein  
+3. **Extracted Check Data** → Customer's current implementation status and explanations
+4. **Output** → Pre-populated audit checklists ready for on-site verification
+
+**Output:** Comprehensive manual audit checklists with customer context pre-filled.
+
+---
+
+### **Chapter 7: Anhang (Appendix)**
+
+**Approach:** Deterministic file listing with centralized findings integration.
+
+**Key Features:**
+- **Reference Documents (7.1):** Auto-generated from GCS source file listing
+- **Findings Integration (7.2):** Populated by `ReportGenerator` from central `all_findings.json`
+
+**Process:**
+1. **File Discovery:** Lists all source documents from GCS with metadata
+2. **Document Table:** Creates structured reference with version info and change notes
+3. **Findings Consolidation:** `ReportGenerator` handles centralized finding population with:
+   - **Categorical Sorting:** AG (Minor), AS (Major), E (Recommendations)
+   - **Numerical Ordering:** Findings sorted by ID number within category
+   - **Status Tracking:** Preserves status from previous audits or sets defaults
+
+**Output:** Complete appendix with document references and consolidated findings tables.
+
+---
+
+### **Cross-Chapter Integration**
+
+**Central Findings Collection:**
+- All stages contribute structured findings to `all_findings.json`
+- `AuditController` manages finding ID assignment and deduplication
+- Previous audit findings preserved with existing IDs
+- New findings get sequential IDs per category
+
+**State Management:**
+- Each chapter result saved independently to GCS
+- Resumable execution with dependency checking
+- Force overwrite capability for development iterations
+
+**Report Assembly:**
+- `ReportGenerator` combines all stage outputs into final audit report
+- Schema validation ensures compliance with BSI audit structure
+- Non-destructive updates preserve baseline data from previous reports
