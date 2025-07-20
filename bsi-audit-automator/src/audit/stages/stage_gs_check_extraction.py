@@ -4,7 +4,9 @@ import json
 import asyncio
 import fitz  # PyMuPDF
 import re
-from typing import Dict, Any, List, Tuple
+import os
+
+from typing import Optional, Dict, Any, List, Tuple
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -192,8 +194,33 @@ class GrundschutzCheckExtractionRunner:
         # Initialize grouped_blocks
         grouped_blocks = defaultdict(list)
         
-        # Create block mapping from TOP-LEVEL blocks (not flattened ones)
-        block_id_to_block_map = {int(b['blockId']): b for b in all_blocks}
+        # Flatten all blocks for consistent processing
+        def flatten_all_blocks(blocks):
+            """Flattens all blocks into a single list with their hierarchical structure removed."""
+            flattened = []
+            
+            def flatten_recursive(block_list):
+                for block in block_list:
+                    # Add the current block to flattened list
+                    flattened.append(block)
+                    
+                    # Process nested textBlock.blocks
+                    if 'textBlock' in block and 'blocks' in block['textBlock']:
+                        flatten_recursive(block['textBlock']['blocks'])
+                    
+                    # Process table blocks
+                    if 'tableBlock' in block:
+                        for row_type in ['headerRows', 'bodyRows']:
+                            for row in block['tableBlock'].get(row_type, []):
+                                for cell in row.get('cells', []):
+                                    if 'blocks' in cell:
+                                        flatten_recursive(cell['blocks'])
+            
+            flatten_recursive(blocks)
+            return flattened
+        
+        all_flattened_blocks = flatten_all_blocks(all_blocks)
+        block_id_to_block_map = {int(b['blockId']): b for b in all_flattened_blocks}
 
         # --- Phase 1: Find Markers ---
         zielobjekte = system_map.get("zielobjekte", [])
@@ -201,35 +228,9 @@ class GrundschutzCheckExtractionRunner:
         remaining_kuerzel = kuerzel_list.copy()
 
         markers = []
-        
-        def check_all_blocks_flat(blocks):
-            """Flattens all blocks and checks each individual block's direct text."""
-            all_individual_blocks = []
-            
-            def flatten_blocks(block_list):
-                for block in block_list:
-                    all_individual_blocks.append(block)
-                    
-                    # Check nested textBlock.blocks
-                    if 'textBlock' in block and 'blocks' in block['textBlock']:
-                        flatten_blocks(block['textBlock']['blocks'])
-                    
-                    # Check table blocks
-                    if 'tableBlock' in block:
-                        for row_type in ['headerRows', 'bodyRows']:
-                            for row in block['tableBlock'].get(row_type, []):
-                                for cell in row.get('cells', []):
-                                    if 'blocks' in cell:
-                                        flatten_blocks(cell['blocks'])
-            
-            flatten_blocks(blocks)
-            return all_individual_blocks
-
-        # Get all individual blocks (flattened)
-        all_individual_blocks = check_all_blocks_flat(all_blocks)
                 
         # Check each individual block's direct text
-        for block in all_individual_blocks:
+        for block in all_flattened_blocks:
             # Get the direct text from this specific block only
             direct_text = ""
             if 'textBlock' in block and 'text' in block['textBlock']:
