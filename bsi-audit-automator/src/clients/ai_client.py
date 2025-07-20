@@ -83,8 +83,7 @@ class AiClient:
         async with self.semaphore:
             for attempt in range(MAX_RETRIES):
                 try:
-                    if self.config.is_test_mode:
-                        logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
+                    logging.info(f"[{request_context_log}] Attempt {attempt + 1}/{MAX_RETRIES}: Calling Gemini model '{GENERATIVE_MODEL_NAME}'...")
                     response = await self.generative_model.generate_content_async(
                         contents=contents,
                         generation_config=gen_config,
@@ -98,8 +97,7 @@ class AiClient:
                         raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
 
                     response_json = json.loads(response.text)
-                    if self.config.is_test_mode:
-                        logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
+                    logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
                 except (api_core_exceptions.GoogleAPICallError, Exception) as e:
