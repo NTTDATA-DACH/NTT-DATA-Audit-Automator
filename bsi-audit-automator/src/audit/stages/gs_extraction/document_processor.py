@@ -9,7 +9,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
-from src.constants import FINAL_MERGED_LAYOUT_PATH, DOC_AI_CHUNK_RESULTS_PREFIX
+from src.constants import FINAL_MERGED_LAYOUT_PATH, DOC_AI_CHUNK_RESULTS_PREFIX, TEMP_PDF_CHUNKS_PREFIX
 
 
 class DocumentProcessor:
@@ -17,8 +17,7 @@ class DocumentProcessor:
     Handles Document AI Layout Parser workflow for processing the Grundschutz-Check PDF.
     Splits large PDFs into chunks, processes them with Document AI, and merges results.
     """
-    
-    TEMP_PDF_CHUNK_PREFIX = "output/temp_pdf_chunks/"
+
     PAGE_CHUNK_SIZE = 100
 
     def __init__(self, gcs_client: GcsClient, doc_ai_client: DocumentAiClient, rag_client: RagClient, config: AppConfig):
@@ -68,7 +67,7 @@ class DocumentProcessor:
             end_page = min(i + self.PAGE_CHUNK_SIZE, pdf_doc.page_count) - 1
             chunk_doc.insert_pdf(pdf_doc, from_page=i, to_page=end_page)
             
-            destination_blob_name = f"{self.TEMP_PDF_CHUNK_PREFIX}chunk_{i // self.PAGE_CHUNK_SIZE}.pdf"
+            destination_blob_name = f"{TEMP_PDF_CHUNKS_PREFIX}chunk_{i // self.PAGE_CHUNK_SIZE}.pdf"
             upload_tasks.append(
                 self.gcs_client.upload_from_bytes_async(chunk_doc.tobytes(), destination_blob_name)
             )
@@ -85,7 +84,7 @@ class DocumentProcessor:
         """Process all PDF chunks with Document AI."""
         processing_tasks = [
             self.doc_ai_client.process_document_chunk_async(
-                f"gs://{self.config.bucket_name}/{self.TEMP_PDF_CHUNK_PREFIX}chunk_{i}.pdf", 
+                f"gs://{self.config.bucket_name}/{TEMP_PDF_CHUNKS_PREFIX}chunk_{i}.pdf", 
                 DOC_AI_CHUNK_RESULTS_PREFIX
             ) for i in range(chunk_count)
         ]

@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.clients.gcs_client import GcsClient
-from src.constants import GROUND_TRUTH_MAP_PATH
+from src.constants import GROUND_TRUTH_MAP_PATH, GROUND_TRUTH_MODEL
 
 
 class GroundTruthMapper:
@@ -16,7 +16,6 @@ class GroundTruthMapper:
     Zielobjekte and Baustein-to-Zielobjekt mappings from customer documents.
     """
     
-    GROUND_TRUTH_MODEL = os.getenv("GS_GROUND_TRUTH_MODEL", "gemini-2.5-pro")
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
     def __init__(self, ai_client: AiClient, rag_client: RagClient, gcs_client: GcsClient):

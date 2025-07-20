@@ -11,8 +11,8 @@ from google.api_core import exceptions as api_core_exceptions
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 
 from src.config import AppConfig
+from src.constants import GROUND_TRUTH_MODEL
 
-GENERATIVE_MODEL_NAME = "gemini-2.5-pro"
 MAX_RETRIES = 5
 PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
@@ -38,11 +38,11 @@ class AiClient:
         
         # Default model instance
         self.generative_model = GenerativeModel(
-            GENERATIVE_MODEL_NAME, system_instruction=self.system_message
+            GROUND_TRUTH_MODEL, system_instruction=self.system_message
         )
         
         # Cache for alternative model instances
-        self._model_cache = {GENERATIVE_MODEL_NAME: self.generative_model}
+        self._model_cache = {GROUND_TRUTH_MODEL: self.generative_model}
         
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
@@ -104,7 +104,7 @@ class AiClient:
         )
 
         # Select the appropriate model
-        model_to_use = model_override if model_override else GENERATIVE_MODEL_NAME
+        model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
         generative_model = self._get_model_instance(model_to_use)
 
         # Build the content list. The system message is now handled by the model constructor.

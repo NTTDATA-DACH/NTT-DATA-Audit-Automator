@@ -3,6 +3,9 @@ Centralized constants for file paths and output organization.
 This ensures consistency across all stages and reduces magic strings.
 """
 
+CHUNK_PROCESSING_MODEL =  "gemini-2.5-flash"
+GROUND_TRUTH_MODEL =  "gemini-2.5-pro"
+
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation
 # output/temp/           -> Temporary files (PDF chunks, intermediate processing)

@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
-from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX
+from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX, CHUNK_PROCESSING_MODEL
 
 
 class AiRefiner:
@@ -16,7 +16,6 @@ class AiRefiner:
     Handles chunking, caching, error recovery, and result consolidation.
     """
     
-    CHUNK_PROCESSING_MODEL = os.getenv("GS_CHUNK_MODEL", "gemini-2.5-flash")
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     
     # Chunking configuration
