@@ -112,12 +112,12 @@ class AiRefiner:
             
             if len(chunks) == 1:
                 # Single chunk - process normally
-                result = await self._process_blocks_chunk(kuerzel, chunks[0], 0, 1, prompt_template, schema)
+                result = await self._process_single_chunk(kuerzel, chunks[0], 0, 1, prompt_template, schema)
             else:
                 # Multiple chunks - process each and merge results
                 logging.info(f"Processing {len(chunks)} chunks for Zielobjekt '{kuerzel}'")
                 chunk_tasks = [
-                    self._process_blocks_chunk(kuerzel, chunk, idx, len(chunks), prompt_template, schema) 
+                    self._process_single_chunk(kuerzel, chunk, idx, len(chunks), prompt_template, schema) 
                     for idx, chunk in enumerate(chunks)
                 ]
                 chunk_results = await asyncio.gather(*chunk_tasks)
@@ -141,67 +141,140 @@ class AiRefiner:
             logging.error(f"Complete processing failed for Zielobjekt '{kuerzel}': {e}")
             return kuerzel, name, None
 
-    async def _process_blocks_chunk(self, kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int,
+    async def _process_single_chunk(self, kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int,
                                    prompt_template: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process a single chunk of blocks for a kürzel.
-        Simplified logic: 2 attempts with flash model, then 2 attempts with ground truth model, then fail.
+        Process a single chunk with the 2+2 attempt pattern.
         """
-        # Preprocess blocks to prevent JSON issues
+        # Preprocess blocks
         clean_chunk = self.chunk_processor.preprocess_blocks_for_ai(chunk)
         
-        # Calculate rough content size for logging
+        # Build prompt
+        prompt = self._build_chunk_prompt(clean_chunk, chunk_idx, total_chunks, prompt_template)
+        
+        # Log chunk info
         total_chars = sum(len(str(block)) for block in clean_chunk)
+        chunk_info = f"chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}' ({len(clean_chunk)} blocks, ~{total_chars:,} chars)"
+        logging.info(f"Processing {chunk_info}")
         
-        # Add chunk context to prompt if multiple chunks
-        chunk_context = ""
-        if total_chunks > 1:
-            chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Chunks have 10% overlap to maintain context continuity. Focus on extracting requirements from these specific blocks, avoiding duplication of requirements found in overlapping sections."
+        # Try with flash model (2 attempts)
+        flash_result = await self._try_model_with_retries(
+            model_name=CHUNK_PROCESSING_MODEL,
+            model_display_name="flash-lite",
+            prompt=prompt,
+            schema=schema,
+            chunk_info=chunk_info,
+            attempts=2
+        )
         
-        prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
+        if flash_result:
+            return flash_result
         
-        # Try with flash model first (2 attempts)
-        logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars")
+        # Flash failed, try with ground truth model (2 attempts)
+        logging.info(f"⚡ Flash model exhausted for {chunk_info}. Switching to 🎯 ground truth model...")
         
-        for attempt in range(2):
-            try:
-                logging.info(f"Attempt {attempt + 1}/2 with {CHUNK_PROCESSING_MODEL}")
-                result = await self.ai_client.generate_json_response(
-                    prompt=prompt,
-                    json_schema=schema,
-                    request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
-                    model_override=CHUNK_PROCESSING_MODEL,
-                    max_retries=1  # Single internal retry per attempt
-                )
-                
-                if result and "anforderungen" in result:
-                    logging.info(f"Successfully processed chunk with {CHUNK_PROCESSING_MODEL} on attempt {attempt + 1}")
-                    return result
-                    
-            except Exception as e:
-                logging.warning(f"{CHUNK_PROCESSING_MODEL} attempt {attempt + 1} failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
-                if attempt == 1:  # Last attempt with flash model
-                    logging.info(f"Both {CHUNK_PROCESSING_MODEL} attempts failed. Switching to {GROUND_TRUTH_MODEL}...")
+        gt_result = await self._try_model_with_retries(
+            model_name=GROUND_TRUTH_MODEL,
+            model_display_name="ground-truth",
+            prompt=prompt,
+            schema=schema,
+            chunk_info=chunk_info,
+            attempts=2
+        )
         
-        # Try with ground truth model (2 attempts)
-        for attempt in range(2):
-            try:
-                logging.info(f"Attempt {attempt + 1}/2 with {GROUND_TRUTH_MODEL}")
-                result = await self.ai_client.generate_json_response(
-                    prompt=prompt,
-                    json_schema=schema,
-                    request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
-                    model_override=GROUND_TRUTH_MODEL,
-                    max_retries=1  # Single internal retry per attempt
-                )
-                
-                if result and "anforderungen" in result:
-                    logging.info(f"Successfully processed chunk with {GROUND_TRUTH_MODEL} on attempt {attempt + 1}")
-                    return result
-                    
-            except Exception as e:
-                logging.error(f"{GROUND_TRUTH_MODEL} attempt {attempt + 1} failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+        if gt_result:
+            return gt_result
         
         # All attempts failed
-        logging.error(f"All 4 attempts (2x{CHUNK_PROCESSING_MODEL} + 2x{GROUND_TRUTH_MODEL}) failed for '{kuerzel}' chunk {chunk_idx + 1}. Returning empty result.")
+        logging.error(f"❌ All 4 attempts failed for {chunk_info}. Returning empty result.")
         return {"anforderungen": []}
+
+    def _build_chunk_prompt(self, clean_chunk: List[Dict], chunk_idx: int, total_chunks: int, prompt_template: str) -> str:
+        """Build the prompt for a chunk."""
+        chunk_context = ""
+        if total_chunks > 1:
+            chunk_context = (
+                f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. "
+                f"Chunks have 10% overlap to maintain context continuity. Focus on extracting requirements "
+                f"from these specific blocks, avoiding duplication of requirements found in overlapping sections."
+            )
+        
+        return prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
+
+    async def _try_model_with_retries(self, model_name: str, model_display_name: str, prompt: str, 
+                                     schema: Dict[str, Any], chunk_info: str, attempts: int) -> Optional[Dict[str, Any]]:
+        """
+        Try a specific model with the given number of attempts.
+        
+        Returns:
+            The result dict if successful, None if all attempts failed.
+        """
+        for attempt in range(attempts):
+            try:
+                model_icon = "⚡" if "flash" in model_display_name else "🎯"
+                logging.info(f"{model_icon} Attempt {attempt + 1}/{attempts} with {model_display_name} for {chunk_info}")
+                
+                # Call AI without internal retries - we handle retries here
+                result = await self._call_ai_model(
+                    model_name=model_name,
+                    prompt=prompt,
+                    schema=schema,
+                    chunk_info=chunk_info
+                )
+                
+                # Validate result
+                if result and self._is_valid_result(result):
+                    logging.info(f"✅ Success with {model_display_name} on attempt {attempt + 1}")
+                    return result
+                else:
+                    logging.warning(f"⚠️  {model_display_name} returned invalid/empty result on attempt {attempt + 1}")
+                    
+            except Exception as e:
+                error_type = self._classify_error(e)
+                if attempt < attempts - 1:  # Not the last attempt
+                    logging.warning(f"⚠️  {model_display_name} attempt {attempt + 1}/{attempts} failed: {error_type}")
+                else:  # Last attempt
+                    logging.error(f"❌ {model_display_name} final attempt {attempt + 1}/{attempts} failed: {error_type}")
+        
+        return None
+
+    def _classify_error(self, error: Exception) -> str:
+        """Classify the error into a concise, readable format."""
+        error_str = str(error)
+        
+        if "Unterminated string" in error_str or "JSONDecodeError" in error_str:
+            return "JSON parsing error"
+        elif "token" in error_str.lower() or "context length" in error_str.lower():
+            return "Token limit exceeded"
+        elif "timeout" in error_str.lower():
+            return "Request timeout"
+        elif "rate limit" in error_str.lower():
+            return "Rate limit hit"
+        elif "GoogleAPICallError" in error.__class__.__name__:
+            return f"API error: {error_str[:100]}..."
+        else:
+            return f"Unexpected error: {error_str[:100]}..."
+
+    async def _call_ai_model(self, model_name: str, prompt: str, schema: Dict[str, Any], 
+                           chunk_info: str) -> Optional[Dict[str, Any]]:
+        """
+        Make a single AI call without retries.
+        """
+        try:
+            # We'll use the standard generate_json_response but with max_retries=1
+            # This gives us one clean attempt without the internal retry logic
+            result = await self.ai_client.generate_json_response(
+                prompt=prompt,
+                json_schema=schema,
+                request_context_log=f"RefineGroup: {chunk_info}",
+                model_override=model_name,
+                max_retries=1  # Disable internal retries
+            )
+            return result
+        except Exception as e:
+            # Re-raise to be handled by the retry logic
+            raise
+
+    def _is_valid_result(self, result: Dict[str, Any]) -> bool:
+        """Check if the AI result is valid."""
+        return result is not None and "anforderungen" in result and isinstance(result["anforderungen"], list)
