@@ -267,13 +267,13 @@ class AiRefiner:
                 is_json_error = "unterminated string" in error_msg or "json" in error_msg
                 
                 if is_json_error and model_name == CHUNK_PROCESSING_MODEL:
-                    logging.warning(f"Flash-lite failed with JSON error for '{kuerzel}' chunk {chunk_idx + 1}: {e}. Trying ground truth model...")
+                    logging.warning(f"Flash-lite failed with JSON parsing error for '{kuerzel}' chunk {chunk_idx + 1}. Trying ground truth model...")
                     continue  # Try next model
                 elif model_name == GROUND_TRUTH_MODEL:
-                    logging.error(f"Ground truth model also failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+                    logging.error(f"Ground truth model also failed for '{kuerzel}' chunk {chunk_idx + 1}. Trying chunk splitting...")
                     break  # Both models failed, try chunk splitting
                 else:
-                    logging.error(f"{model_desc} failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+                    logging.error(f"{model_desc} failed for '{kuerzel}' chunk {chunk_idx + 1}")
                     break
         
         # If both models failed, try splitting the chunk as last resort

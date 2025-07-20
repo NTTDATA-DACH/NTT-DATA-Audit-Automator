@@ -29,6 +29,12 @@ def setup_logging(config: AppConfig):
         logging.getLogger("google.auth").setLevel(logging.WARNING)
         logging.getLogger("google.api_core").setLevel(logging.WARNING)
         logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+        
+        # Suppress verbose JSON decoder stack traces
+        logging.getLogger("json").setLevel(logging.ERROR)
+        
         logging.info("Production logging enabled. Set root to INFO, app logs to DEBUG, and suppressed noisy libs.")
     else:
+        # In test mode, also suppress JSON decoder noise but keep other details
+        logging.getLogger("json").setLevel(logging.WARNING)
         logging.info("Test mode logging enabled. All INFO logs will be visible.")

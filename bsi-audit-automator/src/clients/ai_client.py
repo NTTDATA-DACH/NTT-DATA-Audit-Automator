@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 
 from google.cloud import aiplatform
 from google.api_core import exceptions as api_core_exceptions
+from jsonschema import validate, ValidationError
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 
 from src.config import AppConfig
@@ -148,8 +149,40 @@ class AiClient:
                     if isinstance(e, api_core_exceptions.GoogleAPICallError):
                         logging.warning(f"[{request_context_log}] Generation attempt {attempt + 1} failed with Google API Error (Code: {e.code}): {e.message}. Retrying in {wait_time}s...")
                     else:
-                        logging.warning(f"[{request_context_log}] Generation attempt {attempt + 1} failed with an exception: {e}. Retrying in {wait_time}s...")
+                        # Clean up JSON error messages to be more readable
+                        error_msg = str(e)
+                        if "Unterminated string" in error_msg or "json.decoder.JSONDecodeError" in error_msg:
+                            logging.warning(f"[{request_context_log}] Attempt {attempt + 1} failed: JSON parsing error. Retrying in {wait_time}s...")
+                        else:
+                            logging.warning(f"[{request_context_log}] Attempt {attempt + 1} failed: {error_msg}. Retrying in {wait_time}s...")
 
                     await asyncio.sleep(wait_time)
 
         raise RuntimeError("AI generation failed unexpectedly after exhausting all retries.")
+
+    async def generate_validated_json_response(
+        self, 
+        prompt: str, 
+        json_schema: Dict[str, Any], 
+        gcs_uris: List[str] = None, 
+        request_context_log: str = "Generic AI Request",
+        model_override: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generates and validates a JSON response from the AI model.
+        
+        Raises:
+            ValidationError: If the response doesn't match the provided schema
+            
+        Returns:
+            The validated JSON response from the model
+        """
+        try:
+            result = await self.generate_json_response(prompt, json_schema, gcs_uris, request_context_log, model_override)
+            validate(instance=result, schema=json_schema)
+            return result
+        except ValidationError as e:
+            # Clean validation error message
+            clean_msg = e.message.split('\n')[0] if '\n' in e.message else e.message
+            logging.error(f"[{request_context_log}] Schema validation failed: {clean_msg}")
+            raise ValidationError(f"Response validation failed: {clean_msg}")

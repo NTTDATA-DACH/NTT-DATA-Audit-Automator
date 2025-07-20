@@ -1,0 +1,332 @@
+--- a/src/clients/ai_client.py
++++ b/src/clients/ai_client.py
+@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
+ 
+ from google.cloud import aiplatform
+ from google.api_core import exceptions as api_core_exceptions
++from jsonschema import validate, ValidationError
+ from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
+ 
+ from src.config import AppConfig
+@@ -139,6 +140,28 @@ class AiClient:
+                     await asyncio.sleep(wait_time)
+ 
+         raise RuntimeError("AI generation failed unexpectedly after exhausting all retries.")
++
++    async def generate_validated_json_response(
++        self, 
++        prompt: str, 
++        json_schema: Dict[str, Any], 
++        gcs_uris: List[str] = None, 
++        request_context_log: str = "Generic AI Request",
++        model_override: Optional[str] = None
++    ) -> Dict[str, Any]:
++        """
++        Generates and validates a JSON response from the AI model.
++        
++        Raises:
++            ValidationError: If the response doesn't match the provided schema
++            
++        Returns:
++            The validated JSON response from the model
++        """
++        result = await self.generate_json_response(prompt, json_schema, gcs_uris, request_context_log, model_override)
++        
++        validate(instance=result, schema=json_schema)
++        return result
+--- a/src/audit/stages/stage_1_general.py
++++ b/src/audit/stages/stage_1_general.py
+@@ -2,6 +2,7 @@
+ import logging
+ import json
+ import asyncio
++from jsonschema import ValidationError
+ from typing import Dict, Any
+ 
+ from src.config import AppConfig
+@@ -56,10 +57,20 @@ class Chapter1Runner:
+             }
+             
+-        return await self.ai_client.generate_json_response(
+-            prompt=prompt_template,
+-            json_schema=schema,
+-            gcs_uris=gcs_uris,
+-            request_context_log="Chapter-1: informationsverbund"
+-        )
++        try:
++            result = await self.ai_client.generate_validated_json_response(
++                prompt=prompt_template,
++                json_schema=schema,
++                gcs_uris=gcs_uris,
++                request_context_log="Chapter-1: informationsverbund"
++            )
++            return result
++        except ValidationError as e:
++            logging.error(f"Chapter-1 informationsverbund validation failed: {e.message}")
++            # Return fallback response on validation failure
++            return {
++                "kurzbezeichnung": "Validierungsfehler",
++                "kurzbeschreibung": f"Die Analyse des Informationsverbunds schlug fehl aufgrund eines Validierungsfehlers: {e.message}",
++                "finding": {"category": "AS", "description": f"Schwerwiegender Validierungsfehler bei der Analyse des Informationsverbunds: {e.message}"}
++            }
+ 
+     async def run(self, force_overwrite: bool = False) -> dict:
+--- a/src/audit/stages/stage_3_dokumentenpruefung.py
++++ b/src/audit/stages/stage_3_dokumentenpruefung.py
+@@ -4,6 +4,7 @@ import json
+ import asyncio
+ from typing import Dict, Any, List, Tuple
+ from datetime import datetime, timedelta
++from jsonschema import ValidationError
+ from google.cloud.exceptions import NotFound
+ from collections import defaultdict
+ 
+@@ -156,10 +157,17 @@ class Chapter3Runner:
+             question = questions_config["entbehrlich"]
+             prompt = targeted_prompt_template.format(
+                 question=question,
+                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
+             )
+-            res = await self.ai_client.generate_json_response(
+-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+-                gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
+-            )
++            try:
++                res = await self.ai_client.generate_validated_json_response(
++                    prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
++                    gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
++                )
++            except ValidationError as e:
++                logging.error(f"Q2 validation failed: {e.message}")
++                res = {
++                    "answers": [False],
++                    "finding": {"category": "AS", "description": f"Validierungsfehler bei der Prüfung entbehrlicher Anforderungen: {e.message}"}
++                }
+             answers[1], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+         else:
+             answers[1] = True
+@@ -172,8 +180,16 @@ class Chapter3Runner:
+                 question=questions_config["muss_anforderungen"],
+                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
+             )
+-            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
++            try:
++                res = await self.ai_client.generate_validated_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
++            except ValidationError as e:
++                logging.error(f"Q3 validation failed: {e.message}")
++                res = {
++                    "answers": [False],
++                    "finding": {"category": "AS", "description": f"Validierungsfehler bei der Prüfung von MUSS-Anforderungen: {e.message}"}
++                }
+             answers[2], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+         else:
+             answers[2] = True
+@@ -186,10 +202,17 @@ class Chapter3Runner:
+                 question=questions_config["nicht_umgesetzt"],
+                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
+             )
+-            res = await self.ai_client.generate_json_response(
+-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+-                gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
+-            )
++            try:
++                res = await self.ai_client.generate_validated_json_response(
++                    prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
++                    gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
++                )
++            except ValidationError as e:
++                logging.error(f"Q4 validation failed: {e.message}")
++                res = {
++                    "answers": [False],
++                    "finding": {"category": "AS", "description": f"Validierungsfehler bei der Prüfung des Realisierungsplans: {e.message}"}
++                }
+             answers[3], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+         else:
+             answers[3] = not unmet_items
+@@ -213,14 +236,22 @@ class Chapter3Runner:
+              return {key: {"error": f"No source documents for categories: {task.get('source_categories')}"}}
+         try:
+-            data = await self.ai_client.generate_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
++            data = await self.ai_client.generate_validated_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
+             if key == "aktualitaetDerReferenzdokumente":
+                 coverage_finding = self._check_document_coverage()
+                 if coverage_finding['category'] != 'OK': data['finding'] = coverage_finding
+             return {key: data}
++        except ValidationError as e:
++            logging.error(f"Validation failed for {key}: {e.message}")
++            return {key: {
++                "error": f"Schema validation failed: {e.message}",
++                "finding": {"category": "AS", "description": f"Validierungsfehler in Sektion {key}: {e.message}"}
++            }}
+         except Exception as e:
+             logging.error(f"Failed to generate for {key}: {e}", exc_info=True)
+-            return {key: {"error": str(e)}}
++            return {key: {
++                "error": str(e),
++                "finding": {"category": "AS", "description": f"Generierungsfehler in Sektion {key}: {str(e)}"}
++            }}
+ 
+     async def _process_summary_subchapter(self, task: Dict[str, Any], previous_findings: str) -> Dict[str, Any]:
+         """Generates a summary/verdict for a subchapter."""
+@@ -228,7 +259,15 @@ class Chapter3Runner:
+         prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
+         try:
+-            return {key: await self.ai_client.generate_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
++            result = await self.ai_client.generate_validated_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")
++            return {key: result}
++        except ValidationError as e:
++            logging.error(f"Summary validation failed for {key}: {e.message}")
++            return {key: {
++                "votum": f"Zusammenfassung konnte aufgrund eines Validierungsfehlers nicht erstellt werden: {e.message}",
++                "finding": {"category": "AS", "description": f"Validierungsfehler bei Zusammenfassung {key}: {e.message}"}
++            }}
+         except Exception as e:
+-            return {key: {"error": str(e)}}
++            return {key: {
++                "votum": f"Zusammenfassung konnte aufgrund eines Fehlers nicht erstellt werden: {str(e)}",
++                "finding": {"category": "AS", "description": f"Generierungsfehler bei Zusammenfassung {key}: {str(e)}"}
++            }}
+--- a/src/audit/stages/stage_4_pruefplan.py
++++ b/src/audit/stages/stage_4_pruefplan.py
+@@ -3,6 +3,7 @@ import logging
+ import json
+ import asyncio
+ from typing import Dict, Any
++from jsonschema import ValidationError
+ from google.cloud.exceptions import NotFound
+ 
+ from src.config import AppConfig
+@@ -104,14 +105,22 @@ class Chapter4Runner:
+         schema = self._load_asset_json(definition["schema_path"])
+         
+         try:
+-            generated_data = await self.ai_client.generate_json_response(
++            generated_data = await self.ai_client.generate_validated_json_response(
+                 prompt=prompt,
+                 json_schema=schema,
+                 request_context_log=f"Chapter-4: {name}"
+             )
+             logging.info(f"Successfully generated plan for subchapter {definition.get('key', name)}")
+             # The AI response is the table content itself, e.g. {"rows": [...]}.
+             return {name: generated_data}
++        except ValidationError as e:
++            logging.error(f"Validation failed for Chapter-4 subchapter {definition.get('key', name)}: {e.message}")
++            return {name: {
++                "rows": [],
++                "error": f"Schema validation failed: {e.message}",
++                "finding": {"category": "AS", "description": f"Validierungsfehler bei Prüfplanung {name}: {e.message}"}
++            }}
+         except Exception as e:
+             logging.error(f"Failed to generate plan for subchapter {definition.get('key', name)}: {e}", exc_info=True)
+-            return {name: {"rows": []}} # Return empty structure on failure
++            return {name: {
++                "rows": [],
++                "error": str(e),
++                "finding": {"category": "AS", "description": f"Generierungsfehler bei Prüfplanung {name}: {str(e)}"}
++            }}
+--- a/src/audit/stages/stage_previous_report_scan.py
++++ b/src/audit/stages/stage_previous_report_scan.py
+@@ -3,6 +3,7 @@ import logging
+ import json
+ import asyncio
+ from typing import Dict, Any
++from jsonschema import ValidationError
+ 
+ from src.config import AppConfig
+ from src.clients.ai_client import AiClient
+@@ -33,12 +34,20 @@ class PreviousReportScanner:
+             task_config = self.prompt_config["stages"][self.STAGE_NAME][task_name]
+             prompt = task_config["prompt"]
+             schema = self._load_asset_json(task_config["schema_path"])
+             
+-            response = await self.ai_client.generate_json_response(
++            response = await self.ai_client.generate_validated_json_response(
+                 prompt=prompt,
+                 json_schema=schema,
+                 gcs_uris=[gcs_uri],
+                 request_context_log=f"{self.STAGE_NAME}: {task_name}"
+             )
+             return response
++        except ValidationError as e:
++            logging.error(f"Validation failed for task '{task_name}': {e.message}")
++            return {task_name: {
++                "error": f"Schema validation failed: {e.message}",
++                "finding": {"category": "E", "description": f"Validierungsfehler beim Scannen des vorherigen Berichts ({task_name}): {e.message}"}
++            }}
+         except Exception as e:
+             logging.error(f"Extraction task '{task_name}' failed: {e}", exc_info=True)
+-            return {task_name: {"error": str(e)}} # Return error structure
++            return {task_name: {
++                "error": str(e),
++                "finding": {"category": "E", "description": f"Generierungsfehler beim Scannen des vorherigen Berichts ({task_name}): {str(e)}"}
++            }}
+--- a/src/audit/stages/gs_extraction/ground_truth_mapper.py
++++ b/src/audit/stages/gs_extraction/ground_truth_mapper.py
+@@ -3,6 +3,7 @@ import logging
+ import json
+ import os
+ from typing import Dict, Any, List
++from jsonschema import ValidationError
+ 
+ from src.clients.ai_client import AiClient
+ from src.clients.rag_client import RagClient
+@@ -66,22 +67,42 @@ class GroundTruthMapper:
+         gt_config = self.prompt_config["stages"]["Chapter-3-Ground-Truth"]
+         
+         try:
+             # Extract Zielobjekte from Strukturanalyse (A.1)
+             z_task_config = gt_config["extract_zielobjekte"]
+             z_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
+-            zielobjekte_result = await self.ai_client.generate_json_response(
++            zielobjekte_result = await self.ai_client.generate_validated_json_response(
+                 prompt=z_task_config["prompt"], 
+                 json_schema=self._load_asset_json(z_task_config["schema_path"]), 
+                 gcs_uris=z_uris, 
+                 request_context_log="GT: extract_zielobjekte",
+                 model_override=self.GROUND_TRUTH_MODEL
+             )
+ 
+             # Extract Mappings from Modellierung (A.3)
+             m_task_config = gt_config["extract_baustein_mappings"]
+             m_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
+-            mappings_result = await self.ai_client.generate_json_response(
++            mappings_result = await self.ai_client.generate_validated_json_response(
+                 prompt=m_task_config["prompt"], 
+                 json_schema=self._load_asset_json(m_task_config["schema_path"]), 
+                 gcs_uris=m_uris, 
+                 request_context_log="GT: extract_baustein_mappings",
+                 model_override=self.GROUND_TRUTH_MODEL
+             )
++        except ValidationError as e:
++            logging.error(f"Ground truth extraction validation failed: {e.message}")
++            raise ValueError(f"Critical validation error in ground truth extraction: {e.message}")
++        except Exception as e:
++            logging.error(f"Ground truth extraction failed: {e}", exc_info=True)
++            raise
+ 
++        # Validate that we got meaningful data
++        zielobjekte_list = zielobjekte_result.get("zielobjekte", [])
++        if not zielobjekte_list:
++            raise ValueError("No Zielobjekte found in ground truth extraction - cannot proceed")
++            
++        mappings_list = mappings_result.get("mappings", [])
++        if not mappings_list:
++            logging.warning("No Baustein mappings found in ground truth extraction")
++
+             # Construct the system map
+             system_map = {
+-                "zielobjekte": zielobjekte_result.get("zielobjekte", []),
+-                "baustein_to_zielobjekt_mapping": self._structure_mappings(mappings_result.get("mappings", []))
++                "zielobjekte": zielobjekte_list,
++                "baustein_to_zielobjekt_mapping": self._structure_mappings(mappings_list)
+             }
+             
+             # Save to GCS
+@@ -92,8 +113,5 @@ class GroundTruthMapper:
+             logging.info(f"Successfully created and saved system structure map to {GROUND_TRUTH_MAP_PATH}.")
+             
+             return system_map
+-            
+-        except Exception as e:
+-            logging.error(f"Failed to create system structure map: {e}", exc_info=True)
+-            raise
