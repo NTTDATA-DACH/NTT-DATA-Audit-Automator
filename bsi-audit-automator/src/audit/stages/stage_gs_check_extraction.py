@@ -307,6 +307,63 @@ class GrundschutzCheckExtractionRunner:
         
         zielobjekt_map = {z['kuerzel']: z['name'] for z in system_map.get("zielobjekte", [])}
 
+# Add content preprocessing and validation
+
+        def preprocess_blocks_for_ai(blocks: List[Dict]) -> List[Dict]:
+            """Preprocess blocks to avoid JSON generation issues."""
+            processed_blocks = []
+            
+            for block in blocks:
+                # Create a clean copy of the block
+                clean_block = block.copy()
+                
+                # Clean text content to prevent JSON issues
+                if 'textBlock' in clean_block and 'text' in clean_block['textBlock']:
+                    text = clean_block['textBlock']['text']
+                    # Remove or escape problematic characters
+                    text = text.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+                    text = text.replace('"', '\\"').replace('\t', ' ')
+                    # Limit extremely long text blocks that might cause issues
+                    if len(text) > 2000:
+                        text = text[:1800] + "... [truncated]"
+                    clean_block['textBlock']['text'] = text
+                
+                processed_blocks.append(clean_block)
+            
+            return processed_blocks
+
+        def validate_and_fix_json_response(response_text: str) -> Optional[Dict[str, Any]]:
+            """Attempt to validate and fix common JSON issues in AI responses."""
+            if not response_text:
+                return None
+            
+            try:
+                # First attempt: parse as-is
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logging.warning(f"Initial JSON parse failed: {e}")
+                
+                try:
+                    # Second attempt: try to fix common issues
+                    fixed_text = response_text.strip()
+                    
+                    # Remove any text before the first {
+                    start_idx = fixed_text.find('{')
+                    if start_idx > 0:
+                        fixed_text = fixed_text[start_idx:]
+                    
+                    # Remove any text after the last }
+                    end_idx = fixed_text.rfind('}')
+                    if end_idx > 0:
+                        fixed_text = fixed_text[:end_idx + 1]
+                    
+                    # Try parsing the fixed text
+                    return json.loads(fixed_text)
+                    
+                except json.JSONDecodeError:
+                    logging.error(f"Could not fix JSON response. Original error at char {e.pos}")
+                    return None
+
         async def get_cached_result(kuerzel: str) -> Optional[Dict[str, Any]]:
             """Check if we have a cached result for this kürzel."""
             cache_path = f"output/{INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
@@ -331,12 +388,12 @@ class GrundschutzCheckExtractionRunner:
                 logging.error(f"Failed to cache result for '{kuerzel}': {e}")
 
         def chunk_blocks(blocks: List[Dict], max_blocks: int) -> List[List[Dict]]:
-            """Split blocks into chunks of manageable size with 2% overlap."""
+            """Split blocks into chunks of manageable size with 8% overlap."""
             if len(blocks) <= max_blocks:
                 return [blocks]
             
-            # Calculate overlap size (2% of max_blocks, minimum 1 block)
-            overlap_size = max(1, int(max_blocks * 0.02))
+            # Calculate overlap size (8% of max_blocks, minimum 2 blocks, maximum 20 blocks)
+            overlap_size = max(2, min(20, int(max_blocks * 0.08)))
             
             chunks = []
             i = 0
@@ -356,7 +413,7 @@ class GrundschutzCheckExtractionRunner:
                 if end_idx >= len(blocks):
                     break
             
-            logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks with {overlap_size}-block overlap")
+            logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks with {overlap_size}-block overlap ({overlap_size/max_blocks*100:.1f}%)")
             return chunks
 
         async def process_blocks_chunk(kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int) -> Dict[str, Any]:
@@ -373,7 +430,7 @@ class GrundschutzCheckExtractionRunner:
             # Add chunk context to prompt if multiple chunks
             chunk_context = ""
             if total_chunks > 1:
-                chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Chunks have 2% overlap to maintain context continuity. Focus on extracting requirements from these specific blocks, avoiding duplication of requirements found in overlapping sections."
+                chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Chunks have 8% overlap to maintain context continuity. Focus on extracting requirements from these specific blocks, avoiding duplication of requirements found in overlapping sections."
 
             prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
 
