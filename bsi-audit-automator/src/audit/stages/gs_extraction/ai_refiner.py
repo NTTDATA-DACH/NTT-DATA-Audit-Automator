@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
-from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX, CHUNK_PROCESSING_MODEL
+from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL
 
 
 class AiRefiner:
