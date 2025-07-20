@@ -7,6 +7,7 @@ from typing import Dict, Any, List
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.clients.gcs_client import GcsClient
+from src.constants import GROUND_TRUTH_MAP_PATH
 
 
 class GroundTruthMapper:
@@ -17,7 +18,6 @@ class GroundTruthMapper:
     
     GROUND_TRUTH_MODEL = os.getenv("GS_GROUND_TRUTH_MODEL", "gemini-2.5-pro")
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
-    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
 
     def __init__(self, ai_client: AiClient, rag_client: RagClient, gcs_client: GcsClient):
         self.ai_client = ai_client
@@ -55,10 +55,10 @@ class GroundTruthMapper:
         Returns:
             Dict containing zielobjekte list and baustein_to_zielobjekt_mapping
         """
-        if not force_overwrite and self.gcs_client.blob_exists(self.GROUND_TRUTH_MAP_PATH):
-            logging.info(f"System structure map already exists. Loading from '{self.GROUND_TRUTH_MAP_PATH}'.")
+        if not force_overwrite and self.gcs_client.blob_exists(GROUND_TRUTH_MAP_PATH):
+            logging.info(f"System structure map already exists. Loading from '{GROUND_TRUTH_MAP_PATH}'.")
             try:
-                system_map = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
+                system_map = await self.gcs_client.read_json_async(GROUND_TRUTH_MAP_PATH)
                 if not system_map.get("zielobjekte"):
                     logging.error("Loaded system structure map has empty 'zielobjekte'. Exiting.")
                     raise ValueError("No Zielobjekte found in loaded map. Cannot proceed.")

@@ -8,6 +8,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 
 class Chapter5Runner:
     """
@@ -16,8 +17,6 @@ class Chapter5Runner:
     enriching it with data extracted in prior stages.
     """
     STAGE_NAME = "Chapter-5"
-    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
-    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
         self.config = config
@@ -32,11 +31,11 @@ class Chapter5Runner:
         Baustein-to-Zielobjekt mappings.
         """
         try:
-            system_map = self.gcs_client.read_json(self.GROUND_TRUTH_MAP_PATH)
-            logging.info(f"Successfully loaded ground truth map from: {self.GROUND_TRUTH_MAP_PATH}")
+            system_map = self.gcs_client.read_json(GROUND_TRUTH_MAP_PATH)
+            logging.info(f"Successfully loaded ground truth map from: {GROUND_TRUTH_MAP_PATH}")
             return system_map
         except NotFound:
-            logging.error(f"FATAL: Ground truth map '{self.GROUND_TRUTH_MAP_PATH}' not found. Cannot generate Chapter 5 checklist. Please run the 'Grundschutz-Check-Extraction' stage first.")
+            logging.error(f"FATAL: Ground truth map '{GROUND_TRUTH_MAP_PATH}' not found. Cannot generate Chapter 5 checklist. Please run the 'Grundschutz-Check-Extraction' stage first.")
             raise
         except Exception as e:
             logging.error(f"Failed to load or parse ground truth map: {e}", exc_info=True)
@@ -49,7 +48,7 @@ class Chapter5Runner:
         for efficient, context-aware access.
         """
         try:
-            data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
+            data = self.gcs_client.read_json(EXTRACTED_CHECK_DATA_PATH)
             anforderungen_list = data.get("anforderungen", [])
             # The key is a tuple of the requirement ID and the target object's short ID (Kürzel).
             # This correctly handles the same requirement applied to multiple objects.
@@ -60,7 +59,7 @@ class Chapter5Runner:
             logging.info(f"Successfully loaded and mapped {len(lookup_map)} unique requirement-object pairs for Chapter 5.")
             return lookup_map
         except NotFound:
-            logging.warning(f"Refined check data file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' not found. Checklist will not contain customer explanations. Please run the 'Grundschutz-Check-Extraction' stage first.")
+            logging.warning(f"Refined check data file '{EXTRACTED_CHECK_DATA_PATH}' not found. Checklist will not contain customer explanations. Please run the 'Grundschutz-Check-Extraction' stage first.")
             return {}
         except Exception as e:
             logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)

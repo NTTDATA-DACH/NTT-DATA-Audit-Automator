@@ -11,6 +11,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
+from src.constants import STAGE_RESULTS_PATH, ALL_FINDINGS_PATH, EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 from src.audit.stages.stage_previous_report_scan import PreviousReportScanner
 from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
@@ -215,7 +216,7 @@ class AuditController:
             raise ValueError(f"Unknown stage: {stage_name}")
 
         # 1. Load and filter the central findings list
-        findings_path = f"{self.config.output_prefix}results/all_findings.json"
+        findings_path = ALL_FINDINGS_PATH
         current_findings = []
         try:
             if self.gcs_client.blob_exists(findings_path):
@@ -237,14 +238,14 @@ class AuditController:
                 self.finding_counters[category] = max(self.finding_counters[category], num)
 
         # 2. Execute the stage logic
-        stage_output_path = f"{self.config.output_prefix}results/{stage_name}.json"
+        stage_output_path = STAGE_RESULTS_PATH.format(stage_name=stage_name)
         result_data = None
 
         if not force_overwrite:
             try:
                 if stage_name == "Grundschutz-Check-Extraction":
-                    if self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.EXTRACTED_CHECK_DATA_PATH) and \
-                       self.gcs_client.blob_exists(GrundschutzCheckExtractionRunner.GROUND_TRUTH_MAP_PATH):
+                    if self.gcs_client.blob_exists(EXTRACTED_CHECK_DATA_PATH) and \
+                       self.gcs_client.blob_exists(GROUND_TRUTH_MAP_PATH):
                         logging.info(f"Stage '{stage_name}' already completed (intermediate files exist). Skipping.")
                         result_data = {"status": "skipped", "reason": "intermediate files found"}
                 else:

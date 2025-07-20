@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
+from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, INDIVIDUAL_RESULTS_PREFIX
 
 
 class AiRefiner:
@@ -17,9 +18,6 @@ class AiRefiner:
     
     CHUNK_PROCESSING_MODEL = os.getenv("GS_CHUNK_MODEL", "gemini-2.5-flash")
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
-    GROUPED_BLOCKS_PATH = "output/results/intermediate/zielobjekt_grouped_blocks.json"
-    FINAL_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
-    INDIVIDUAL_RESULTS_PREFIX = "output/results/intermediate/gs_extraction_individual_results/"
     
     # Chunking configuration
     MAX_BLOCKS_PER_CHUNK = 300
@@ -43,14 +41,14 @@ class AiRefiner:
             system_map: Ground truth map containing zielobjekte information
             force_overwrite: If True, reprocess even if output exists
         """
-        if not force_overwrite and self.gcs_client.blob_exists(self.FINAL_CHECK_RESULTS_PATH):
+        if not force_overwrite and self.gcs_client.blob_exists(EXTRACTED_CHECK_DATA_PATH):
             logging.info(f"Final extracted check results file exists. Skipping AI refinement.")
             return
 
         logging.info("Refining grouped blocks with AI to extract structured requirements...")
         
         # Load grouped blocks and configuration
-        grouped_blocks_data = await self.gcs_client.read_json_async(self.GROUPED_BLOCKS_PATH)
+        grouped_blocks_data = await self.gcs_client.read_json_async(GROUPED_BLOCKS_PATH)
         groups = grouped_blocks_data.get("zielobjekt_grouped_blocks", {})
         
         refine_config = self.prompt_config["stages"]["Chapter-3"]["refine_layout_parser_group"]
@@ -83,7 +81,7 @@ class AiRefiner:
         # Save consolidated results
         await self.gcs_client.upload_from_string_async(
             json.dumps(final_output, indent=2, ensure_ascii=False), 
-            self.FINAL_CHECK_RESULTS_PATH
+            EXTRACTED_CHECK_DATA_PATH
         )
         logging.info(f"Saved final refined check data with {len(final_output['anforderungen'])} requirements")
 
@@ -143,7 +141,7 @@ class AiRefiner:
 
     async def _get_cached_result(self, kuerzel: str) -> Optional[Dict[str, Any]]:
         """Check if we have a cached result for this kürzel."""
-        cache_path = f"{self.INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
+        cache_path = f"{INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
         if self.gcs_client.blob_exists(cache_path):
             try:
                 cached_result = await self.gcs_client.read_json_async(cache_path)
@@ -155,7 +153,7 @@ class AiRefiner:
 
     async def _save_result_to_cache(self, kuerzel: str, result_data: Dict[str, Any]):
         """Save individual result to cache."""
-        cache_path = f"{self.INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
+        cache_path = f"{INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
         try:
             await self.gcs_client.upload_from_string_async(
                 json.dumps(result_data, indent=2, ensure_ascii=False), cache_path

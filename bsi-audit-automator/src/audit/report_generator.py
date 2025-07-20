@@ -10,6 +10,7 @@ from datetime import datetime
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
+from src.constants import FINAL_REPORT_PATH, ALL_FINDINGS_PATH, STAGE_RESULTS_PATH
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
@@ -119,7 +120,7 @@ class ReportGenerator:
         """
         report = self._load_local_report_template()
 
-        stage_read_tasks = [self.gcs_client.read_json_async(f"{self.config.output_prefix}results/{s}.json") for s in self.STAGES_TO_AGGREGATE]
+        stage_read_tasks = [self.gcs_client.read_json_async(STAGE_RESULTS_PATH.format(stage_name=s)) for s in self.STAGES_TO_AGGREGATE]
         stage_results = await asyncio.gather(*stage_read_tasks, return_exceptions=True)
         
         stage_data_map = {}
@@ -154,12 +155,12 @@ class ReportGenerator:
 
         today = datetime.now()
         date_str = today.strftime("%y%m%d")
-        final_report_path = f"{self.config.output_prefix}report-{date_str}.json"
+        
         await self.gcs_client.upload_from_string_async(
             content=json.dumps(report, indent=2, ensure_ascii=False),
-            destination_blob_name=final_report_path
+            destination_blob_name=FINAL_REPORT_PATH
         )
-        logging.info(f"Final report assembled and saved to: gs://{self.config.bucket_name}/{final_report_path}")
+        logging.info(f"Successfully generated final audit report at {FINAL_REPORT_PATH}")
         
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
@@ -236,9 +237,8 @@ class ReportGenerator:
         ensuring the findings are sorted numerically by their ID.
         """
         logging.info("Populating Chapter 7.2 with collected findings...")
-        findings_path = f"{self.config.output_prefix}results/all_findings.json"
         try:
-            all_findings = self.gcs_client.read_json(findings_path)
+            all_findings = self.gcs_client.read_json(ALL_FINDINGS_PATH)
         except NotFound:
             logging.warning("Central findings file not found. Chapter 7.2 will be empty.")
             return

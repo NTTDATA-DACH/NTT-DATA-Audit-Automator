@@ -36,7 +36,7 @@ class DocumentProcessor:
         Args:
             force_overwrite: If True, reprocess even if output already exists
         """
-        if not force_overwrite and self.gcs_client.blob_exists(self.FINAL_MERGED_LAYOUT_PATH):
+        if not force_overwrite and self.gcs_client.blob_exists(FINAL_MERGED_LAYOUT_PATH):
             logging.info(f"Merged layout file already exists. Skipping Layout Parser workflow.")
             return
 
@@ -118,9 +118,9 @@ class DocumentProcessor:
         # Save to GCS
         await self.gcs_client.upload_from_string_async(
             json.dumps(final_layout_json, indent=2, ensure_ascii=False),
-            self.FINAL_MERGED_LAYOUT_PATH
+            FINAL_MERGED_LAYOUT_PATH
         )
-        logging.info(f"Successfully merged, re-indexed, and saved final layout to {self.FINAL_MERGED_LAYOUT_PATH}")
+        logging.info(f"Successfully merged, re-indexed, and saved final layout to {FINAL_MERGED_LAYOUT_PATH}")
 
     def _reindex_and_prune_blocks(self, blocks: List[Dict[str, Any]]):
         """Recursively re-index blockId globally and remove pageSpan."""

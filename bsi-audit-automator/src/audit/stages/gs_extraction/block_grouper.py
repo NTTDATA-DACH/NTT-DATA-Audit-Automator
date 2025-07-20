@@ -28,7 +28,7 @@ class BlockGrouper:
             system_map: Ground truth map containing zielobjekte list
             force_overwrite: If True, reprocess even if output exists
         """
-        if not force_overwrite and self.gcs_client.blob_exists(self.GROUPED_BLOCKS_PATH):
+        if not force_overwrite and self.gcs_client.blob_exists(GROUPED_BLOCKS_PATH):
             logging.info(f"Grouped layout blocks file already exists. Skipping grouping.")
             return
 
@@ -59,9 +59,9 @@ class BlockGrouper:
         # Save grouped blocks
         await self.gcs_client.upload_from_string_async(
             json.dumps({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, indent=2, ensure_ascii=False),
-            self.GROUPED_BLOCKS_PATH
+            GROUPED_BLOCKS_PATH
         )
-        logging.info(f"Saved grouped layout blocks to {self.GROUPED_BLOCKS_PATH}")
+        logging.info(f"Saved grouped layout blocks to {GROUPED_BLOCKS_PATH}")
 
     def _flatten_all_blocks(self, blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Flatten all blocks into a single list with hierarchical structure removed."""

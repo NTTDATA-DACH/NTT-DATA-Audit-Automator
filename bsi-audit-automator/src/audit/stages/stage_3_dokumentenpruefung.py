@@ -12,6 +12,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 
 class Chapter3Runner:
     """
@@ -23,8 +24,6 @@ class Chapter3Runner:
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
-    INTERMEDIATE_CHECK_RESULTS_PATH = "output/results/intermediate/extracted_grundschutz_check_merged.json"
-    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
     SUMMARY_DEPENDENCIES = {
         "ergebnisDerStrukturanalyse": [
             "definitionDesInformationsverbundes", "bereinigterNetzplan", "listeDerGeschaeftsprozesse",
@@ -60,9 +59,9 @@ class Chapter3Runner:
         """Lazy loads the ground truth map and caches it."""
         if self._ground_truth_map is None:
             try:
-                self._ground_truth_map = await self.gcs_client.read_json_async(self.GROUND_TRUTH_MAP_PATH)
+                self._ground_truth_map = await self.gcs_client.read_json_async(GROUND_TRUTH_MAP_PATH)
             except NotFound:
-                logging.error(f"FATAL: Ground truth map not found at '{self.GROUND_TRUTH_MAP_PATH}'. Please run the extraction stage.")
+                logging.error(f"FATAL: Ground truth map not found at '{GROUND_TRUTH_MAP_PATH}'. Please run the extraction stage.")
                 raise
         return self._ground_truth_map
 
@@ -73,10 +72,10 @@ class Chapter3Runner:
         """
         logging.info("Processing 3.6.1 'Details zum IT-Grundschutz-Check' using pre-computed data...")
         try:
-            check_data = self.gcs_client.read_json(self.INTERMEDIATE_CHECK_RESULTS_PATH)
+            check_data = self.gcs_client.read_json(EXTRACTED_CHECK_DATA_PATH)
             anforderungen = check_data.get("anforderungen", [])
         except NotFound:
-            logging.error(f"FATAL: The required intermediate file '{self.INTERMEDIATE_CHECK_RESULTS_PATH}' was not found. Please run the 'Grundschutz-Check-Extraction' stage first.")
+            logging.error(f"FATAL: The required intermediate file '{EXTRACTED_CHECK_DATA_PATH}' was not found. Please run the 'Grundschutz-Check-Extraction' stage first.")
             raise
 
         answers = [None] * 5
