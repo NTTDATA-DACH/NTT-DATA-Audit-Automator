@@ -79,35 +79,88 @@ This step is a crucial bridge between deep analysis (Chapter 3) and planning (Ch
 
 ### **Phase 2: Ground-Truth-Driven Extraction (via Document AI & Gemini)**
 
-This strategy replaces manual text extraction and chunking with a highly structured, two-stage process designed for maximum precision on large, formatted documents like the `Grundschutz-Check`. It leverages specialized Google Cloud services to first identify and extract only relevant information, then uses a large language model for refinement and structuring.
+The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, hierarchically-organized JSON structure grouped by Zielobjekte (target objects), using a robust four-phase approach combining deterministic logic with AI-powered analysis.
 
-#### **Stage 1: Ground-Truth-Driven Layout Extraction with Document AI**
+**Architecture:** The stage is implemented as a modular pipeline with four specialized components:
+- **GroundTruthMapper**: Creates authoritative system structure from customer documents
+- **DocumentProcessor**: Handles Document AI workflow for PDF processing  
+- **BlockGrouper**: Groups content blocks by Zielobjekt using marker-based algorithm
+- **AiRefiner**: Extracts structured requirements using AI with intelligent chunking
 
-The goal of this stage is to convert the semi-structured `Grundschutz-Check` PDF into a clean, hierarchically-organized JSON structure grouped by Zielobjekte (target objects), using a robust marker-based approach.
+---
 
-1.  **Processor:** We use Google Cloud's **Document AI Layout Parser** to extract detailed document structure including nested blocks, text positioning, and hierarchical relationships.
+#### **Phase 2.1: Ground Truth Establishment**
+**Processor:** The **GroundTruthMapper** uses targeted AI calls to extract the authoritative system structure from customer documents.
 
-2.  **Input:** The entire multi-hundred-page `Grundschutz-Check` PDF is processed in chunks for optimal performance and merged into a unified layout structure.
+**Ground Truth Sources:**
+- **Zielobjekte** (target objects) from the `Strukturanalyse` (A.1)
+- **Baustein-to-Zielobjekt mappings** from the `Modellierung` (A.3)
 
-3.  **Ground Truth Mapping:** Before processing the document, we extract the authoritative system structure from customer documents:
-    *   **Zielobjekte** (target objects) from the `Strukturanalyse` (A.1)
-    *   **Baustein-to-Zielobjekt mappings** from the `Modellierung` (A.3)
-    *   This creates our "Ground Truth" map of what we expect to find in the document.
+**Output:** Creates a "Ground Truth" map (`system_structure_map.json`) of what we expect to find in the document, serving as the foundation for all subsequent processing.
 
-4.  **Marker-Based Grouping:** The system uses a deterministic three-phase algorithm:
-    *   **Phase 1:** Flatten all document blocks (including deeply nested structures) and search for exact Zielobjekt identifiers (e.g., "AC-001", "SRV-002") as section markers
-    *   **Phase 2:** Sort found markers by their position in the document 
-    *   **Phase 3:** Group all content blocks between consecutive markers, assigning them to the appropriate Zielobjekt context
+---
 
-5.  **Key Advantages:**
-    *   **Hierarchical Structure Preservation:** Maintains the document's natural block hierarchy while enabling precise content grouping
-    *   **Deep Nested Search:** Finds markers even when buried multiple levels deep in the document structure
-    *   **Deterministic Grouping:** Uses document position to systematically assign content to the correct Zielobjekt sections
-    *   **Ground Truth Validation:** Only searches for Zielobjekte that actually exist in the customer's system architecture
+#### **Phase 2.2: Document Layout Extraction**
+**Processor:** The **DocumentProcessor** uses Google Cloud's **Document AI Layout Parser** to extract detailed document structure.
 
-6.  **Output:** A structured JSON file (`zielobjekt_grouped_blocks.json`) where each Zielobjekt contains all its associated document blocks, ready for AI-powered requirement extraction. Ungrouped content is preserved in a special `_UNGROUPED_` section for manual review.
+**Workflow:**
+1. **PDF Chunking:** Large PDFs are split into manageable chunks (100 pages each) for optimal processing
+2. **Parallel Processing:** All chunks are processed simultaneously with Document AI
+3. **Intelligent Merging:** Results are merged with global block re-indexing and cleanup
+4. **Structure Preservation:** Maintains nested blocks, text positioning, and hierarchical relationships
 
-#### **Stage 2: Refinement and Structuring with Gemini 2.5**
+**Output:** Unified layout structure (`doc_ai_layout_parser_merged.json`) with globally consistent block IDs.
+
+---
+
+#### **Phase 2.2: Context-Aware Block Grouping**
+**Processor:** The **BlockGrouper** uses a deterministic three-step algorithm to assign content to Zielobjekt contexts.
+
+**Algorithm:**
+1. **Block Flattening:** All document blocks (including deeply nested structures) are flattened for consistent processing
+2. **Marker Detection:** Searches for exact Zielobjekt identifiers (e.g., "AC-001", "SRV-002") as section markers
+3. **Position-Based Grouping:** Content blocks between consecutive markers are systematically assigned to the appropriate Zielobjekt
+
+**Key Advantages:**
+- **Hierarchical Structure Preservation:** Maintains document's natural block hierarchy while enabling precise content grouping
+- **Deep Nested Search:** Finds markers even when buried multiple levels deep in document structure
+- **Deterministic Logic:** Uses document position to systematically assign content to correct sections
+- **Ground Truth Validation:** Only searches for Zielobjekte that actually exist in the customer's system
+
+**Output:** Grouped blocks file (`zielobjekt_grouped_blocks.json`) with content organized by Zielobjekt context.
+
+---
+
+#### **Phase 2.3: AI-Powered Requirement Extraction**
+**Processor:** The **AiRefiner** transforms grouped raw layout blocks into structured security requirements using advanced AI processing with intelligent chunking.
+
+**Smart Chunking Strategy:**
+- **Adaptive Sizing:** Automatically splits large block groups (>300 blocks) into manageable chunks
+- **Context Preservation:** 8% overlap between chunks maintains semantic continuity at boundaries
+- **Dynamic Overlap:** Overlap size scales with chunk size (2-20 blocks) for optimal context retention
+- **Boundary Optimization:** Prevents requirement fragmentation across chunk boundaries
+
+**Robust Processing Features:**
+- **Per-Kürzel Caching:** Individual results are cached to enable efficient reruns and recovery
+- **Content Preprocessing:** Cleans problematic characters and truncates oversized text blocks
+- **Automatic Recovery:** Failed chunks are automatically split and reprocessed
+- **JSON Validation:** Built-in validation and repair for malformed AI responses
+- **Parallel Processing:** Multiple Zielobjekt groups processed concurrently for speed
+
+**Error Handling & Recovery:**
+- **Token Limit Detection:** Automatically detects and handles token limit errors
+- **Recursive Splitting:** Oversized chunks are recursively split until processable
+- **Graceful Degradation:** Failed extractions don't block overall pipeline progress
+- **Comprehensive Logging:** Detailed progress tracking for debugging and monitoring
+
+**Performance Optimizations:**
+- **Test Mode Limiting:** Processes only subset of data during development/testing
+- **Efficient Caching:** Skips already-processed Zielobjekte in incremental runs
+- **Memory Management:** Optimized for large document processing
+
+**Output:** Structured requirements file (`extracted_grundschutz_check_merged.json`) containing all security requirements with Zielobjekt context, ready for downstream analysis stages.
+
+#### **Phase 2.4 : Refinement and Structuring with Gemini 2.5**
 
 The entity-based JSON from Document AI is now used as high-quality input for the LLM, which performs targeted refinement tasks rather than open-ended analysis.
 

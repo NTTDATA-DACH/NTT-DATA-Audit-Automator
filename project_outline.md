@@ -27,6 +27,7 @@ The audit process and resulting report must be based on two key documents:
 **3. Gemini Model and API Interaction**
 *   **Model Configuration (Imperative):**
     *   **Generative Model:** `gemini-2.5-pro`
+    *   **Generative Model for AI Refinemen:** `gemini-2.5-flash` 
     *   **Max Output Tokens:** 65536
 *   **Robustness:** All API calls use an asynchronous, parallel-limited (`Semaphore`), and robust error-handling wrapper with an exponential backoff retry loop.
 *   **Embedding API Constraint:** The `gemini-embedding-001` model via the Python SDK does **not** support batch processing. Each text chunk must be sent in a separate API call. 
