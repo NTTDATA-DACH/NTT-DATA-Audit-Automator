@@ -26,7 +26,7 @@ DOC_AI_BATCH_RESULTS_PREFIX = f"{TEMP_BASE}/doc_ai_results/"
 # =============================================================================
 # INTERMEDIARY PATHS - Idempotent saves organized by stage
 # =============================================================================
-INTERMEDIARY_BASE = "output/intermediary"
+INTERMEDIARY_BASE = "output/intermediate"
 
 # Grundschutz-Check-Extraction stage paths
 GS_EXTRACTION_BASE = f"{INTERMEDIARY_BASE}/gs_extraction"
