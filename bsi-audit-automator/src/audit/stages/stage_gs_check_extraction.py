@@ -26,6 +26,10 @@ class GrundschutzCheckExtractionRunner:
     STAGE_NAME = "Grundschutz-Check-Extraction"
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     
+    # Model configuration for different processing steps
+    GROUND_TRUTH_MODEL = "gemini-2.5-pro"      # Complex reasoning for system structure
+    CHUNK_PROCESSING_MODEL = "gemini-2.5-flash"  # Fast structured extraction
+    
     # Paths for intermediate and final artifacts
     GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
     TEMP_PDF_CHUNK_PREFIX = "output/temp_pdf_chunks/"
@@ -86,14 +90,16 @@ class GrundschutzCheckExtractionRunner:
             z_task_config = gt_config["extract_zielobjekte"]
             z_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
             zielobjekte_result = await self.ai_client.generate_json_response(
-                z_task_config["prompt"], self._load_asset_json(z_task_config["schema_path"]), z_uris, "GT: extract_zielobjekte"
+                z_task_config["prompt"], self._load_asset_json(z_task_config["schema_path"]), z_uris, 
+                "GT: extract_zielobjekte", model_override=self.GROUND_TRUTH_MODEL
             )
 
             # Extract Mappings from Modellierung (A.3)
             m_task_config = gt_config["extract_baustein_mappings"]
             m_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
             mappings_result = await self.ai_client.generate_json_response(
-                m_task_config["prompt"], self._load_asset_json(m_task_config["schema_path"]), m_uris, "GT: extract_baustein_mappings"
+                m_task_config["prompt"], self._load_asset_json(m_task_config["schema_path"]), m_uris, 
+                "GT: extract_baustein_mappings", model_override=self.GROUND_TRUTH_MODEL
             )
 
             system_map = {
@@ -425,7 +431,7 @@ class GrundschutzCheckExtractionRunner:
 
             # Calculate rough content size for logging
             total_chars = sum(len(str(block)) for block in clean_chunk)
-            logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars")
+            logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {self.CHUNK_PROCESSING_MODEL})")
 
             # Add chunk context to prompt if multiple chunks
             chunk_context = ""
@@ -435,9 +441,10 @@ class GrundschutzCheckExtractionRunner:
             prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
 
             try:
-                # Try with normal generation first
+                # Try with flash model for faster processing
                 result = await self.ai_client.generate_json_response(
-                    prompt, schema, request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})"
+                    prompt, schema, request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
+                    model_override=self.CHUNK_PROCESSING_MODEL
                 )
 
                 # Validate the result
