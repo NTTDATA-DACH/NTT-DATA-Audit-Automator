@@ -34,7 +34,8 @@ class AiClient:
         current_date = datetime.date.today().strftime("%Y-%m-%d")
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        aiplatform.init(project=config.gcp_project_id, location=config.region)
+        # aiplatform.init(project=config.gcp_project_id, location=config.region)
+        aiplatform.init(project=config.gcp_project_id, location="global")
         
         # Default model instance
         self.generative_model = GenerativeModel(
@@ -99,7 +100,9 @@ class AiClient:
         gen_config = GenerationConfig(
             response_mime_type="application/json",
             response_schema=schema_for_api,
-            max_output_tokens=65536,
+            max_output_tokens=65535,
+
+            
             temperature=0.2,
         )
 

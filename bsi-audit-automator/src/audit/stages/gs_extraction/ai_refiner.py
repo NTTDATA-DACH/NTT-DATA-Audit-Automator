@@ -19,7 +19,7 @@ class AiRefiner:
     PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     
     # Chunking configuration
-    MAX_BLOCKS_PER_CHUNK = 300
+    MAX_BLOCKS_PER_CHUNK = 200
     MIN_BLOCKS_PER_CHUNK = 50
 
     def __init__(self, ai_client: AiClient, gcs_client: GcsClient):
@@ -165,9 +165,9 @@ class AiRefiner:
         """Split blocks into chunks of manageable size with 8% overlap."""
         if len(blocks) <= max_blocks:
             return [blocks]
-        
-        # Calculate overlap size (8% of max_blocks, minimum 2 blocks, maximum 20 blocks)
-        overlap_size = max(2, min(20, int(max_blocks * 0.08)))
+
+        # Calculate overlap size (10% of max_blocks, minimum 10 blocks, maximum 20 blocks)
+        overlap_size = max(10, min(20, int(max_blocks * 0.10)))
         
         chunks = []
         i = 0
@@ -221,7 +221,7 @@ class AiRefiner:
         
         # Calculate rough content size for logging
         total_chars = sum(len(str(block)) for block in clean_chunk)
-        logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {self.CHUNK_PROCESSING_MODEL})")
+        logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {CHUNK_PROCESSING_MODEL})")
         
         # Add chunk context to prompt if multiple chunks
         chunk_context = ""
@@ -236,7 +236,7 @@ class AiRefiner:
                 prompt=prompt,
                 json_schema=schema,
                 request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
-                model_override=self.CHUNK_PROCESSING_MODEL
+                model_override=CHUNK_PROCESSING_MODEL
             )
             
             # Validate the result
