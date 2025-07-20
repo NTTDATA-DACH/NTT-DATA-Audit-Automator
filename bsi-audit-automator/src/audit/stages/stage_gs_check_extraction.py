@@ -301,7 +301,8 @@ class GrundschutzCheckExtractionRunner:
         schema = self._load_asset_json(refine_config["schema_path"])
         
         # Configuration for chunking
-        MAX_BLOCKS_PER_CHUNK = 400  # Adjust based on token limits
+        MAX_BLOCKS_PER_CHUNK = 300  # Reduced to prevent token limit issues
+        MIN_BLOCKS_PER_CHUNK = 50   # Minimum chunk size before splitting further
         INDIVIDUAL_RESULTS_PREFIX = "output/results/intermediate/gs_extraction_individual_results/"
         
         zielobjekt_map = {z['kuerzel']: z['name'] for z in system_map.get("zielobjekte", [])}
@@ -330,36 +331,93 @@ class GrundschutzCheckExtractionRunner:
                 logging.error(f"Failed to cache result for '{kuerzel}': {e}")
 
         def chunk_blocks(blocks: List[Dict], max_blocks: int) -> List[List[Dict]]:
-            """Split blocks into chunks of manageable size."""
+            """Split blocks into chunks of manageable size with 2% overlap."""
             if len(blocks) <= max_blocks:
                 return [blocks]
             
-            chunks = []
-            for i in range(0, len(blocks), max_blocks):
-                chunk = blocks[i:i + max_blocks]
-                chunks.append(chunk)
+            # Calculate overlap size (2% of max_blocks, minimum 1 block)
+            overlap_size = max(1, int(max_blocks * 0.02))
             
-            logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks")
+            chunks = []
+            i = 0
+            while i < len(blocks):
+                # Calculate chunk boundaries
+                start_idx = max(0, i - (overlap_size if i > 0 else 0))
+                end_idx = min(len(blocks), i + max_blocks)
+                
+                # Extract chunk with overlap
+                chunk = blocks[start_idx:end_idx]
+                chunks.append(chunk)
+                
+                # Move to next chunk position (accounting for overlap)
+                i += max_blocks - overlap_size
+                
+                # Break if we've covered all blocks
+                if end_idx >= len(blocks):
+                    break
+            
+            logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks with {overlap_size}-block overlap")
             return chunks
 
         async def process_blocks_chunk(kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int) -> Dict[str, Any]:
             """Process a single chunk of blocks for a kürzel."""
             name = zielobjekt_map.get(kuerzel, "Unbekannt")
-            
+
+            # Preprocess blocks to prevent JSON issues
+            clean_chunk = preprocess_blocks_for_ai(chunk)
+
+            # Calculate rough content size for logging
+            total_chars = sum(len(str(block)) for block in clean_chunk)
+            logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars")
+
             # Add chunk context to prompt if multiple chunks
             chunk_context = ""
             if total_chunks > 1:
-                chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Focus on extracting requirements from these specific blocks."
-            
-            prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(chunk, indent=2)) + chunk_context
-            
+                chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Chunks have 2% overlap to maintain context continuity. Focus on extracting requirements from these specific blocks, avoiding duplication of requirements found in overlapping sections."
+
+            prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
+
             try:
+                # Try with normal generation first
                 result = await self.ai_client.generate_json_response(
                     prompt, schema, request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})"
                 )
-                return result
+
+                # Validate the result
+                if result and "anforderungen" in result:
+                    return result
+                else:
+                    logging.warning(f"Invalid result structure for {kuerzel} chunk {chunk_idx + 1}")
+                    return {"anforderungen": []}
+
             except Exception as e:
                 logging.error(f"AI refinement failed for Zielobjekt '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+
+                # If this chunk is too large, try splitting it further
+                if len(clean_chunk) > MIN_BLOCKS_PER_CHUNK and "token" in str(e).lower():
+                    logging.info(f"Attempting to split large chunk {chunk_idx + 1} for '{kuerzel}'")
+                    try:
+                        # Split the chunk in half and process each part
+                        mid_point = len(clean_chunk) // 2
+                        part1 = clean_chunk[:mid_point]
+                        part2 = clean_chunk[mid_point:]
+
+                        # Process both parts
+                        result1 = await process_blocks_chunk(kuerzel, part1, f"{chunk_idx}a", f"{total_chunks}+")
+                        result2 = await process_blocks_chunk(kuerzel, part2, f"{chunk_idx}b", f"{total_chunks}+")
+
+                        # Combine results
+                        combined_anforderungen = []
+                        if result1 and "anforderungen" in result1:
+                            combined_anforderungen.extend(result1["anforderungen"])
+                        if result2 and "anforderungen" in result2:
+                            combined_anforderungen.extend(result2["anforderungen"])
+
+                        return {"anforderungen": combined_anforderungen}
+
+                    except Exception as split_error:
+                        logging.error(f"Chunk splitting also failed for '{kuerzel}': {split_error}")
+
                 return {"anforderungen": []}
 
         async def generate_and_tag(kuerzel: str, blocks: List[Dict]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
