@@ -9,6 +9,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
+from src.constants import FINAL_MERGED_LAYOUT_PATH, DOC_AI_CHUNK_RESULTS_PREFIX
 
 
 class DocumentProcessor:
@@ -18,8 +19,6 @@ class DocumentProcessor:
     """
     
     TEMP_PDF_CHUNK_PREFIX = "output/temp_pdf_chunks/"
-    DOC_AI_CHUNK_RESULTS_PREFIX = "output/doc_ai_results/"
-    FINAL_MERGED_LAYOUT_PATH = "output/results/intermediate/doc_ai_layout_parser_merged.json"
     PAGE_CHUNK_SIZE = 100
 
     def __init__(self, gcs_client: GcsClient, doc_ai_client: DocumentAiClient, rag_client: RagClient, config: AppConfig):
@@ -34,7 +33,7 @@ class DocumentProcessor:
         Execute the full Document AI Layout Parser workflow.
         
         Args:
-            force_overwrite: If True, reprocess even if output already exists
+            force_overwrite: If True, recreate layout even if it already exists
         """
         if not force_overwrite and self.gcs_client.blob_exists(FINAL_MERGED_LAYOUT_PATH):
             logging.info(f"Merged layout file already exists. Skipping Layout Parser workflow.")
@@ -87,7 +86,7 @@ class DocumentProcessor:
         processing_tasks = [
             self.doc_ai_client.process_document_chunk_async(
                 f"gs://{self.config.bucket_name}/{self.TEMP_PDF_CHUNK_PREFIX}chunk_{i}.pdf", 
-                self.DOC_AI_CHUNK_RESULTS_PREFIX
+                DOC_AI_CHUNK_RESULTS_PREFIX
             ) for i in range(chunk_count)
         ]
         await asyncio.gather(*processing_tasks)
@@ -100,7 +99,7 @@ class DocumentProcessor:
         
         # Collect results from all chunks
         for i in range(chunk_count):
-            chunk_json_path = f"{self.DOC_AI_CHUNK_RESULTS_PREFIX}chunk_{i}.json"
+            chunk_json_path = f"{DOC_AI_CHUNK_RESULTS_PREFIX}chunk_{i}.json"
             chunk_data = await self.gcs_client.read_json_async(chunk_json_path)
             merged_text += chunk_data.get("text", "")
             merged_blocks.extend(chunk_data.get("documentLayout", {}).get("blocks", []))
