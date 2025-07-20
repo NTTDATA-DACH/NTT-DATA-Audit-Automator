@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 from collections import defaultdict
 
 from src.clients.gcs_client import GcsClient
+from src.constants import FINAL_MERGED_LAYOUT_PATH, GROUPED_BLOCKS_PATH
 
 
 class BlockGrouper:
@@ -13,9 +14,6 @@ class BlockGrouper:
     Groups Document AI layout blocks by Zielobjekt context using a marker-based algorithm.
     Finds Zielobjekt identifiers as section markers and groups content between them.
     """
-    
-    FINAL_MERGED_LAYOUT_PATH = "output/results/intermediate/doc_ai_layout_parser_merged.json"
-    GROUPED_BLOCKS_PATH = "output/results/intermediate/zielobjekt_grouped_blocks.json"
 
     def __init__(self, gcs_client: GcsClient):
         self.gcs_client = gcs_client
@@ -35,7 +33,7 @@ class BlockGrouper:
         logging.info("Grouping layout blocks by Zielobjekt context using marker-based algorithm...")
         
         # Load layout data
-        layout_data = await self.gcs_client.read_json_async(self.FINAL_MERGED_LAYOUT_PATH)
+        layout_data = await self.gcs_client.read_json_async(FINAL_MERGED_LAYOUT_PATH)
         all_blocks = layout_data.get("documentLayout", {}).get("blocks", [])
 
         # Initialize grouping structures
