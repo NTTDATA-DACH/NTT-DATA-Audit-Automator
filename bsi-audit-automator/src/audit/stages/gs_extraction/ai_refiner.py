@@ -103,6 +103,7 @@ class AiRefiner:
         if cached_result is not None:
             return kuerzel, name, cached_result
         
+        processing_error = None
         try:
             # Process with chunking if needed
             chunks = self._chunk_blocks(blocks, self.MAX_BLOCKS_PER_CHUNK)
@@ -135,6 +136,7 @@ class AiRefiner:
             return kuerzel, name, result
             
         except Exception as e:
+            processing_error = e
             logging.error(f"Complete processing failed for Zielobjekt '{kuerzel}': {e}")
             return kuerzel, name, None
 
@@ -239,12 +241,20 @@ class AiRefiner:
             logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {model_desc})")
             
             try:
-                result = await self.ai_client.generate_json_response(
-                    prompt=prompt,
-                    json_schema=schema,
-                    request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
-                    model_override=model_name
-                )
+                # Use single attempt for model fallback to avoid internal retry conflicts
+                if model_name == CHUNK_PROCESSING_MODEL:
+                    result = await self.ai_client.generate_json_response_single_attempt(
+                        prompt=prompt, json_schema=schema, 
+                        request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
+                        model_override=model_name
+                    )
+                else:
+                    result = await self.ai_client.generate_json_response(
+                        prompt=prompt,
+                        json_schema=schema,
+                        request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
+                        model_override=model_name
+                    )
                 
                 # Validate the result against the schema
                 if result:
@@ -285,8 +295,10 @@ class AiRefiner:
                 part2 = clean_chunk[mid_point:]
                 
                 # Process both parts recursively
-                result1 = await self._process_blocks_chunk(kuerzel, part1, f"{chunk_idx}a", f"{total_chunks}+", prompt_template, schema)
-                result2 = await self._process_blocks_chunk(kuerzel, part2, f"{chunk_idx}b", f"{total_chunks}+", prompt_template, schema)
+                # Convert chunk_idx to string for concatenation
+                chunk_idx_str = str(chunk_idx)
+                result1 = await self._process_blocks_chunk(kuerzel, part1, chunk_idx_str + "a", total_chunks + 1, prompt_template, schema)
+                result2 = await self._process_blocks_chunk(kuerzel, part2, chunk_idx_str + "b", total_chunks + 1, prompt_template, schema)
                 
                 # Combine results
                 combined_anforderungen = []

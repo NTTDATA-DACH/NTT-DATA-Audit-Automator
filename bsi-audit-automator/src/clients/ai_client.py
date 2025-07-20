@@ -68,6 +68,59 @@ class AiClient:
             )
         return self._model_cache[model_name]
 
+    async def generate_json_response_single_attempt(
+        self, 
+        prompt: str, 
+        json_schema: Dict[str, Any], 
+        gcs_uris: List[str] = None, 
+        request_context_log: str = "Generic AI Request",
+        model_override: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Single attempt JSON generation - used for model fallback scenarios.
+        Fails fast on JSON errors rather than retrying 5 times.
+        """
+        # Same logic as generate_json_response but without the retry loop
+        # Just one attempt and fail immediately on JSON parsing errors
+        try:
+            schema_for_api = json.loads(json.dumps(json_schema))
+            schema_for_api.pop("$schema", None)
+        except Exception as e:
+            logging.error(f"Failed to process JSON schema before API call: {e}")
+            raise ValueError("Invalid JSON schema provided.") from e
+
+        gen_config = GenerationConfig(
+            response_mime_type="application/json",
+            response_schema=schema_for_api,
+            max_output_tokens=65535,
+            temperature=0.2,
+        )
+
+        model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
+        generative_model = self._get_model_instance(model_to_use)
+
+        contents = [prompt]
+        if gcs_uris:
+            for uri in gcs_uris:
+                contents.append(Part.from_uri(uri, mime_type="application/pdf"))
+
+        logging.info(f"[{request_context_log}] Single attempt with model '{model_to_use}'...")
+        response = await generative_model.generate_content_async(
+            contents=contents,
+            generation_config=gen_config,
+        )
+
+        if not response.candidates:
+            raise ValueError("The model response contained no candidates.")
+
+        finish_reason = response.candidates[0].finish_reason.name
+        if finish_reason not in ["STOP", "MAX_TOKENS"]:
+            raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
+
+        response_json = json.loads(response.text)
+        logging.info(f"[{request_context_log}] Successfully generated JSON response.")
+        return response_json
+
     async def generate_json_response(
         self, 
         prompt: str, 
