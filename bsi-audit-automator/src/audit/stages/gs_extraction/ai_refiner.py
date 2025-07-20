@@ -221,7 +221,6 @@ class AiRefiner:
         
         # Calculate rough content size for logging
         total_chars = sum(len(str(block)) for block in clean_chunk)
-        logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {CHUNK_PROCESSING_MODEL})")
         
         # Add chunk context to prompt if multiple chunks
         chunk_context = ""
@@ -230,25 +229,68 @@ class AiRefiner:
         
         prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
         
-        try:
-            # Try with flash model for faster processing
-            result = await self.ai_client.generate_json_response(
-                prompt=prompt,
-                json_schema=schema,
-                request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
-                model_override=CHUNK_PROCESSING_MODEL
-            )
+        # Try flash-lite first, then fallback to ground truth model on JSON errors
+        models_to_try = [
+            (CHUNK_PROCESSING_MODEL, "flash-lite"),
+            (GROUND_TRUTH_MODEL, "ground-truth fallback")
+        ]
+        
+        for model_name, model_desc in models_to_try:
+            logging.info(f"Processing chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}': {len(clean_chunk)} blocks, ~{total_chars} chars (using {model_desc})")
             
-            # Validate the result
-            if result and "anforderungen" in result:
-                return result
-            else:
-                logging.warning(f"Invalid result structure for {kuerzel} chunk {chunk_idx + 1}")
-                return {"anforderungen": []}
+            try:
+                result = await self.ai_client.generate_json_response(
+                    prompt=prompt,
+                    json_schema=schema,
+                    request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})",
+                    model_override=model_name
+                )
                 
-        except Exception as e:
-            logging.error(f"AI refinement failed for Zielobjekt '{kuerzel}' chunk {chunk_idx + 1}: {e}")
-            
+                if result and "anforderungen" in result:
+                    if model_name != CHUNK_PROCESSING_MODEL:
+                        logging.info(f"Successfully processed chunk with {model_desc} after flash-lite failed")
+                    return result
+                else:
+                    logging.warning(f"{model_desc} returned invalid result structure for {kuerzel} chunk {chunk_idx + 1}")
+                    
+            except Exception as e:
+                error_msg = str(e).lower()
+                is_json_error = "unterminated string" in error_msg or "json" in error_msg
+                
+                if is_json_error and model_name == CHUNK_PROCESSING_MODEL:
+                    logging.warning(f"Flash-lite failed with JSON error for '{kuerzel}' chunk {chunk_idx + 1}: {e}. Trying ground truth model...")
+                    continue  # Try next model
+                elif model_name == GROUND_TRUTH_MODEL:
+                    logging.error(f"Ground truth model also failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+                    break  # Both models failed, try chunk splitting
+                else:
+                    logging.error(f"{model_desc} failed for '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+                    break
+        
+        # If both models failed, try splitting the chunk as last resort
+        if len(clean_chunk) > self.MIN_BLOCKS_PER_CHUNK:
+            logging.info(f"Both models failed, attempting to split chunk {chunk_idx + 1} for '{kuerzel}'")
+            try:
+                mid_point = len(clean_chunk) // 2
+                part1 = clean_chunk[:mid_point]
+                part2 = clean_chunk[mid_point:]
+                
+                # Process both parts recursively
+                result1 = await self._process_blocks_chunk(kuerzel, part1, f"{chunk_idx}a", f"{total_chunks}+", prompt_template, schema)
+                result2 = await self._process_blocks_chunk(kuerzel, part2, f"{chunk_idx}b", f"{total_chunks}+", prompt_template, schema)
+                
+                # Combine results
+                combined_anforderungen = []
+                if result1 and "anforderungen" in result1:
+                    combined_anforderungen.extend(result1["anforderungen"])
+                if result2 and "anforderungen" in result2:
+                    combined_anforderungen.extend(result2["anforderungen"])
+                
+                return {"anforderungen": combined_anforderungen}
+                
+            except Exception as split_error:
+                logging.error(f"Chunk splitting also failed for '{kuerzel}': {split_error}")
+        
             # If this chunk is too large, try splitting it further
             if len(clean_chunk) > self.MIN_BLOCKS_PER_CHUNK and "token" in str(e).lower():
                 logging.info(f"Attempting to split large chunk {chunk_idx + 1} for '{kuerzel}'")
