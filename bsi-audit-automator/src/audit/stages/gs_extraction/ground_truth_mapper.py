@@ -78,7 +78,7 @@ class GroundTruthMapper:
                 json_schema=self._load_asset_json(z_task_config["schema_path"]), 
                 gcs_uris=z_uris, 
                 request_context_log="GT: extract_zielobjekte",
-                model_override=self.GROUND_TRUTH_MODEL
+                model_override=GROUND_TRUTH_MODEL
             )
 
             # Extract Mappings from Modellierung (A.3)
@@ -89,7 +89,7 @@ class GroundTruthMapper:
                 json_schema=self._load_asset_json(m_task_config["schema_path"]), 
                 gcs_uris=m_uris, 
                 request_context_log="GT: extract_baustein_mappings",
-                model_override=self.GROUND_TRUTH_MODEL
+                model_override=GROUND_TRUTH_MODEL
             )
 
             # Construct the system map
