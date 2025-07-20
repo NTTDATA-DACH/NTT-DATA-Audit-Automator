@@ -94,10 +94,10 @@ class Chapter4Runner:
 
         # AI-driven
         prompt_template = definition["prompt"]
-        # NEW: Inject the ground truth map into the prompt.
-        prompt = prompt_template.format(
-            ground_truth_map_json=json.dumps(self.ground_truth_map, indent=2, ensure_ascii=False)
-        )
+        # FIXED: Use safe string replacement to avoid JSON key conflicts with format()
+        ground_truth_json_str = json.dumps(self.ground_truth_map, indent=2, ensure_ascii=False)
+        prompt = prompt_template.replace("{ground_truth_map_json}", ground_truth_json_str)
+        
         schema = self._load_asset_json(definition["schema_path"])
         
         try:
