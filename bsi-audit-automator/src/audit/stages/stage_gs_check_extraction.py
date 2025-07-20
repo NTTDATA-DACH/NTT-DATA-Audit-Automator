@@ -280,7 +280,13 @@ class GrundschutzCheckExtractionRunner:
         logging.info(f"Saved grouped layout blocks to {self.GROUPED_BLOCKS_PATH}")
 
     async def _refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
-        """[Step 4] Processes each group of blocks with Gemini to extract structured requirements."""
+        """[Step 4] Processes each group of blocks with Gemini to extract structured requirements.
+        
+        Features:
+        - Per-kürzel idempotency with GCS caching
+        - Automatic chunking for large block groups
+        - Robust error handling and recovery
+        """
         if not force_overwrite and self.gcs_client.blob_exists(self.FINAL_CHECK_RESULTS_PATH):
             logging.info(f"Final extracted check results file exists. Skipping AI refinement.")
             return
@@ -293,36 +299,156 @@ class GrundschutzCheckExtractionRunner:
         prompt_template = refine_config["prompt"]
         schema = self._load_asset_json(refine_config["schema_path"])
         
+        # Configuration for chunking
+        MAX_BLOCKS_PER_CHUNK = 400  # Adjust based on token limits
+        INDIVIDUAL_RESULTS_PREFIX = "output/results/intermediate/gs_extraction_individual_results/"
+        
         zielobjekt_map = {z['kuerzel']: z['name'] for z in system_map.get("zielobjekte", [])}
 
-        async def generate_and_tag(kuerzel, blocks):
+        async def get_cached_result(kuerzel: str) -> Optional[Dict[str, Any]]:
+            """Check if we have a cached result for this kürzel."""
+            cache_path = f"output/{INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
+            if not force_overwrite and self.gcs_client.blob_exists(cache_path):
+                try:
+                    cached_result = await self.gcs_client.read_json_async(cache_path)
+                    logging.info(f"Using cached result for Zielobjekt '{kuerzel}'")
+                    return cached_result
+                except Exception as e:
+                    logging.warning(f"Failed to read cached result for '{kuerzel}': {e}")
+            return None
+
+        async def save_result_to_cache(kuerzel: str, result_data: Dict[str, Any]):
+            """Save individual result to cache."""
+            cache_path = f"output/{INDIVIDUAL_RESULTS_PREFIX}{kuerzel}_result.json"
+            try:
+                await self.gcs_client.upload_from_string_async(
+                    json.dumps(result_data, indent=2, ensure_ascii=False), cache_path
+                )
+                logging.debug(f"Cached result for Zielobjekt '{kuerzel}' to {cache_path}")
+            except Exception as e:
+                logging.error(f"Failed to cache result for '{kuerzel}': {e}")
+
+        def chunk_blocks(blocks: List[Dict], max_blocks: int) -> List[List[Dict]]:
+            """Split blocks into chunks of manageable size."""
+            if len(blocks) <= max_blocks:
+                return [blocks]
+            
+            chunks = []
+            for i in range(0, len(blocks), max_blocks):
+                chunk = blocks[i:i + max_blocks]
+                chunks.append(chunk)
+            
+            logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks")
+            return chunks
+
+        async def process_blocks_chunk(kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int) -> Dict[str, Any]:
+            """Process a single chunk of blocks for a kürzel."""
             name = zielobjekt_map.get(kuerzel, "Unbekannt")
-            prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(blocks, indent=2))
+            
+            # Add chunk context to prompt if multiple chunks
+            chunk_context = ""
+            if total_chunks > 1:
+                chunk_context = f"\n\nNote: This is chunk {chunk_idx + 1} of {total_chunks} for this Zielobjekt. Focus on extracting requirements from these specific blocks."
+            
+            prompt = prompt_template.format(zielobjekt_blocks_json=json.dumps(chunk, indent=2)) + chunk_context
+            
             try:
                 result = await self.ai_client.generate_json_response(
-                    prompt, schema, request_context_log=f"RefineGroup: {kuerzel}"
+                    prompt, schema, request_context_log=f"RefineGroup: {kuerzel} (chunk {chunk_idx + 1}/{total_chunks})"
                 )
-                return kuerzel, name, result
+                return result
             except Exception as e:
-                logging.error(f"AI refinement failed for Zielobjekt '{kuerzel}': {e}")
+                logging.error(f"AI refinement failed for Zielobjekt '{kuerzel}' chunk {chunk_idx + 1}: {e}")
+                return {"anforderungen": []}
+
+        async def generate_and_tag(kuerzel: str, blocks: List[Dict]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+            """Process all blocks for a kürzel, with caching and chunking support."""
+            name = zielobjekt_map.get(kuerzel, "Unbekannt")
+            
+            # Check for cached result first
+            cached_result = await get_cached_result(kuerzel)
+            if cached_result is not None:
+                return kuerzel, name, cached_result
+            
+            try:
+                # Determine if chunking is needed
+                chunks = chunk_blocks(blocks, MAX_BLOCKS_PER_CHUNK)
+                
+                if len(chunks) == 1:
+                    # Single chunk - process normally
+                    result = await process_blocks_chunk(kuerzel, chunks[0], 0, 1)
+                else:
+                    # Multiple chunks - process each and merge results
+                    logging.info(f"Processing {len(chunks)} chunks for Zielobjekt '{kuerzel}'")
+                    chunk_tasks = [
+                        process_blocks_chunk(kuerzel, chunk, idx, len(chunks)) 
+                        for idx, chunk in enumerate(chunks)
+                    ]
+                    chunk_results = await asyncio.gather(*chunk_tasks)
+                    
+                    # Merge all anforderungen from chunks
+                    all_anforderungen = []
+                    for chunk_result in chunk_results:
+                        if chunk_result and "anforderungen" in chunk_result:
+                            all_anforderungen.extend(chunk_result["anforderungen"])
+                    
+                    result = {"anforderungen": all_anforderungen}
+                    logging.info(f"Merged {len(all_anforderungen)} requirements from {len(chunks)} chunks for '{kuerzel}'")
+                
+                # Cache the result
+                if result:
+                    await save_result_to_cache(kuerzel, result)
+                
+                return kuerzel, name, result
+                
+            except Exception as e:
+                logging.error(f"Complete processing failed for Zielobjekt '{kuerzel}': {e}")
                 return kuerzel, name, None
 
-        tasks = [generate_and_tag(kuerzel, blocks) for kuerzel, blocks in groups.items() if kuerzel != "_UNGROUPED_" and blocks]
-        results = await asyncio.gather(*tasks)
-
-        all_anforderungen = []
-        for kuerzel, name, result_data in results:
-            if result_data:
-                for anforderung in result_data.get("anforderungen", []):
-                    anforderung['zielobjekt_kuerzel'] = kuerzel
-                    anforderung['zielobjekt_name'] = name
-                    all_anforderungen.append(anforderung)
+        # Filter and process groups
+        valid_groups = {k: v for k, v in groups.items() if k != "_UNGROUPED_" and v}
         
-        final_output = {"anforderungen": all_anforderungen}
+        if not valid_groups:
+            logging.warning("No valid Zielobjekt groups found for processing")
+            final_output = {"anforderungen": []}
+        else:
+            # Limit in test mode
+            if os.getenv("TEST", "false").lower() == "true":
+                limited_groups = dict(list(valid_groups.items())[:3])
+                logging.info(f"Test mode: Processing only {len(limited_groups)} of {len(valid_groups)} groups")
+                valid_groups = limited_groups
+            
+            logging.info(f"Processing {len(valid_groups)} Zielobjekt groups...")
+            
+            # Process all groups
+            tasks = [generate_and_tag(kuerzel, blocks) for kuerzel, blocks in valid_groups.items()]
+            results = await asyncio.gather(*tasks)
+
+            # Assemble final results
+            all_anforderungen = []
+            successful_count = 0
+            failed_count = 0
+            
+            for kuerzel, name, result_data in results:
+                if result_data and "anforderungen" in result_data:
+                    for anforderung in result_data["anforderungen"]:
+                        anforderung['zielobjekt_kuerzel'] = kuerzel
+                        anforderung['zielobjekt_name'] = name
+                        all_anforderungen.append(anforderung)
+                    successful_count += 1
+                else:
+                    failed_count += 1
+                    logging.warning(f"No valid requirements extracted for Zielobjekt '{kuerzel}'")
+
+            final_output = {"anforderungen": all_anforderungen}
+            
+            logging.info(f"AI refinement completed: {successful_count} successful, {failed_count} failed")
+        
+        # Save final consolidated results
         await self.gcs_client.upload_from_string_async(
             json.dumps(final_output, indent=2, ensure_ascii=False), self.FINAL_CHECK_RESULTS_PATH
         )
-        logging.info(f"Saved final refined check data with {len(all_anforderungen)} requirements to {self.FINAL_CHECK_RESULTS_PATH}")
+        logging.info(f"Saved final refined check data with {len(final_output['anforderungen'])} requirements to {self.FINAL_CHECK_RESULTS_PATH}")
 
     async def run(self, force_overwrite: bool = False) -> Dict[str, Any]:
         """Main execution method for the full extraction and refinement pipeline."""
