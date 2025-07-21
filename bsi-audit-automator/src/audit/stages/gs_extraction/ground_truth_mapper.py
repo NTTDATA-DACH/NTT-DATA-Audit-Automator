@@ -95,7 +95,8 @@ class GroundTruthMapper:
             # Construct the system map
             system_map = {
                 "zielobjekte": zielobjekte_result.get("zielobjekte", []),
-                "baustein_to_zielobjekt_mapping": self._structure_mappings(mappings_result.get("mappings", []))
+                "baustein_to_zielobjekt_mapping": self._structure_mappings(mappings_result.get("mappings", [])),
+                "informationsverbund_name": zielobjekte_result.get("informationsverbund_name", "Gesamter Informationsverbund")
             }
             
             # Save to GCS
