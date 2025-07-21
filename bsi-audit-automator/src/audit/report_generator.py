@@ -155,12 +155,12 @@ class ReportGenerator:
 
         today = datetime.now()
         date_str = today.strftime("%y%m%d")
-        
+        final_report_path = f"{self.config.output_prefix}results/report_{date_str}.json"
         await self.gcs_client.upload_from_string_async(
             content=json.dumps(report, indent=2, ensure_ascii=False),
-            destination_blob_name=FINAL_REPORT_PATH
+            destination_blob_name=final_report_path
         )
-        logging.info(f"Successfully generated final audit report at {FINAL_REPORT_PATH}")
+        logging.info(f"Saving final report to {final_report_path}")
         
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
