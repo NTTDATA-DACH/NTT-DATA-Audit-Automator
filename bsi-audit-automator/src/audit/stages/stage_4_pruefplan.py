@@ -8,6 +8,7 @@ from google.cloud.exceptions import NotFound
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
+from src.clients.rag_client import RagClient
 
 class Chapter4Runner:
     """
@@ -20,10 +21,11 @@ class Chapter4Runner:
     GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
 
 
-    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient):
+    def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
+        self.rag_client = rag_client
         self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
         self.subchapter_definitions = self._load_subchapter_definitions()
         self.ground_truth_map = None
@@ -100,10 +102,18 @@ class Chapter4Runner:
         
         schema = self._load_asset_json(definition["schema_path"])
         
+        # Check if this task needs document context
+        gcs_uris = []
+        source_categories = definition.get("source_categories")
+        if source_categories:
+            logging.info(f"Loading document context for categories: {source_categories}")
+            gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
+        
         try:
             generated_data = await self.ai_client.generate_json_response(
                 prompt=prompt,
                 json_schema=schema,
+                gcs_uris=gcs_uris,
                 request_context_log=f"Chapter-4: {name}"
             )
             logging.info(f"Successfully generated plan for subchapter {definition.get('key', name)}")
