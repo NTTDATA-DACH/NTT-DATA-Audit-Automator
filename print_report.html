@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSI Audit Report Viewer</title>
+    <style>
+        :root {
+            --primary-color: #003359;
+            --secondary-color: #0073e6;
+            --background-color: #f4f7fa;
+            --text-color: #333;
+            --border-color: #d1d9e6;
+            --header-bg: #fff;
+            --card-bg: #fff;
+            --button-bg: #005cbf;
+            --button-hover-bg: #004a99;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: var(--header-bg);
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--primary-color);
+            font-size: 1.8em;
+        }
+        #controls { display: flex; align-items: center; gap: 15px; }
+        #controls button, #controls input[type="file"]::file-selector-button {
+            background-color: var(--button-bg);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        #controls button:hover, #controls input[type="file"]::file-selector-button:hover { background-color: var(--button-hover-bg); }
+        #controls button:disabled { background-color: #999; cursor: not-allowed; }
+        
+        .page-section {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-top: 25px;
+            padding: 40px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        
+        #title-page-container {
+            text-align: center;
+            padding-top: 10vh;
+            padding-bottom: 10vh;
+        }
+        #title-page-container h2 {
+            font-size: 2.5em;
+            color: var(--primary-color);
+        }
+        #title-page-container h3 {
+            font-size: 1.8em;
+            color: var(--secondary-color);
+        }
+
+        #toc-container ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        #toc-container li a {
+            text-decoration: none;
+            color: var(--secondary-color);
+        }
+        #toc-container > ul > li > a {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: var(--primary-color);
+        }
+        #toc-container ul ul {
+            padding-left: 20px;
+        }
+
+        .chapter h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .subchapter {
+            margin-top: 20px;
+            padding-left: 20px;
+            border-left: 3px solid #eef;
+        }
+        h3 { color: var(--primary-color); font-weight: 600; }
+        h4 { color: #555; }
+        p.description { color: #555; font-style: italic; }
+        
+        .content-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #f0f0f0;
+            border-radius: 4px;
+        }
+        .content-item strong {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #444;
+        }
+        .static-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            min-height: 1.2em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+        th { background-color: #f2f2f2; font-weight: bold; }
+
+        fieldset.baustein-pruefung {
+            border: 1px solid var(--secondary-color);
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        fieldset.baustein-pruefung legend {
+            font-weight: bold;
+            color: var(--primary-color);
+            padding: 0 10px;
+        }
+        .anforderung-block {
+            border: 1px solid #e0e0e0;
+            background-color: #fdfdfd;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        .pruefmethode-group {
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
+
+        @media print {
+            body { background-color: #fff; }
+            header { display: none; }
+            .page-section {
+                box-shadow: none;
+                border: none;
+                margin-top: 0;
+                padding: 0;
+            }
+            #title-page-container, #toc-container, .chapter {
+                page-break-after: always;
+            }
+            .chapter:first-of-type {
+                page-break-before: avoid;
+            }
+            .chapter {
+                 page-break-before: always;
+            }
+            a { text-decoration: none; color: inherit; }
+            .subchapter { border-left: none; padding-left: 0; }
+            table, .anforderung-block { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>BSI Audit Report Viewer</h1>
+        <div id="controls">
+            <input type="file" id="json-file-input" accept=".json">
+            <button id="print-button" disabled>Print Report</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</div>
+        <div id="title-page-container"></div>
+        <div id="toc-container"></div>
+        <div id="report-container"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('json-file-input');
+            const printButton = document.getElementById('print-button');
+            const titlePageContainer = document.getElementById('title-page-container');
+            const tocContainer = document.getElementById('toc-container');
+            const reportContainer = document.getElementById('report-container');
+            const initialMessage = document.getElementById('initial-message');
+
+            fileInput.addEventListener('change', handleFileSelect);
+            printButton.addEventListener('click', () => window.print());
+
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const reportData = JSON.parse(e.target.result);
+                        initialMessage.style.display = 'none';
+                        
+                        renderTitlePage(reportData);
+                        renderTableOfContents(reportData);
+                        renderReport(reportData);
+
+                        printButton.disabled = false;
+                    } catch (error) {
+                        alert('Error parsing JSON file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+            
+            function renderTitlePage(data) {
+                titlePageContainer.innerHTML = '';
+                const titlePageData = data?.bsiAuditReport?.titlePage;
+                if (!titlePageData) return;
+
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page-section';
+                pageDiv.id = 'title-page';
+
+                pageDiv.innerHTML = `
+                    <h2>${titlePageData.reportTitle || 'Auditbericht'}</h2>
+                    <br><br>
+                    <h3>Auditierte Institution:</h3>
+                    <p>${titlePageData.auditedInstitution || 'N/A'}</p>
+                    <h3>Zertifizierungs-ID:</h3>
+                    <p>${titlePageData.certificationID || 'N/A'}</p>
+                `;
+                titlePageContainer.appendChild(pageDiv);
+            }
+
+            function renderTableOfContents(data) {
+                tocContainer.innerHTML = '';
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page-section';
+                pageDiv.id = 'table-of-contents';
+
+                const h2 = document.createElement('h2');
+                h2.textContent = 'Inhaltsverzeichnis';
+                pageDiv.appendChild(h2);
+
+                const rootUl = document.createElement('ul');
+
+                function buildNavRecursive(currentObject, parentUl) {
+                    Object.keys(currentObject).forEach(key => {
+                        const child = currentObject[key];
+                        if (typeof child === 'object' && child !== null && child.title) {
+                            const navId = `section-${(child.chapterNumber || child.subchapterNumber || key).replace(/\./g, '-')}`;
+                            
+                            const li = document.createElement('li');
+                            const a = document.createElement('a');
+                            a.href = `#${navId}`;
+                            a.textContent = `${child.chapterNumber || child.subchapterNumber || ''} ${child.title}`;
+                            li.appendChild(a);
+                            
+                            const childKeys = Object.keys(child).filter(k => typeof child[k] === 'object' && child[k] !== null && child[k].title);
+                            if (childKeys.length > 0) {
+                                const nestedUl = document.createElement('ul');
+                                buildNavRecursive(child, nestedUl);
+                                li.appendChild(nestedUl);
+                            }
+                            parentUl.appendChild(li);
+                        }
+                    });
+                }
+                
+                buildNavRecursive(data.bsiAuditReport || {}, rootUl);
+                pageDiv.appendChild(rootUl);
+                tocContainer.appendChild(pageDiv);
+            }
+
+
+            function renderReport(data) {
+                reportContainer.innerHTML = ''; 
+                const report = data.bsiAuditReport;
+                if (!report) return;
+
+                for (const key in report) {
+                    if (key === 'titlePage') continue; // Skip title page as it's rendered separately
+                    const chapterData = report[key];
+                    if (typeof chapterData === 'object' && chapterData !== null) {
+                         reportContainer.appendChild(renderChapter(key, chapterData));
+                    }
+                }
+            }
+            
+            function renderChapter(key, chapterData) {
+                const chapterDiv = document.createElement('div');
+                chapterDiv.className = 'chapter page-section';
+                chapterDiv.dataset.chapterKey = key;
+                
+                const navId = `section-${(chapterData.chapterNumber || key).replace(/\./g, '-')}`;
+                if(chapterData.title) chapterDiv.innerHTML += `<h2 id="${navId}">${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
+                if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
+
+                for (const subKey in chapterData) {
+                    if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
+                         chapterDiv.appendChild(renderSection(subKey, chapterData[subKey]));
+                    }
+                }
+                return chapterDiv;
+            }
+
+            function renderSection(key, sectionData) {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'subchapter';
+                
+                const navId = `section-${(sectionData.subchapterNumber || key).replace(/\./g, '-')}`;
+                if (sectionData.title) sectionDiv.innerHTML += `<h3 id="${navId}">${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
+                if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
+                
+                const handledKeys = ['title', 'description', 'subchapterNumber', 'chapterNumber'];
+                
+                if (Array.isArray(sectionData.content)) {
+                    sectionData.content.forEach((item) => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'content-item';
+                        if (item.type === 'question') {
+                             let answerText = 'N/A';
+                             if (item.answer === true) answerText = 'Ja';
+                             if (item.answer === false) answerText = 'Nein';
+                            itemDiv.appendChild(createStaticDisplay(item.questionText, answerText));
+                        } else if (item.type === 'finding' || item.type === 'prose') {
+                            const text = item.findingText || item.text;
+                            itemDiv.appendChild(createStaticDisplay(item.label, text));
+                        }
+                        sectionDiv.appendChild(itemDiv);
+                    });
+                    handledKeys.push('content');
+                } else if (typeof sectionData.content === 'string') {
+                    sectionDiv.appendChild(createStaticDisplay(sectionData.title, sectionData.content));
+                    handledKeys.push('content');
+                }
+                
+                if (sectionData.table) {
+                    sectionDiv.appendChild(renderStaticTable(sectionData.table));
+                    handledKeys.push('table');
+                }
+                
+                if (Array.isArray(sectionData.bausteinPruefungen)) {
+                    sectionDiv.appendChild(renderStaticBausteinPruefung(sectionData.bausteinPruefungen));
+                    handledKeys.push('bausteinPruefungen');
+                } else if (Array.isArray(sectionData.massnahmenPruefungen)) {
+                    // This can be expanded similarly if needed.
+                    handledKeys.push('massnahmenPruefungen');
+                }
+
+                if (key === 'gesamtvotum' && sectionData.votum) {
+                    sectionDiv.appendChild(renderStaticGesamtvotum(sectionData));
+                    handledKeys.push('gesamtvotum');
+                    handledKeys.push('votum');
+                }
+
+                for (const subKey in sectionData) {
+                    if (handledKeys.includes(subKey)) continue;
+
+                    if (typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
+                        sectionDiv.appendChild(renderSection(subKey, sectionData[subKey]));
+                    }
+                }
+                return sectionDiv;
+            }
+
+            function createStaticDisplay(label, value) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'content-item';
+                if (label) wrapper.innerHTML = `<strong>${label}</strong>`;
+                const div = document.createElement('div');
+                div.className = 'static-content';
+                div.textContent = value || 'Keine Angabe';
+                wrapper.appendChild(div);
+                return wrapper;
+            }
+
+            function renderStaticTable(tableData) {
+                const tableContainer = document.createElement('div');
+                if (!tableData || !Array.isArray(tableData.headers)) {
+                    return tableContainer;
+                }
+                const table = document.createElement('table');
+                const thead = table.createTHead();
+                const tbody = table.createTBody();
+                const headerRow = thead.insertRow();
+                tableData.headers.forEach(headerText => {
+                    const th = document.createElement('th');
+                    th.textContent = headerText;
+                    headerRow.appendChild(th);
+                });
+
+                if (Array.isArray(tableData.rows)) {
+                    tableData.rows.forEach(rowData => {
+                        const row = tbody.insertRow();
+                        tableData.headers.forEach(header => {
+                            const cell = row.insertCell();
+                            const cellValue = rowData[header];
+                            // If the value is an object (like in Kap 5.5.2), stringify it simply
+                            if (typeof cellValue === 'object' && cellValue !== null) {
+                                cell.textContent = Object.entries(cellValue).filter(([k,v]) => v).map(([k,v]) => k).join(', ');
+                            } else {
+                                cell.textContent = cellValue || '';
+                            }
+                        });
+                    });
+                }
+                tableContainer.appendChild(table);
+                return tableContainer;
+            }
+
+             function renderStaticGesamtvotum(data) {
+                const container = document.createElement('div');
+                container.appendChild(createStaticDisplay('Gesamteinschätzung und Begründung des Auditteamleiters:', data.gesamteinschaetzung));
+                
+                const votum = data.votum || {};
+                let votumText = 'Aufgrund der durchgeführten Einzelprüfungen im Rahmen des IT-Grundschutz-Audits wird festgestellt, dass der Untersuchungsgegenstand die Anforderungen einer ISO 27001-Zertifizierung auf der Basis von IT-Grundschutz ';
+                if (votum.entspricht === true) {
+                    votumText += 'erfüllt.';
+                } else if (votum.entspricht === false) {
+                    votumText += 'nicht erfüllt.';
+                } else {
+                    votumText += '[nicht bewertet].';
+                }
+                container.appendChild(createStaticDisplay('Votum:', votumText));
+                container.appendChild(createStaticDisplay('Datum:', votum.datum));
+
+                const signatureDiv = document.createElement('div');
+                signatureDiv.className = 'content-item';
+                signatureDiv.innerHTML = `<br><br><hr style="width: 250px; margin-left: 0;">
+                <p style="margin-top: 5px;">${votum.unterschrift || 'Unterschrift des Auditteamleiters'}</p>`;
+                container.appendChild(signatureDiv);
+
+                return container;
+            }
+
+            function renderStaticBausteinPruefung(pruefungen) {
+                const container = document.createElement('div');
+                if (Array.isArray(pruefungen)) {
+                    pruefungen.forEach((pruefung) => {
+                        const fieldset = document.createElement('fieldset');
+                        fieldset.className = 'baustein-pruefung';
+                        
+                        const legend = document.createElement('legend');
+                        legend.textContent = `${pruefung.title || 'Unbenannte Prüfung'}`;
+                        fieldset.appendChild(legend);
+
+                        fieldset.appendChild(createStaticDisplay('Bezogen auf Zielobjekt', pruefung.bezogenAufZielobjekt));
+                        fieldset.appendChild(createStaticDisplay('Auditiert am', pruefung.auditiertAm));
+                        fieldset.appendChild(createStaticDisplay('Auditor(en)', pruefung.auditor));
+                        fieldset.appendChild(createStaticDisplay('Befragt wurde', pruefung.befragtWurde));
+                        
+                        if (Array.isArray(pruefung.anforderungen)) {
+                            pruefung.anforderungen.forEach((anf) => {
+                                const anfBlock = document.createElement('div');
+                                anfBlock.className = 'anforderung-block';
+
+                                anfBlock.appendChild(createStaticDisplay('Nummer', anf.nummer));
+                                anfBlock.appendChild(createStaticDisplay('Anforderung', anf.anforderung));
+                                anfBlock.appendChild(createStaticDisplay('Bewertung der Anforderung', anf.bewertung));
+                                anfBlock.appendChild(createStaticDisplay('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
+
+                                const pmGroup = document.createElement('div');
+                                pmGroup.className = 'pruefmethode-group';
+                                const pruefmethoden = anf.pruefmethode || {};
+                                const activeMethods = Object.keys(pruefmethoden).filter(k => pruefmethoden[k]).join(', ');
+                                pmGroup.innerHTML = `<strong>Prüfmethode:</strong> <div>${activeMethods || 'Keine'}</div>`;
+                                anfBlock.appendChild(pmGroup);
+
+                                anfBlock.appendChild(createStaticDisplay('Auditfeststellung im Detail mit Nachweisen', anf.auditfeststellung));
+                                anfBlock.appendChild(createStaticDisplay('Identifizierte Abweichungen und Empfehlungen', anf.abweichungen));
+                                
+                                fieldset.appendChild(anfBlock);
+                            });
+                        }
+                        container.appendChild(fieldset);
+                    });
+                }
+                return container;
+            }
+        });
+    </script>
+</body>
+</html>
