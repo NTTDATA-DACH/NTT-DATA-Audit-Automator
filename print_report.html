@@ -240,6 +240,19 @@
                         const reportData = JSON.parse(e.target.result);
                         initialMessage.style.display = 'none';
                         
+                        // --- NEW LOGIC: Prompt for Certification ID ---
+                        // Ensure titlePage object exists to avoid errors
+                        if (!reportData.bsiAuditReport) reportData.bsiAuditReport = {};
+                        if (!reportData.bsiAuditReport.titlePage) reportData.bsiAuditReport.titlePage = {};
+                        
+                        const certId = prompt("Please enter the Certification ID (Zertifizierungs-ID):", reportData.bsiAuditReport.titlePage.certificationID || '');
+                        
+                        // Only update if user provides a value (even an empty string), don't update if they cancel the prompt (null)
+                        if (certId !== null) {
+                            reportData.bsiAuditReport.titlePage.certificationID = certId;
+                        }
+                        // --- END NEW LOGIC ---
+
                         renderTitlePage(reportData);
                         renderTableOfContents(reportData);
                         renderReport(reportData);
@@ -257,17 +270,23 @@
                 const titlePageData = data?.bsiAuditReport?.titlePage;
                 if (!titlePageData) return;
 
+                // --- NEW LOGIC: Get data from correct sources ---
+                const institutionData = data?.bsiAuditReport?.allgemeines?.auditierteInstitution?.kontaktinformationenAntragsteller?.table?.rows?.[0];
+                const institutionName = institutionData?.Institution || titlePageData.auditedInstitution || 'N/A';
+                const certificationId = titlePageData.certificationID || 'N/A';
+                // --- END NEW LOGIC ---
+
                 const pageDiv = document.createElement('div');
                 pageDiv.className = 'page-section';
                 pageDiv.id = 'title-page';
 
                 pageDiv.innerHTML = `
-                    <h2>${titlePageData.reportTitle || 'Auditbericht'}</h2>
+                    &lt;h2&gt;${titlePageData.reportTitle || 'Auditbericht'}&lt;/h2&gt;
                     <br><br>
                     <h3>Auditierte Institution:</h3>
-                    <p>${titlePageData.auditedInstitution || 'N/A'}</p>
+                    <p>${institutionName}</p>
                     <h3>Zertifizierungs-ID:</h3>
-                    <p>${titlePageData.certificationID || 'N/A'}</p>
+                    <p>${certificationId}</p>
                 `;
                 titlePageContainer.appendChild(pageDiv);
             }
