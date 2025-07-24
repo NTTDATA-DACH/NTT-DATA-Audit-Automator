@@ -27,6 +27,10 @@
             line-height: 1.6;
             display: flex;
         }
+        body.print-mode {
+            display: block;
+            background-color: white;
+        }
         .sidebar-nav {
             width: var(--sidebar-width);
             height: 100vh;
@@ -38,6 +42,9 @@
             padding: 20px;
             overflow-y: auto;
             box-sizing: border-box;
+        }
+        body.print-mode .sidebar-nav {
+            display: none;
         }
         .sidebar-nav h2 {
             font-size: 1.4em;
@@ -98,11 +105,19 @@
             margin-left: var(--sidebar-width);
             width: calc(100% - var(--sidebar-width));
         }
+        body.print-mode #main-content {
+            margin-left: 0;
+            width: 100%;
+        }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+        }
+        body.print-mode .container {
+            max-width: 210mm;
+            padding: 0;
         }
         header {
             background-color: var(--header-bg);
@@ -114,6 +129,9 @@
             position: sticky;
             top: 0;
             z-index: 1000;
+        }
+        body.print-mode header {
+            display: none;
         }
         header h1 {
             margin: 0;
@@ -142,6 +160,13 @@
             padding: 25px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
+        body.print-mode .chapter {
+            border: none;
+            box-shadow: none;
+            page-break-inside: avoid;
+            margin-top: 0;
+            padding-top: 20px;
+        }
         .chapter h2 {
             color: var(--primary-color);
             border-bottom: 2px solid var(--secondary-color);
@@ -153,6 +178,10 @@
             padding-left: 20px;
             border-left: 3px solid #eef;
         }
+        body.print-mode .subchapter {
+            border-left: none;
+            padding-left: 0;
+        }
         h3 { color: var(--primary-color); font-weight: 600; }
         h4 { color: #555; }
         p.description { color: #555; font-style: italic; }
@@ -162,6 +191,10 @@
             padding: 10px;
             border: 1px solid #f0f0f0;
             border-radius: 4px;
+        }
+        body.print-mode .content-item {
+            border: none;
+            padding: 5px 0;
         }
         label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; }
         input[type="text"], input[type="date"], select, textarea {
@@ -174,6 +207,20 @@
             font-size: 1em;
         }
         textarea { min-height: 80px; resize: vertical; }
+        body.print-mode textarea {
+            border: none;
+            background: none;
+            resize: none;
+            padding: 0;
+            min-height: auto;
+            height: auto;
+            overflow: visible;
+        }
+        body.print-mode input, body.print-mode select {
+            border: none;
+            background: none;
+            padding: 0;
+        }
 
         table {
             width: 100%;
@@ -188,7 +235,11 @@
         }
         th { background-color: #f2f2f2; font-weight: bold; }
         td input, td textarea, td select { padding: 4px; width: 100%; box-sizing: border-box;}
+        body.print-mode td textarea {
+            padding: 0;
+        }
         .action-cell { width: 80px; text-align: center; }
+        body.print-mode .action-cell { display: none; }
         .delete-row-btn, .add-row-btn {
             background-color: var(--danger-color);
             color: white;
@@ -204,6 +255,8 @@
             margin-top: 10px;
         }
         .add-row-btn:hover { background-color: var(--button-hover-bg); }
+        body.print-mode .add-row-btn,
+        body.print-mode .delete-row-btn { display: none; }
 
         fieldset.baustein-pruefung {
             border: 1px solid var(--secondary-color);
@@ -225,6 +278,11 @@
             margin-top: 15px;
             border-radius: 5px;
         }
+        body.print-mode .anforderung-block {
+            page-break-inside: avoid;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+        }
         .read-only-field {
             background-color: #e9ecef;
             padding: 8px;
@@ -233,6 +291,11 @@
             min-height: 1.5em;
             white-space: pre-wrap;
             word-wrap: break-word;
+        }
+        body.print-mode .read-only-field {
+            background: none;
+            border: none;
+            padding: 0;
         }
         .pruefmethode-group {
             display: flex;
@@ -245,6 +308,11 @@
             border-radius: 4px;
             margin-top: 10px;
             margin-bottom: 15px;
+        }
+        body.print-mode .pruefmethode-group {
+            background: none;
+            border: none;
+            padding: 5px 0;
         }
         .pruefmethode-group label:first-child {
             font-weight: bold;
@@ -267,6 +335,136 @@
 
         #report-container { padding-top: 20px; }
         #initial-message { text-align: center; font-size: 1.2em; color: #888; margin-top: 50px; }
+
+        /* Print-specific styles */
+        .cover-page {
+            display: none;
+        }
+        body.print-mode .cover-page {
+            display: block;
+            page-break-after: always;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+        }
+        .cover-page h1 {
+            font-size: 2.5em;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+        }
+        .cover-page .metadata {
+            font-size: 1.2em;
+            line-height: 2;
+            margin-top: 50px;
+        }
+        .cover-page .metadata div {
+            margin: 10px 0;
+        }
+
+        .table-of-contents {
+            display: none;
+        }
+        body.print-mode .table-of-contents {
+            display: block;
+            page-break-after: always;
+            padding: 40px;
+        }
+        .table-of-contents h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .toc-entry {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .toc-entry.level-1 {
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .toc-entry.level-2 {
+            padding-left: 20px;
+        }
+        .toc-entry.level-3 {
+            padding-left: 40px;
+            font-size: 0.95em;
+        }
+        .toc-entry .toc-title {
+            flex: 1;
+        }
+        .toc-entry .toc-dots {
+            flex: 0 0 auto;
+            margin: 0 10px;
+            border-bottom: 1px dotted #999;
+            height: 1em;
+            min-width: 20px;
+            flex-grow: 1;
+        }
+        .toc-entry .toc-page {
+            flex: 0 0 auto;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            .chapter {
+                page-break-inside: avoid;
+            }
+            h2, h3 {
+                page-break-after: avoid;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+            .anforderung-block {
+                page-break-inside: avoid;
+            }
+        }
+
+        .print-header {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            z-index: 1001;
+        }
+        body.print-mode .print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .print-header button {
+            background: white;
+            color: var(--primary-color);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        body.print-mode #report-container {
+            margin-top: 60px;
+        }
+        @media print {
+            .print-header {
+                display: none !important;
+            }
+            body.print-mode #report-container {
+                margin-top: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -280,9 +478,15 @@
             <h1>BSI Audit Report Editor</h1>
             <div id="controls">
                 <input type="file" id="json-file-input" accept=".json">
+                <button id="print-view-button" disabled>Print View</button>
                 <button id="export-json-button" disabled>Export to JSON</button>
             </div>
         </header>
+
+        <div class="print-header">
+            <span>BSI Audit Report - Print View</span>
+            <button id="exit-print-button">Exit Print View</button>
+        </div>
 
         <div class="container">
             <div id="report-container">
@@ -295,6 +499,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             const fileInput = document.getElementById('json-file-input');
             const exportButton = document.getElementById('export-json-button');
+            const printViewButton = document.getElementById('print-view-button');
+            const exitPrintButton = document.getElementById('exit-print-button');
             const reportContainer = document.getElementById('report-container');
             const navList = document.getElementById('nav-list');
             const navSearch = document.getElementById('nav-search');
@@ -305,6 +511,8 @@
 
             fileInput.addEventListener('change', handleFileSelect);
             exportButton.addEventListener('click', handleExport);
+            printViewButton.addEventListener('click', enterPrintView);
+            exitPrintButton.addEventListener('click', exitPrintView);
             navSearch.addEventListener('keyup', filterNav);
             
             reportContainer.addEventListener('click', (event) => {
@@ -337,11 +545,119 @@
                         renderReport(reportData);
                         createSidebarNav(reportData);
                         exportButton.disabled = false;
+                        printViewButton.disabled = false;
                     } catch (error) {
                         alert('Error parsing JSON file: ' + error.message);
                     }
                 };
                 reader.readAsText(file);
+            }
+
+            function enterPrintView() {
+                syncUiToData();
+                document.body.classList.add('print-mode');
+                
+                // Create cover page and TOC
+                const coverPage = createCoverPage();
+                const toc = createTableOfContents();
+                
+                // Re-render report for print
+                renderReport(reportData, true);
+                
+                // Insert cover and TOC at beginning
+                reportContainer.insertBefore(toc, reportContainer.firstChild);
+                reportContainer.insertBefore(coverPage, reportContainer.firstChild);
+                
+                // Expand all textareas
+                setTimeout(() => {
+                    const textareas = reportContainer.querySelectorAll('textarea');
+                    textareas.forEach(textarea => {
+                        textarea.style.height = 'auto';
+                        textarea.style.height = textarea.scrollHeight + 'px';
+                    });
+                }, 100);
+            }
+
+            function exitPrintView() {
+                document.body.classList.remove('print-mode');
+                
+                // Remove cover and TOC
+                const coverPage = reportContainer.querySelector('.cover-page');
+                const toc = reportContainer.querySelector('.table-of-contents');
+                if (coverPage) coverPage.remove();
+                if (toc) toc.remove();
+                
+                // Re-render normal view
+                renderReport(reportData, false);
+            }
+
+            function createCoverPage() {
+                const cover = document.createElement('div');
+                cover.className = 'cover-page';
+                
+                const report = reportData?.bsiAuditReport || {};
+                const auditType = report.allgemeines?.audittyp?.content || 'Audit';
+                const institution = report.allgemeines?.auditierteInstitution?.kontaktinformationenAntragsteller?.table?.rows?.[0]?.Institution || 'N/A';
+                const kurzbezeichnung = report.allgemeines?.informationsverbund?.content?.[0]?.text || 'N/A';
+                const today = new Date().toLocaleDateString('de-DE');
+                
+                cover.innerHTML = `
+                    <h1>Auditbericht im Rahmen der Zertifizierung nach ISO 27001 auf der Basis von IT-Grundschutz</h1>
+                    <div class="metadata">
+                        <div><strong>Audittyp:</strong> ${auditType}</div>
+                        <div><strong>Institution:</strong> ${institution}</div>
+                        <div><strong>Informationsverbund:</strong> ${kurzbezeichnung}</div>
+                        <div><strong>Datum:</strong> ${today}</div>
+                    </div>
+                `;
+                
+                return cover;
+            }
+
+            function createTableOfContents() {
+                const toc = document.createElement('div');
+                toc.className = 'table-of-contents';
+                toc.innerHTML = '<h2>Inhaltsverzeichnis</h2>';
+                
+                const tocList = document.createElement('div');
+                tocList.className = 'toc-list';
+                
+                const report = reportData?.bsiAuditReport || {};
+                let pageNum = 3; // Start after cover and TOC
+                
+                function addTocEntry(title, level) {
+                    const entry = document.createElement('div');
+                    entry.className = `toc-entry level-${level}`;
+                    entry.innerHTML = `
+                        <span class="toc-title">${title}</span>
+                        <span class="toc-dots"></span>
+                        <span class="toc-page">${pageNum++}</span>
+                    `;
+                    tocList.appendChild(entry);
+                }
+                
+                function processTocLevel(obj, level = 1) {
+                    Object.keys(obj).forEach(key => {
+                        const item = obj[key];
+                        if (typeof item === 'object' && item !== null && item.title) {
+                            const number = item.chapterNumber || item.subchapterNumber || '';
+                            addTocEntry(`${number} ${item.title}`, level);
+                            
+                            // Process sub-items
+                            Object.keys(item).forEach(subKey => {
+                                const subItem = item[subKey];
+                                if (typeof subItem === 'object' && subItem !== null && subItem.title && 
+                                    !['title', 'chapterNumber', 'subchapterNumber', 'description'].includes(subKey)) {
+                                    processTocLevel({ [subKey]: subItem }, level + 1);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                processTocLevel(report);
+                toc.appendChild(tocList);
+                return toc;
             }
             
             function syncUiToData() {
@@ -434,9 +750,19 @@
             }
 
 
-            function renderReport(data) {
+            function renderReport(data, isPrintMode = false) {
                 const currentScroll = window.scrollY;
+                
+                // Skip cover and TOC if they exist (in print mode)
+                let existingCover = reportContainer.querySelector('.cover-page');
+                let existingToc = reportContainer.querySelector('.table-of-contents');
+                
                 reportContainer.innerHTML = ''; 
+                
+                // Re-add cover and TOC if in print mode
+                if (isPrintMode && existingCover) reportContainer.appendChild(existingCover);
+                if (isPrintMode && existingToc) reportContainer.appendChild(existingToc);
+                
                 const report = data.bsiAuditReport;
                 if (!report) return;
 
@@ -480,464 +806,4 @@
                 const sectionDiv = document.createElement('div');
                 sectionDiv.className = 'subchapter';
                 
-                const navId = `nav-${path.replace(/[.\[\]]/g, '-')}`;
-                if (sectionData.title) sectionDiv.innerHTML += `<h3 id="${navId}">${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
-                if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
-                
-                const handledKeys = ['title', 'description', 'subchapterNumber'];
-                
-                // Handle content which can be an array of items, or a single string
-                if (Array.isArray(sectionData.content)) {
-                    sectionData.content.forEach((item, index) => {
-                        const itemPath = `${path}.content[${index}]`;
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'content-item';
-                        if (item.type === 'question') {
-                            itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
-                        } else if (item.type === 'finding') {
-                            itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
-                        } else if (item.type === 'prose') {
-                            itemDiv.appendChild(createTextArea(item.label, item.text, `${itemPath}.text`));
-                        }
-                        sectionDiv.appendChild(itemDiv);
-                    });
-                    handledKeys.push('content');
-                } else if (typeof sectionData.content === 'string') {
-                    sectionDiv.appendChild(createReadOnlyField(sectionData.title, sectionData.content));
-                    handledKeys.push('content');
-                }
-                
-                if (sectionData.table) {
-                    sectionDiv.appendChild(renderTable(sectionData.table, `${path}.table`));
-                    handledKeys.push('table');
-                }
-                
-                if (Array.isArray(sectionData.bausteinPruefungen)) {
-                    sectionDiv.appendChild(renderBausteinPruefung(sectionData.bausteinPruefungen, `${path}.bausteinPruefungen`));
-                    handledKeys.push('bausteinPruefungen');
-                } else if (Array.isArray(sectionData.massnahmenPruefungen)) {
-                    sectionDiv.appendChild(renderMassnahmenPruefung(sectionData.massnahmenPruefungen, `${path}.massnahmenPruefungen`));
-                    handledKeys.push('massnahmenPruefungen');
-                }
-
-                for (const subKey in sectionData) {
-                    if (handledKeys.includes(subKey)) continue;
-
-                    if (typeof sectionData[subKey] === 'object' && sectionData[subKey] !== null) {
-                        sectionDiv.appendChild(renderSection(subKey, sectionData[subKey], `${path}.${subKey}`));
-                    }
-                }
-                return sectionDiv;
-            }
-
-            function createInputField(label, value, type, path) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'content-item';
-                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
-                const input = document.createElement('input');
-                input.type = type || 'text';
-                input.value = value || '';
-                input.id = path;
-                input.dataset.path = path;
-                wrapper.appendChild(input);
-                return wrapper;
-            }
-
-            function createReadOnlyField(label, value) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'content-item';
-                if (label) wrapper.innerHTML = `<label>${label}</label>`;
-                const div = document.createElement('div');
-                div.className = 'read-only-field';
-                div.textContent = value || 'N/A';
-                wrapper.appendChild(div);
-                return wrapper;
-            }
-
-            function createSelect(label, value, path) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'content-item';
-                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
-                const select = document.createElement('select');
-                select.innerHTML = `<option value="true" ${value === true ? 'selected' : ''}>Ja</option><option value="false" ${value === false ? 'selected' : ''}>Nein</option><option value="" ${value === null || value === undefined ? 'selected' : ''}>N/A</option>`;
-                select.id = path;
-                select.dataset.path = path;
-                wrapper.appendChild(select);
-                return wrapper;
-            }
-
-            function createTextArea(label, value, path, isFindingSource = false, context = {}) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'content-item';
-                if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
-                const textarea = document.createElement('textarea');
-                textarea.id = path;
-                textarea.dataset.path = path;
-                textarea.value = value || '';
-                if (isFindingSource) {
-                    textarea.dataset.findingSource = "true";
-                    for (const key in context) {
-                        textarea.dataset[key] = context[key];
-                    }
-                }
-                wrapper.appendChild(textarea);
-                return wrapper;
-            }
-
-            function renderTable(tableData, path) {
-                 const editableTablePaths = [
-                    'allgemeines.versionshistorie', 'allgemeines.auditierteInstitution',
-                    'allgemeines.auditteam.auditteamleiter', 'allgemeines.auditteam.auditor',
-                    'allgemeines.auditteam.fachexperte', 'allgemeines.auditteam.berater',
-                    'allgemeines.absprachen', 'allgemeines.formaleGrundlagen',
-                    'anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen',
-                    'anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen',
-                    'anhang.abweichungenUndEmpfehlungen.empfehlungen'
-                ];
-                const isEditable = editableTablePaths.some(p => path.includes(p));
-
-                const tableContainer = document.createElement('div');
-                if (!tableData || !Array.isArray(tableData.headers)) {
-                    tableContainer.textContent = `Info: No table data to render for ${path}.`;
-                    return tableContainer;
-                }
-                const table = document.createElement('table');
-                const thead = table.createTHead();
-                const tbody = table.createTBody();
-                const tfoot = table.createTFoot();
-                const headerRow = thead.insertRow();
-                tableData.headers.forEach(headerText => {
-                    const th = document.createElement('th');
-                    th.textContent = headerText;
-                    headerRow.appendChild(th);
-                });
-                if (isEditable) {
-                    headerRow.insertCell().className = 'action-cell';
-                }
-                if (Array.isArray(tableData.rows)) {
-                    tableData.rows.forEach((rowData, rowIndex) => {
-                        const row = tbody.insertRow();
-                        const rowPath = `${path}.rows[${rowIndex}]`;
-                        tableData.headers.forEach(header => {
-                            const cell = row.insertCell();
-                            const cellPath = `${rowPath}.${header}`;
-                            const input = document.createElement('textarea');
-                            input.dataset.path = cellPath;
-                            input.value = getValueByPath(reportData, cellPath) || '';
-                            cell.appendChild(input);
-                        });
-                        if (isEditable) {
-                            const actionCell = row.insertCell();
-                            actionCell.className = 'action-cell';
-                            const deleteBtn = document.createElement('button');
-                            deleteBtn.textContent = 'Delete';
-                            deleteBtn.className = 'delete-row-btn';
-                            deleteBtn.dataset.path = `${path}.rows`;
-                            deleteBtn.dataset.rowIndex = rowIndex;
-                            actionCell.appendChild(deleteBtn);
-                        }
-                    });
-                }
-                if (isEditable) {
-                    const footerRow = tfoot.insertRow();
-                    const addCell = footerRow.insertCell();
-                    addCell.colSpan = tableData.headers.length + (isEditable ? 1 : 0);
-                    const addBtn = document.createElement('button');
-                    addBtn.textContent = '+ Add Row';
-                    addBtn.className = 'add-row-btn';
-                    addBtn.dataset.path = `${path}.rows`;
-                    addBtn.dataset.headers = JSON.stringify(tableData.headers);
-                    addCell.appendChild(addBtn);
-                }
-                tableContainer.appendChild(table);
-                return tableContainer;
-            }
-            
-            function renderGesamtvotum(data, path) {
-                const container = document.createElement('div');
-                container.appendChild(createTextArea('Gesamteinschätzung und Begründung des Auditteamleiters:', data.gesamteinschaetzung, `${path}.gesamteinschaetzung`));
-                
-                // FIX: Ensure votum object exists before accessing its properties
-                const votum = data.votum && typeof data.votum === 'object' ? data.votum : { entspricht: null, datum: '', unterschrift: 'Unterschrift des Auditteamleiters' };
-
-                const votumWrapper = document.createElement('div');
-                votumWrapper.className = 'content-item';
-                const selectLabel = document.createElement('label');
-                selectLabel.textContent = 'Votum:';
-                votumWrapper.appendChild(selectLabel);
-                
-                const votumTextStart = document.createElement('span');
-                votumTextStart.textContent = 'Aufgrund der durchgeführten Einzelprüfungen im Rahmen des IT-Grundschutz-Audits wird festgestellt, dass der Untersuchungsgegenstand die Anforderungen einer ISO 27001-Zertifizierung auf der Basis von IT-Grundschutz ';
-                votumWrapper.appendChild(votumTextStart);
-
-                const select = document.createElement('select');
-                select.dataset.path = `${path}.votum.entspricht`;
-                select.innerHTML = `
-                    <option value="true" ${votum.entspricht === true ? 'selected' : ''}>erfüllt</option>
-                    <option value="false" ${votum.entspricht === false ? 'selected' : ''}>nicht erfüllt</option>
-                    <option value="" ${votum.entspricht === null || votum.entspricht === undefined ? 'selected' : ''}>[Bitte wählen]</option>
-                `;
-                votumWrapper.appendChild(select);
-                
-                container.appendChild(votumWrapper);
-                
-                const dateInput = createInputField('Datum', votum.datum, 'date', `${path}.votum.datum`);
-                container.appendChild(dateInput);
-
-                const signatureDiv = document.createElement('div');
-                signatureDiv.className = 'content-item';
-                signatureDiv.innerHTML = `<br><br><hr style="width: 250px; margin-left: 0;">
-                <p style="margin-top: 5px;">${votum.unterschrift || 'Unterschrift des Auditteamleiters'}</p>`;
-                container.appendChild(signatureDiv);
-
-                return container;
-            }
-
-            function renderBausteinPruefung(pruefungen, path) {
-                const container = document.createElement('div');
-                if (Array.isArray(pruefungen)) {
-                    pruefungen.forEach((pruefung, pIndex) => {
-                        const pPath = `${path}[${pIndex}]`;
-                        const fieldset = document.createElement('fieldset');
-                        fieldset.className = 'baustein-pruefung';
-                        
-                        const legend = document.createElement('legend');
-                        legend.textContent = `Prüfung für Baustein: ${pruefung.baustein || 'N/A'}`;
-                        fieldset.appendChild(legend);
-
-                        fieldset.appendChild(createInputField('bezogen auf Zielobjekt', pruefung.bezogenAufZielobjekt, 'text', `${pPath}.bezogenAufZielobjekt`));
-                        fieldset.appendChild(createInputField('Auditiert am', pruefung.auditiertAm, 'text', `${pPath}.auditiertAm`));
-                        fieldset.appendChild(createInputField('Auditor(en)', pruefung.auditor, 'text', `${pPath}.auditor`));
-                        fieldset.appendChild(createInputField('Befragt wurde', pruefung.befragtWurde, 'text', `${pPath}.befragtWurde`));
-                        
-                        if (Array.isArray(pruefung.anforderungen)) {
-                            pruefung.anforderungen.forEach((anf, aIndex) => {
-                                const aPath = `${pPath}.anforderungen[${aIndex}]`;
-                                const anfBlock = document.createElement('div');
-                                anfBlock.className = 'anforderung-block';
-
-                                anfBlock.appendChild(createReadOnlyField('Nummer', anf.nummer));
-                                anfBlock.appendChild(createReadOnlyField('Anforderung', anf.anforderung));
-                                anfBlock.appendChild(createReadOnlyField('Bewertung der Anforderung', anf.bewertung));
-                                anfBlock.appendChild(createReadOnlyField('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
-
-                                const pmGroup = document.createElement('div');
-                                pmGroup.className = 'pruefmethode-group';
-                                pmGroup.innerHTML = '<label>Prüfmethode:</label>';
-                                const pruefmethoden = anf.pruefmethode || {};
-                                ['D', 'I', 'C', 'S', 'A', 'B'].forEach(method => {
-                                    const checkWrapper = document.createElement('div');
-                                    checkWrapper.className = 'form-check-inline';
-                                    const checkbox = document.createElement('input');
-                                    checkbox.type = 'checkbox';
-                                    checkbox.className = 'form-check-input';
-                                    checkbox.checked = !!pruefmethoden[method];
-                                    checkbox.dataset.path = `${aPath}.pruefmethode.${method}`;
-                                    const checkLabel = document.createElement('label');
-                                    checkLabel.className = 'form-check-label';
-                                    checkLabel.textContent = method;
-                                    checkWrapper.appendChild(checkbox);
-                                    checkWrapper.appendChild(checkLabel);
-                                    pmGroup.appendChild(checkWrapper);
-                                });
-                                anfBlock.appendChild(pmGroup);
-
-                                anfBlock.appendChild(createTextArea('Auditfeststellung im Detail mit Nachweisen', anf.auditfeststellung, `${aPath}.auditfeststellung`));
-                                anfBlock.appendChild(createTextArea(
-                                    'Es wurden folgende Abweichungen und Empfehlungen identifiziert', 
-                                    anf.abweichungen, 
-                                    `${aPath}.abweichungen`,
-                                    true,
-                                    { baustein: pruefung.baustein, anforderungId: anf.nummer }
-                                ));
-                                
-                                fieldset.appendChild(anfBlock);
-                            });
-                        }
-                        container.appendChild(fieldset);
-                    });
-                }
-                return container;
-            }
-
-            function renderMassnahmenPruefung(pruefungen, path) {
-                const container = document.createElement('div');
-                if (Array.isArray(pruefungen)) {
-                    pruefungen.forEach((massnahme, index) => {
-                        const mPath = `${path}[${index}]`;
-                        const mBlock = document.createElement('div');
-                        mBlock.className = 'anforderung-block';
-
-                        mBlock.appendChild(createReadOnlyField('Maßnahme', massnahme.massnahme));
-                        mBlock.appendChild(createReadOnlyField('Zielobjekt', massnahme.zielobjekt));
-                        
-                        mBlock.appendChild(createInputField('Bewertung', massnahme.bewertung, 'text', `${mPath}.bewertung`));
-
-                        const pmGroup = document.createElement('div');
-                        pmGroup.className = 'pruefmethode-group';
-                        pmGroup.innerHTML = '<label>Prüfmethode:</label>';
-                        const pruefmethoden = massnahme.pruefmethode || {};
-                        ['D', 'I', 'C', 'S', 'A', 'B'].forEach(method => {
-                            const checkWrapper = document.createElement('div');
-                            checkWrapper.className = 'form-check-inline';
-                            const checkbox = document.createElement('input');
-                            checkbox.type = 'checkbox';
-                            checkbox.className = 'form-check-input';
-                            checkbox.checked = !!pruefmethoden[method];
-                            checkbox.dataset.path = `${mPath}.pruefmethode.${method}`;
-                            const checkLabel = document.createElement('label');
-                            checkLabel.className = 'form-check-label';
-                            checkLabel.textContent = method;
-                            checkWrapper.appendChild(checkbox);
-                            checkWrapper.appendChild(checkLabel);
-                            pmGroup.appendChild(checkWrapper);
-                        });
-                        mBlock.appendChild(pmGroup);
-
-                        mBlock.appendChild(createTextArea('Auditfeststellung im Detail', massnahme.auditfeststellung, `${mPath}.auditfeststellung`));
-                        mBlock.appendChild(createTextArea('Abweichungen und Empfehlungen', massnahme.abweichungen, `${mPath}.abweichungen`, true, { anforderungId: massnahme.massnahme, baustein: 'Risikoanalyse' }));
-                        
-                        container.appendChild(mBlock);
-                    });
-                }
-                return container;
-            }
-
-
-            function handleAddRow(button) {
-                syncUiToData();
-                const path = button.dataset.path;
-                const headers = JSON.parse(button.dataset.headers);
-                const newRow = {};
-                headers.forEach(header => { newRow[header] = ''; });
-
-                const tableRows = getValueByPath(reportData, path);
-                if (Array.isArray(tableRows)) {
-                    tableRows.push(newRow);
-                    renderReport(reportData);
-                }
-            }
-
-            function handleDeleteRow(button) {
-                syncUiToData();
-                const path = button.dataset.path;
-                const rowIndex = parseInt(button.dataset.rowIndex, 10);
-
-                const tableRows = getValueByPath(reportData, path);
-                if (Array.isArray(tableRows) && !isNaN(rowIndex)) {
-                    tableRows.splice(rowIndex, 1);
-                    renderReport(reportData);
-                }
-            }
-
-            function handleFindingInput(textarea) {
-                const findingText = textarea.value.trim();
-                if (!findingText) return;
-
-                const context = textarea.dataset;
-                let category = prompt("Bitte geben Sie die Kategorie für diese Feststellung ein (AG, AS, E):")?.toUpperCase();
-                
-                const validCategories = ['AG', 'AS', 'E'];
-                if (!category || !validCategories.includes(category)) {
-                    alert("Ungültige Kategorie. Bitte geben Sie AG, AS oder E ein.");
-                    return;
-                }
-                
-                let targetArray, idPrefix, descriptionKey;
-
-                if (category === 'AG') {
-                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen.table.rows');
-                    idPrefix = 'AG';
-                    descriptionKey = "Beschreibung der Abweichung";
-                } else if (category === 'AS') {
-                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen.table.rows');
-                    idPrefix = 'AS';
-                    descriptionKey = "Beschreibung der Abweichung";
-                } else { // 'E'
-                    targetArray = getValueByPath(reportData, 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen.empfehlungen.table.rows');
-                    idPrefix = 'E';
-                    descriptionKey = "Beschreibung der Empfehlung";
-                }
-                
-                if (Array.isArray(targetArray)) {
-                    const existingNumbers = targetArray.map(item => {
-                        const nr = item['Nummer'] || '';
-                        const match = nr.match(new RegExp(`^${idPrefix}-(\\d+)$`));
-                        return match ? parseInt(match[1], 10) : 0;
-                    });
-                    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-                    const nextIdNumber = maxNumber + 1;
-                    const newId = `${idPrefix}-${nextIdNumber}`;
-
-                    const newFinding = {
-                        "Nummer": newId,
-                        [descriptionKey]: `[${context.anforderungId}] ${findingText}`,
-                        "Quelle (Kapitel)": `5.x (${context.baustein})`,
-                        "Behebungsfrist": category !== 'E' ? "30 Tage nach Audit" : "N/A",
-                        "Status": category !== 'E' ? "Offen" : "Zur Umsetzung empfohlen"
-                    };
-
-                    targetArray.push(newFinding);
-                    textarea.value = '';
-                    setValueByPath(reportData, textarea.dataset.path, '');
-                    alert(`Feststellung '${newId}' wurde zur Tabelle '${category}' im Anhang hinzugefügt.`);
-                    renderReport(reportData);
-                    setTimeout(() => {
-                        const anchor = document.getElementById('nav-bsiAuditReport-anhang');
-                        if (anchor) {
-                            const targetElement = document.getElementById(anchor.href.split('#')[1]);
-                            if(targetElement) targetElement.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    }, 100); 
-                }
-            }
-
-            function handleExport() {
-                syncUiToData();
-                if (!reportData) {
-                    alert("No data loaded to export.");
-                    return;
-                }
-                const updatedData = JSON.parse(JSON.stringify(reportData)); 
-                downloadObjectAsJson(updatedData, 'edited_report.json');
-            }
-            
-            function getValueByPath(obj, path) {
-                const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
-                let current = obj;
-                for (let i = 0; i < keys.length; i++) {
-                    if (current === undefined || current === null) return undefined;
-                    current = current[keys[i]];
-                }
-                return current;
-            }
-
-            function setValueByPath(obj, path, value) {
-                const keys = path.replace(/\[(\d+)\]/g, '.$1').split('.');
-                let current = obj;
-                for (let i = 0; i < keys.length - 1; i++) {
-                     const key = keys[i];
-                    if (current[key] === undefined || typeof current[key] !== 'object' || current[key] === null) {
-                        const nextKey = keys[i+1];
-                        current[key] = /^\d+$/.test(nextKey) ? [] : {};
-                    }
-                    current = current[key];
-                }
-                if(current && (typeof current === 'object' || Array.isArray(current))) {
-                    current[keys[keys.length - 1]] = value;
-                }
-            }
-
-            function downloadObjectAsJson(exportObj, exportName) {
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
-                const downloadAnchorNode = document.createElement('a');
-                downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", exportName);
-                document.body.appendChild(downloadAnchorNode);
-                downloadAnchorNode.click();
-                downloadAnchorNode.remove();
-            }
-        });
-    </script>
-</body>
-</html>
+                const navId = `nav-${path.replace(/[.\[\]]/g, '-')}
