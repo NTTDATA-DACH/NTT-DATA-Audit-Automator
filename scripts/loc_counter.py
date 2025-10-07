@@ -32,6 +32,7 @@ def analyze_loc():
     loc_by_extension = defaultdict(int)
     total_loc = 0
 
+    max_lines = 1000  # Threshold for skipping large files
     for file_path in all_files:
         if file_path.endswith(excluded_file_suffix):
             print(f"--> Excluding file: {file_path}")
@@ -41,6 +42,11 @@ def analyze_loc():
             # Use 'ignore' to handle potential binary files gracefully
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 line_count = sum(1 for _ in f)
+
+            if line_count > max_lines:
+                print(f"--> Skipping file (>{max_lines} lines): {file_path}")
+                continue
+
 
             _, extension = os.path.splitext(file_path)
             category = extension if extension else '.no_extension'

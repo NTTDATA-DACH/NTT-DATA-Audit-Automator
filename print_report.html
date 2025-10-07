@@ -355,6 +355,32 @@
                 if(chapterData.title) chapterDiv.innerHTML += `<h2 id="${navId}">${chapterData.chapterNumber || ''} ${chapterData.title}</h2>`;
                 if(chapterData.description) chapterDiv.innerHTML += `<p class="description">${chapterData.description}</p>`;
 
+                // --- FIX: Add special handlers for "flat" chapters ---
+                if (key === 'voraudit') {
+                    if (Array.isArray(chapterData.content)) {
+                        chapterData.content.forEach((item) => {
+                            const itemDiv = document.createElement('div');
+                            itemDiv.className = 'content-item';
+                            if (item.type === 'question') {
+                                let answerText = 'N/A';
+                                if (item.answer === true) answerText = 'Ja';
+                                if (item.answer === false) answerText = 'Nein';
+                                itemDiv.appendChild(createStaticDisplay(item.questionText, answerText));
+                            } else if (item.type === 'prose') {
+                                itemDiv.appendChild(createStaticDisplay(item.label, item.text || item.findingText));
+                            }
+                            chapterDiv.appendChild(itemDiv);
+                        });
+                    }
+                    return chapterDiv; // Finished with this special chapter
+                }
+
+                if (key === 'gesamtvotum') {
+                    chapterDiv.appendChild(renderStaticGesamtvotum(chapterData));
+                    return chapterDiv; // Finished with this special chapter
+                }
+                // --- END FIX ---
+
                 for (const subKey in chapterData) {
                     if (typeof chapterData[subKey] === 'object' && chapterData[subKey] !== null) {
                          chapterDiv.appendChild(renderSection(subKey, chapterData[subKey]));
@@ -405,12 +431,6 @@
                 } else if (Array.isArray(sectionData.massnahmenPruefungen)) {
                     // This can be expanded similarly if needed.
                     handledKeys.push('massnahmenPruefungen');
-                }
-
-                if (key === 'gesamtvotum' && sectionData.votum) {
-                    sectionDiv.appendChild(renderStaticGesamtvotum(sectionData));
-                    handledKeys.push('gesamtvotum');
-                    handledKeys.push('votum');
                 }
 
                 for (const subKey in sectionData) {

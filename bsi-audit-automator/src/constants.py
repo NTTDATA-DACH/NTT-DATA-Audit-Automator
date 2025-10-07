@@ -3,7 +3,7 @@ Centralized constants for file paths and output organization.
 This ensures consistency across all stages and reduces magic strings.
 """
 
-CHUNK_PROCESSING_MODEL =  "gemini-2.5-flash-lite-preview-06-17"
+CHUNK_PROCESSING_MODEL =  "gemini-2.5-flash-lite"
 GROUND_TRUTH_MODEL =  "gemini-2.5-pro"
 
 # Output organization structure:
