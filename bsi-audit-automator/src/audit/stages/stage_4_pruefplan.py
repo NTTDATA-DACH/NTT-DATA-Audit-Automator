@@ -9,6 +9,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.constants import GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
 class Chapter4Runner:
     """
@@ -17,16 +18,13 @@ class Chapter4Runner:
     and accurate audit plan.
     """
     STAGE_NAME = "Chapter-4"
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
-    GROUND_TRUTH_MAP_PATH = "output/results/intermediate/system_structure_map.json"
-
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
         self.subchapter_definitions = self._load_subchapter_definitions()
         self.ground_truth_map = None
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
@@ -38,10 +36,10 @@ class Chapter4Runner:
     def _load_ground_truth_map(self) -> None:
         """Loads the ground truth system structure map from GCS."""
         try:
-            self.ground_truth_map = self.gcs_client.read_json(self.GROUND_TRUTH_MAP_PATH)
+            self.ground_truth_map = self.gcs_client.read_json(GROUND_TRUTH_MAP_PATH)
             logging.info(f"Successfully loaded ground truth map for Chapter 4 planning.")
         except NotFound:
-            logging.warning(f"Ground truth map not found at '{self.GROUND_TRUTH_MAP_PATH}'. Audit plan will be less accurate.")
+            logging.warning(f"Ground truth map not found at '{GROUND_TRUTH_MAP_PATH}'. Audit plan will be less accurate.")
             self.ground_truth_map = {} # Ensure it's not None
         except Exception as e:
             logging.error(f"Failed to load or parse ground truth map: {e}", exc_info=True)

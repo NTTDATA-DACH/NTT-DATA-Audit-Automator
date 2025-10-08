@@ -9,11 +9,10 @@ from google.cloud.exceptions import NotFound
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
-from src.constants import DOCUMENT_CATEGORY_MAP_PATH
+from src.constants import DOCUMENT_CATEGORY_MAP_PATH, PROMPT_CONFIG_PATH
 
 DOC_MAP_PATH = DOCUMENT_CATEGORY_MAP_PATH
 MAX_FILES_TEST_MODE = 3
-PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
 
 class RagClient:

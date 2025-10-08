@@ -12,7 +12,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
-from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
+from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
 class Chapter3Runner:
     """
@@ -23,7 +23,6 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
     SUMMARY_DEPENDENCIES = {
         "ergebnisDerStrukturanalyse": [
             "definitionDesInformationsverbundes", "bereinigterNetzplan", "listeDerGeschaeftsprozesse",
@@ -46,7 +45,7 @@ class Chapter3Runner:
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
         self._ground_truth_map = None # Lazy loaded

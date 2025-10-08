@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
-from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL
+from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH
 
 from .cache_manager import CacheManager
 from .chunk_processor import ChunkProcessor
@@ -19,8 +19,6 @@ class AiRefiner:
     Orchestrates the AI refinement process for grouped blocks to extract structured security requirements.
     Delegates specific responsibilities to specialized components.
     """
-    
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
     def __init__(self, ai_client: AiClient, gcs_client: GcsClient):
         self.ai_client = ai_client
@@ -28,7 +26,7 @@ class AiRefiner:
         self.cache_manager = CacheManager(gcs_client)
         self.chunk_processor = ChunkProcessor()
         self.data_processor = DataProcessor()
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
 
     def _load_asset_json(self, path: str) -> dict:
         """Load JSON configuration from assets."""

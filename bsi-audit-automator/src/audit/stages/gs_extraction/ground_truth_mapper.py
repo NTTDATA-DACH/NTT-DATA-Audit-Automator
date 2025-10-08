@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.clients.gcs_client import GcsClient
-from src.constants import GROUND_TRUTH_MAP_PATH, GROUND_TRUTH_MODEL
+from src.constants import GROUND_TRUTH_MAP_PATH, GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH
 
 
 class GroundTruthMapper:
@@ -15,14 +15,12 @@ class GroundTruthMapper:
     Responsible for creating the authoritative system structure map by extracting
     Zielobjekte and Baustein-to-Zielobjekt mappings from customer documents.
     """
-    
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
     def __init__(self, ai_client: AiClient, rag_client: RagClient, gcs_client: GcsClient):
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.gcs_client = gcs_client
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
 
     def _load_asset_json(self, path: str) -> dict:
         """Load JSON configuration from assets."""

@@ -46,3 +46,8 @@ DOC_AI_CHUNK_RESULTS_PREFIX = f"{DOC_AI_BASE}/chunk_results/"
 # RAG Client paths  
 RAG_BASE = f"{INTERMEDIARY_BASE}/rag"
 DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
+
+# =============================================================================
+# ASSET PATHS
+# =============================================================================
+PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"

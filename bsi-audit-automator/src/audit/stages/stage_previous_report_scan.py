@@ -7,6 +7,7 @@ from typing import Dict, Any
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.constants import PROMPT_CONFIG_PATH
 
 class PreviousReportScanner:
     """
@@ -14,13 +15,12 @@ class PreviousReportScanner:
     It runs three extraction tasks in parallel for maximum efficiency.
     """
     STAGE_NAME = "Scan-Report"
-    PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
     def __init__(self, config: AppConfig, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(self.PROMPT_CONFIG_PATH)
+        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
     def _load_asset_json(self, path: str) -> dict:
