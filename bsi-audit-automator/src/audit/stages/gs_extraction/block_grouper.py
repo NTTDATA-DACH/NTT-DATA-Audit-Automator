@@ -88,7 +88,10 @@ class BlockGrouper:
     def _find_zielobjekt_markers(self, all_flattened_blocks: List[Dict[str, Any]], system_map: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Find Zielobjekt markers in the flattened blocks."""
         zielobjekte = system_map.get("zielobjekte", [])
-        kuerzel_list = [item['kuerzel'] for item in zielobjekte]
+        kuerzel_list = [item['name'] for item in zielobjekte if 'name' in item]
+        if "informationsverbund_name" in system_map:
+            kuerzel_list.append(system_map["informationsverbund_name"])
+
         remaining_kuerzel = kuerzel_list.copy()
         markers = []
         
