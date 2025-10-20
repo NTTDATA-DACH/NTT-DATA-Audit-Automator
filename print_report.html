@@ -429,7 +429,7 @@
                     sectionDiv.appendChild(renderStaticBausteinPruefung(sectionData.bausteinPruefungen));
                     handledKeys.push('bausteinPruefungen');
                 } else if (Array.isArray(sectionData.massnahmenPruefungen)) {
-                    // This can be expanded similarly if needed.
+                    sectionDiv.appendChild(renderStaticMassnahmenPruefung(sectionData.massnahmenPruefungen));
                     handledKeys.push('massnahmenPruefungen');
                 }
 
@@ -552,6 +552,37 @@
                                 fieldset.appendChild(anfBlock);
                             });
                         }
+                        container.appendChild(fieldset);
+                    });
+                }
+                return container;
+            }
+
+             function renderStaticMassnahmenPruefung(pruefungen) {
+                const container = document.createElement('div');
+                if (Array.isArray(pruefungen)) {
+                    pruefungen.forEach((pruefung) => {
+                        const fieldset = document.createElement('fieldset');
+                        fieldset.className = 'baustein-pruefung'; // Re-using style for visual grouping
+                        
+                        const legend = document.createElement('legend');
+                        legend.textContent = `Maßnahmenprüfung: ${pruefung.massnahme || 'Unbenannte Maßnahme'}`;
+                        fieldset.appendChild(legend);
+
+                        fieldset.appendChild(createStaticDisplay('Maßnahme', pruefung.massnahme));
+                        fieldset.appendChild(createStaticDisplay('Bezogen auf Zielobjekt', pruefung.zielobjekt));
+                        fieldset.appendChild(createStaticDisplay('Bewertung der Maßnahme', pruefung.bewertung));
+                        fieldset.appendChild(createStaticDisplay('Dokumentation des Antragstellers zur Umsetzung', pruefung.dokuAntragsteller));
+                        
+                        const pmGroup = document.createElement('div');
+                        pmGroup.className = 'pruefmethode-group';
+                        const pruefmethoden = pruefung.pruefmethode || {};
+                        const activeMethods = Object.keys(pruefmethoden).filter(k => pruefmethoden[k]).join(', ');
+                        pmGroup.innerHTML = `<strong>Prüfmethode:</strong> <div>${activeMethods || 'Keine'}</div>`;
+                        fieldset.appendChild(pmGroup);
+
+                        fieldset.appendChild(createStaticDisplay('Auditfeststellung im Detail', pruefung.auditfeststellung));
+
                         container.appendChild(fieldset);
                     });
                 }
