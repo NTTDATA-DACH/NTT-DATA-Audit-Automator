@@ -513,81 +513,201 @@
                 return container;
             }
 
-            function renderStaticBausteinPruefung(pruefungen) {
-                const container = document.createElement('div');
-                if (Array.isArray(pruefungen)) {
-                    pruefungen.forEach((pruefung) => {
-                        const fieldset = document.createElement('fieldset');
-                        fieldset.className = 'baustein-pruefung';
-                        
-                        const legend = document.createElement('legend');
-                        legend.textContent = `${pruefung.title || 'Unbenannte Prüfung'}`;
-                        fieldset.appendChild(legend);
+			function renderStaticBausteinPruefung(pruefungen) {
+				const container = document.createElement('div');
+				if (!Array.isArray(pruefungen) || pruefungen.length === 0) return container;
 
-                        fieldset.appendChild(createStaticDisplay('Bezogen auf Zielobjekt', pruefung.bezogenAufZielobjekt));
-                        fieldset.appendChild(createStaticDisplay('Auditiert am', pruefung.auditiertAm));
-                        fieldset.appendChild(createStaticDisplay('Auditor(en)', pruefung.auditor));
-                        fieldset.appendChild(createStaticDisplay('Befragt wurde', pruefung.befragtWurde));
-                        
-                        if (Array.isArray(pruefung.anforderungen)) {
-                            pruefung.anforderungen.forEach((anf) => {
-                                const anfBlock = document.createElement('div');
-                                anfBlock.className = 'anforderung-block';
+				// Constrain everything so pasting into Word fits letter page content width
+				// (≈ 6.5in / 165mm assuming 1in margins). Inline styles paste into Word.
+				container.style.maxWidth = '165mm';
+				container.style.boxSizing = 'border-box';
 
-                                anfBlock.appendChild(createStaticDisplay('Nummer', anf.nummer));
-                                anfBlock.appendChild(createStaticDisplay('Anforderung', anf.anforderung));
-                                anfBlock.appendChild(createStaticDisplay('Bewertung der Anforderung', anf.bewertung));
-                                anfBlock.appendChild(createStaticDisplay('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
+				const val = (v) => (v === 0 ? '0' : (v && String(v).trim()) ? String(v) : '—');
 
-                                const pmGroup = document.createElement('div');
-                                pmGroup.className = 'pruefmethode-group';
-                                const pruefmethoden = anf.pruefmethode || {};
-                                const activeMethods = Object.keys(pruefmethoden).filter(k => pruefmethoden[k]).join(', ');
-                                pmGroup.innerHTML = `<strong>Prüfmethode:</strong> <div>${activeMethods || 'Keine'}</div>`;
-                                anfBlock.appendChild(pmGroup);
+				// Generic two-column table WITHOUT header; Element | Wert
+				function buildKeyValueTable(pairs) {
+					const table = document.createElement('table');
+					table.style.width = '100%';
+					table.style.borderCollapse = 'collapse';
+					table.style.tableLayout = 'fixed';         // avoid overflow in Word
+					table.style.margin = '0 0 10px 0';
 
-                                anfBlock.appendChild(createStaticDisplay('Auditfeststellung im Detail mit Nachweisen', anf.auditfeststellung));
-                                anfBlock.appendChild(createStaticDisplay('Identifizierte Abweichungen und Empfehlungen', anf.abweichungen));
-                                
-                                fieldset.appendChild(anfBlock);
-                            });
-                        }
-                        container.appendChild(fieldset);
-                    });
-                }
-                return container;
-            }
+					pairs.forEach(([k, v]) => {
+						const row = table.insertRow();
 
-             function renderStaticMassnahmenPruefung(pruefungen) {
-                const container = document.createElement('div');
-                if (Array.isArray(pruefungen)) {
-                    pruefungen.forEach((pruefung) => {
-                        const fieldset = document.createElement('fieldset');
-                        fieldset.className = 'baustein-pruefung'; // Re-using style for visual grouping
-                        
-                        const legend = document.createElement('legend');
-                        legend.textContent = `Maßnahmenprüfung: ${pruefung.massnahme || 'Unbenannte Maßnahme'}`;
-                        fieldset.appendChild(legend);
+						const tdKey = row.insertCell();
+						tdKey.textContent = k;
+						tdKey.style.border = '1px solid #ccc';
+						tdKey.style.padding = '4px';
+						tdKey.style.fontWeight = 'bold';
+						tdKey.style.width = '28%';
+						tdKey.style.verticalAlign = 'top';
+						tdKey.style.wordBreak = 'break-word';
+						tdKey.style.overflowWrap = 'anywhere';
+						tdKey.style.hyphens = 'auto';
+						tdKey.style.whiteSpace = 'normal';
 
-                        fieldset.appendChild(createStaticDisplay('Maßnahme', pruefung.massnahme));
-                        fieldset.appendChild(createStaticDisplay('Bezogen auf Zielobjekt', pruefung.zielobjekt));
-                        fieldset.appendChild(createStaticDisplay('Bewertung der Maßnahme', pruefung.bewertung));
-                        fieldset.appendChild(createStaticDisplay('Dokumentation des Antragstellers zur Umsetzung', pruefung.dokuAntragsteller));
-                        
-                        const pmGroup = document.createElement('div');
-                        pmGroup.className = 'pruefmethode-group';
-                        const pruefmethoden = pruefung.pruefmethode || {};
-                        const activeMethods = Object.keys(pruefmethoden).filter(k => pruefmethoden[k]).join(', ');
-                        pmGroup.innerHTML = `<strong>Prüfmethode:</strong> <div>${activeMethods || 'Keine'}</div>`;
-                        fieldset.appendChild(pmGroup);
+						const tdVal = row.insertCell();
+						tdVal.textContent = val(v);
+						tdVal.style.border = '1px solid #ccc';
+						tdVal.style.padding = '4px';
+						tdVal.style.width = '72%';
+						tdVal.style.verticalAlign = 'top';
+						tdVal.style.wordBreak = 'break-word';
+						tdVal.style.overflowWrap = 'anywhere';
+						tdVal.style.hyphens = 'auto';
+						tdVal.style.whiteSpace = 'normal';
+					});
 
-                        fieldset.appendChild(createStaticDisplay('Auditfeststellung im Detail', pruefung.auditfeststellung));
+					return table;
+				}
 
-                        container.appendChild(fieldset);
-                    });
-                }
-                return container;
-            }
+				pruefungen.forEach((pruefung) => {
+					const section = document.createElement('div');
+					section.style.margin = '0 0 18px 0';
+
+					// ---- Baustein name as <h4> ----
+					const h4 = document.createElement('h4');
+					h4.textContent = val(pruefung.title);
+					h4.style.margin = '12px 0 6px';
+					section.appendChild(h4);
+
+					// ---- Meta (no header row) ----
+					const metaPairs = [
+						['Zielobjekt', pruefung.bezogenAufZielobjekt],
+						['Auditiert am', pruefung.auditiertAm],
+						['Auditor(en)', pruefung.auditor],
+						['Befragte(r)', pruefung.befragtWurde],
+					];
+					section.appendChild(buildKeyValueTable(metaPairs));
+
+					// ---- Anforderungen ----
+					const anforderungen = Array.isArray(pruefung.anforderungen) && pruefung.anforderungen.length
+						? pruefung.anforderungen
+						: [];
+
+					if (anforderungen.length === 0) {
+						const p = document.createElement('p');
+						p.textContent = 'Keine Anforderungen erfasst.';
+						section.appendChild(p);
+					} else {
+						anforderungen.forEach((anf) => {
+							// Anf.-Nr. as <h5>
+							const h5 = document.createElement('h5');
+							h5.textContent = `Anf.-Nr. ${val(anf?.nummer)}`;
+							h5.style.margin = '12px 0 4px';
+							section.appendChild(h5);
+
+							// Prüfmethode flags as comma-separated list
+							let pm = '';
+							if (anf && anf.pruefmethode && typeof anf.pruefmethode === 'object') {
+								pm = Object.keys(anf.pruefmethode)
+									.filter(k => anf.pruefmethode[k])
+									.join(', ');
+							}
+
+							const anfPairs = [
+								['Anforderung', anf?.anforderung],
+								['Bewertung', anf?.bewertung],
+								['Dokumentation Antragsteller', anf?.dokuAntragsteller],
+								['Prüfmethode', pm],
+								['Auditfeststellung', anf?.auditfeststellung],
+								['Abweichungen/Empfehlungen', anf?.abweichungen],
+							];
+							section.appendChild(buildKeyValueTable(anfPairs));
+						});
+					}
+
+					container.appendChild(section);
+				});
+
+				return container;
+			}
+
+			function renderStaticMassnahmenPruefung(pruefungen) {
+				const container = document.createElement('div');
+				// Match 5.5.2 paste-friendly width & wrapping
+				container.style.maxWidth = '165mm';
+				container.style.boxSizing = 'border-box';
+
+				const val = (v) => (v === 0 ? '0' : (v && String(v).trim()) ? String(v) : '—');
+
+				// Reuse the same Element|Wert table pattern (no header)
+				function buildKeyValueTable(pairs) {
+					const table = document.createElement('table');
+					table.style.width = '100%';
+					table.style.borderCollapse = 'collapse';
+					table.style.tableLayout = 'fixed';
+					table.style.margin = '0 0 10px 0';
+
+					pairs.forEach(([k, v]) => {
+						const row = table.insertRow();
+
+						const tdKey = row.insertCell();
+						tdKey.textContent = k;
+						tdKey.style.border = '1px solid #ccc';
+						tdKey.style.padding = '4px';
+						tdKey.style.fontWeight = 'bold';
+						tdKey.style.width = '28%';
+						tdKey.style.verticalAlign = 'top';
+						tdKey.style.wordBreak = 'break-word';
+						tdKey.style.overflowWrap = 'anywhere';
+						tdKey.style.hyphens = 'auto';
+						tdKey.style.whiteSpace = 'normal';
+
+						const tdVal = row.insertCell();
+						tdVal.textContent = val(v);
+						tdVal.style.border = '1px solid #ccc';
+						tdVal.style.padding = '4px';
+						tdVal.style.width = '72%';
+						tdVal.style.verticalAlign = 'top';
+						tdVal.style.wordBreak = 'break-word';
+						tdVal.style.overflowWrap = 'anywhere';
+						tdVal.style.hyphens = 'auto';
+						tdVal.style.whiteSpace = 'normal';
+					});
+
+					return table;
+				}
+
+				if (!Array.isArray(pruefungen) || pruefungen.length === 0) return container;
+
+				pruefungen.forEach((pruefung) => {
+					const section = document.createElement('div');
+					section.style.margin = '0 0 18px 0';
+
+					// === <h4>: Maßnahme (same level as Baustein name in 5.5.2) ===
+					const h4 = document.createElement('h4');
+					h4.textContent = val(pruefung.massnahme || 'Maßnahmenprüfung');
+					h4.style.margin = '12px 0 6px';
+					section.appendChild(h4);
+
+					// Collect Prüfmethode flags like in 5.5.2
+					let pm = '';
+					if (pruefung && pruefung.pruefmethode && typeof pruefung.pruefmethode === 'object') {
+						pm = Object.keys(pruefung.pruefmethode)
+							.filter(k => pruefung.pruefmethode[k])
+							.join(', ');
+					}
+
+					// === Meta/details as Element|Wert (no header row) ===
+					const pairs = [
+						['Zielobjekt', pruefung.zielobjekt],
+						['Bewertung', pruefung.bewertung],
+						['Dokumentation Antragsteller', pruefung.dokuAntragsteller],
+						['Prüfmethode', pm],
+						['Auditfeststellung', pruefung.auditfeststellung],
+					];
+					section.appendChild(buildKeyValueTable(pairs));
+
+					container.appendChild(section);
+				});
+
+				return container;
+			}
+
+
+			
         });
     </script>
 </body>
