@@ -12,10 +12,9 @@ from jsonschema import validate, ValidationError
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 
 from src.config import AppConfig
-from src.constants import GROUND_TRUTH_MODEL
+from src.constants import GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH
 
 MAX_RETRIES = 5
-PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
 
 class AiClient:
@@ -35,8 +34,10 @@ class AiClient:
         current_date = datetime.date.today().strftime("%Y-%m-%d")
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        # aiplatform.init(project=config.gcp_project_id, location=config.region)
-        aiplatform.init(project=config.gcp_project_id, location="global")
+        # Vertex AI location. "global" is intentional here for broad Gemini model
+        # availability; config.region still drives other GCP resources (GCS, Document AI).
+        vertex_location = "global"
+        aiplatform.init(project=config.gcp_project_id, location=vertex_location)
         
         # Default model instance
         self.generative_model = GenerativeModel(
@@ -48,7 +49,7 @@ class AiClient:
         
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
-        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' in region '{config.region}'.")
+        logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' (Vertex AI location '{vertex_location}').")
         logging.info(f"System Message Context includes today's date: {current_date}")
 
     def _get_model_instance(self, model_name: str) -> GenerativeModel:
@@ -205,7 +206,7 @@ class AiClient:
                     logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                     return response_json
 
-                except (api_core_exceptions.GoogleAPICallError, Exception) as e:
+                except (api_core_exceptions.GoogleAPICallError, ValueError, asyncio.TimeoutError) as e:
                     wait_time = 2 ** attempt
                     if attempt == retries - 1:
                         logging.critical(f"[{request_context_log}] AI generation failed after all {retries} retries.", exc_info=True)

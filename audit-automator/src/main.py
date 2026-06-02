@@ -3,7 +3,7 @@ import argparse
 import logging
 import asyncio
 
-from .config import config
+from .config import load_config_from_env
 from .logging_setup import setup_logging
 from .clients.gcs_client import GcsClient
 from .clients.rag_client import RagClient
@@ -15,6 +15,7 @@ async def main_async():
     """
     Asynchronous main function to handle all pipeline operations.
     """
+    config = load_config_from_env()
     setup_logging(config)
 
     parser = argparse.ArgumentParser(

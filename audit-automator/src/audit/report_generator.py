@@ -4,13 +4,11 @@ import json
 import asyncio
 from google.cloud.exceptions import NotFound
 from typing import Dict, Any, List
-from jsonschema import validate, ValidationError
-
 from datetime import datetime
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
-from src.constants import FINAL_REPORT_PATH, ALL_FINDINGS_PATH, STAGE_RESULTS_PATH
+from src.constants import ALL_FINDINGS_PATH, STAGE_RESULTS_PATH
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
@@ -20,17 +18,7 @@ class ReportGenerator:
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
         self.gcs_client = gcs_client
-        self.report_schema = self._load_report_schema()
         logging.info("Report Generator initialized.")
-    
-    def _load_report_schema(self) -> Dict[str, Any]:
-        """Loads the master template to use as a validation schema."""
-        try:
-            with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logging.error(f"FATAL: Could not load the master report schema from {self.LOCAL_MASTER_TEMPLATE_PATH}. Error: {e}")
-            raise
 
     def _set_value_by_path(self, report: Dict, path: str, value: Any):
         """
@@ -146,12 +134,15 @@ class ReportGenerator:
         # Populate the final aggregated findings last.
         self._populate_chapter_7_findings(report)
 
-        try:
-            validate(instance=report, schema=self.report_schema)
-            logging.info("Final report successfully validated against the master schema.")
-        except ValidationError as e:
-            logging.error(f"CRITICAL: Final report failed schema validation. Report will not be saved. Error: {e.message}")
+        # Basic structural sanity check. NOTE: the previous implementation passed the
+        # *data template* (master_report_template.json) to jsonschema.validate as if it
+        # were a schema; because the template's keys are not JSON-Schema keywords, that
+        # check was a silent no-op that accepted any input. Until a real report JSON
+        # Schema exists, do a cheap, honest structural check instead.
+        if not isinstance(report, dict) or "bsiAuditReport" not in report:
+            logging.error("CRITICAL: Assembled report is malformed (missing 'bsiAuditReport' root). Report will not be saved.")
             return
+        logging.info("Final report passed basic structural checks.")
 
         today = datetime.now()
         date_str = today.strftime("%y%m%d")

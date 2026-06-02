@@ -1,6 +1,8 @@
 # src/clients/gcs_client.py
 import logging
 import asyncio
+import json
+from typing import Any
 from google.cloud import storage
 from src.config import AppConfig
 
@@ -84,15 +86,14 @@ class GcsClient:
         blob.upload_from_string(content, content_type=content_type)
         logging.info(f"Upload complete for {destination_blob_name}.")
 
-    async def read_json_async(self, blob_name: str) -> dict:
+    async def read_json_async(self, blob_name: str) -> Any:
         """Asynchronously downloads and parses a JSON file from GCS."""
         loop = asyncio.get_running_loop()
         # Use asyncio.to_thread in Python 3.9+ for a cleaner syntax
         return await loop.run_in_executor(None, self.read_json, blob_name)
 
-    def read_json(self, blob_name: str) -> dict:
-        """Downloads and parses a JSON file from GCS."""
-        import json
+    def read_json(self, blob_name: str) -> Any:
+        """Downloads and parses a JSON file from GCS (may return a dict or a list)."""
         logging.info(f"Attempting to read JSON from: gs://{self.bucket.name}/{blob_name}")
         blob = self.bucket.blob(blob_name)
         content = blob.download_as_text() # This raises NotFound if not present.

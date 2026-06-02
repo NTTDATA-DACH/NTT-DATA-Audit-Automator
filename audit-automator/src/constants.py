@@ -2,9 +2,12 @@
 Centralized constants for file paths and output organization.
 This ensures consistency across all stages and reduces magic strings.
 """
+import os
 
-CHUNK_PROCESSING_MODEL =  "gemini-2.5-flash-lite"
-GROUND_TRUTH_MODEL =  "gemini-2.5-pro"
+# Model IDs are config-driven (env override) with current-generation defaults.
+# Gemini 3.1 is GA on Vertex AI as of 2026-06; the 2.5 series is a generation behind.
+CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", "gemini-3.1-flash-lite")
+GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro")
 
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation
