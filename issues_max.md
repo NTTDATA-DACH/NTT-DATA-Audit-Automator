@@ -8,25 +8,11 @@ comparison. Most findings were fixed on branch **`fix/max-findings`** (commit `5
 fake-success), MAX-3 (findings path split), MAX-4 (over-broad retry `except`), MAX-5 *model bump*
 (2.5→3.1, now env-driven), MAX-6 (region log), MAX-10 (import-time `exit`), MAX-11 (junk files),
 MAX-12 (dead DEBUG logging), MAX-13 (dup/dead constants), MAX-14 (`read_json` typing/import),
-MAX-15a (`int(blockId)` guard), MAX-16 (`envs.sh` docs), MAX-17 (models config-driven).
+MAX-15a (`int(blockId)` guard), MAX-16 (`envs.sh` docs), MAX-17 (models config-driven),
+MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `google-genai`).
 
 What remains below needs a real GCP environment, behavioral testing, or network access — so it was
 deliberately deferred rather than done blind.
-
----
-
-## 🟠 High
-
-### MAX-5b — Migrate off the deprecated Vertex generative-AI SDK
-**[ai_client.py](audit-automator/src/clients/ai_client.py)** · _from A#2_
-
-The client still uses `google.cloud.aiplatform` + `vertexai.generative_models`
-(`GenerativeModel`/`GenerationConfig`/`Part`), which Google deprecated (removal ~mid-2026). The
-model IDs were already bumped to Gemini 3.1, but the SDK itself is end-of-life.
-
-**Fix:** migrate to the `google-genai` SDK (`google.genai`, `client.models.generate_content`).
-This is a sizable rewrite of `ai_client` (model instantiation, `GenerationConfig`/`response_schema`,
-`Part.from_uri`, async calls) and must be validated against a live project, hence deferred.
 
 ---
 

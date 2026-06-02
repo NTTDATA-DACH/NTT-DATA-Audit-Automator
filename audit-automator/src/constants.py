@@ -5,9 +5,10 @@ This ensures consistency across all stages and reduces magic strings.
 import os
 
 # Model IDs are config-driven (env override) with current-generation defaults.
-# Gemini 3.1 is GA on Vertex AI as of 2026-06; the 2.5 series is a generation behind.
+# On Vertex AI (project gpp-agentic-3, 2026-06) gemini-3.1-flash-lite is GA, but the
+# 3.1 pro tier is only available as a "-preview" model; there is no stable gemini-3.1-pro.
 CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", "gemini-3.1-flash-lite")
-GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro")
+GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro-preview")
 
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation

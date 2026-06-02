@@ -1,6 +1,6 @@
 # GCP and Vertex AI
 google-cloud-storage
-google-cloud-aiplatform
+google-genai  # Current Vertex AI / Gemini SDK (replaces deprecated google-cloud-aiplatform)
 google-cloud-documentai
 
 # For local development, to load .env files
