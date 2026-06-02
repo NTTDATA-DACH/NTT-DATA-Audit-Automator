@@ -13,10 +13,16 @@ Scope: BSI Grundschutz audit-report pipeline on GCP (Vertex AI Gemini, Document 
 
 **Fix:** author a real JSON Schema for the report (separate from the template), or remove the `validate` step.
 
-### 2. Deprecated Vertex AI generative-AI SDK
-`ai_client.py:9-12` uses `google.cloud.aiplatform` + `vertexai.generative_models.GenerativeModel/GenerationConfig/Part`. Google deprecated the Vertex generative-AI modules of this SDK (deprecated mid-2025, removal ~mid-2026). As of today this is at/near end-of-life.
+### 2. Outdated Gemini models AND deprecated Vertex AI SDK
+Two distinct problems in the model layer:
 
-**Fix:** migrate to the `google-genai` SDK (`google.genai`, `client.models.generate_content`). Note: the Gemini model IDs themselves (`gemini-2.5-pro`, `gemini-2.5-flash-lite` in `constants.py:6-7`) are still current — the **SDK** is the breakage risk, not the models.
+**(a) Outdated model IDs.** `constants.py:6-7` pins `GROUND_TRUTH_MODEL = "gemini-2.5-pro"` and `CHUNK_PROCESSING_MODEL = "gemini-2.5-flash-lite"`. As of June 2026 these are **prior-generation** — still supported, but two generations behind the current lineup. The current flagships are **`gemini-3.1-pro`** (Pro / reasoning) and **`gemini-3.5-flash`** (Flash), with `gemini-3.1-flash-lite` as the lightweight tier. Recommended replacements: `gemini-2.5-pro → gemini-3.1-pro` for `GROUND_TRUTH_MODEL`; `gemini-2.5-flash-lite → gemini-3.1-flash-lite` (or `gemini-3.1-flash` if more capability is needed) for `CHUNK_PROCESSING_MODEL`. Avoid `gemini-3.5-flash` here — it is more expensive than `gemini-3.1-flash` and not warranted for chunk processing. Validate output quality/cost after switching, since the 3.x models reason differently. Also note `gemini-2.0-flash`/`flash-lite` were shut down on 2026-06-01, so staying current matters.
+
+**(b) Deprecated SDK.** `ai_client.py:9-12` uses `google.cloud.aiplatform` + `vertexai.generative_models.GenerativeModel/GenerationConfig/Part`. Google deprecated the Vertex generative-AI modules of this SDK (deprecated mid-2025, removal ~mid-2026); as of today it is at/near end-of-life.
+
+**Fix:** bump the model IDs in `constants.py` to the 3.x generation, and migrate the client to the `google-genai` SDK (`google.genai`, `client.models.generate_content`). The model-ID bump is the urgent, low-effort change; the SDK migration is larger.
+
+_Sources: [Vertex AI models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models), [model versions & lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)._
 
 ### 3. Findings / final-report paths are written and read via two different conventions
 `controller.py:170` writes `all_findings.json` to `f"{config.output_prefix}results/all_findings.json"`, but `controller.py:219` and `report_generator.py:241` **read** it from the constant `ALL_FINDINGS_PATH = "output/results/all_findings.json"`. Same split for the final report: saved as `f"{output_prefix}results/report_{date}.json"` (`report_generator.py:158`) while `FINAL_REPORT_PATH` is imported but unused. This only works because `OUTPUT_PREFIX` is hard-coded to `"output/"` in `envs.sh`. Any other prefix → findings silently lost and Chapter 7.2 empty.
