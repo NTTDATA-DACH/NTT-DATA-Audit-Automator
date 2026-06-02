@@ -73,6 +73,9 @@ class DocumentProcessor:
             )
             chunk_doc.close()
         
+        # Fail-fast (MAX-7): every chunk must upload — _process_pdf_chunks below reads
+        # chunk_0..chunk_N back, so a partial upload would silently drop pages. Abort
+        # on the first failure rather than continuing with an incomplete document.
         await asyncio.gather(*upload_tasks)
         pdf_doc.close()
         
@@ -88,6 +91,8 @@ class DocumentProcessor:
                 DOC_AI_CHUNK_RESULTS_PREFIX
             ) for i in range(chunk_count)
         ]
+        # Fail-fast (MAX-7): _merge_and_save_results reads every chunk_i.json; a missing
+        # chunk would corrupt the merged layout (lost pages/blocks). Abort on first failure.
         await asyncio.gather(*processing_tasks)
         logging.info(f"Processed {chunk_count} chunks with Document AI.")
 

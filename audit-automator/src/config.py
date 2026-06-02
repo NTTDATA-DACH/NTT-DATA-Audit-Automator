@@ -2,7 +2,11 @@
 import os
 from dataclasses import dataclass
 from typing import Optional
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:  # python-dotenv is only needed for local .env files; cloud sets env directly
+    def load_dotenv(*args, **kwargs):
+        return False
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -56,10 +60,6 @@ def load_config_from_env() -> AppConfig:
 
     return AppConfig(**config_values)
 
-# Create a singleton instance to be imported by other modules.
-# The try/except block ensures the application exits gracefully if config is invalid.
-try:
-    config = load_config_from_env()
-except ValueError as e:
-    print(e)
-    exit(1)
+# NOTE: configuration is built explicitly by the application entrypoint (src/main.py)
+# via load_config_from_env(). It is intentionally NOT constructed at import time, so the
+# package stays importable for tests and tooling without a full GCP environment present.

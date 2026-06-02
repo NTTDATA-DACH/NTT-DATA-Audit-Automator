@@ -16,7 +16,7 @@
 #      source ./envs.sh
 #
 #   Then, you can run the application like this:
-#      auditor --run-etl
+#      auditor --run-gs-check-extraction
 #      auditor --run-stage Chapter-1
 #
 set -e # Exit on error
@@ -67,5 +67,5 @@ echo "   - DOC_AI_PROC:    ${DOC_AI_PROCESSOR_NAME}"
 echo "   - AUDIT_TYPE:     ${AUDIT_TYPE}"
 echo "   - TEST mode:      ${TEST}"
 echo ""
-echo "👉 A new command 'bsi-auditor' is now available in your shell."
-echo "   Run the app with: bsi-auditor --run-stage Chapter-1"
+echo "👉 A new command 'auditor' is now available in your shell."
+echo "   Run the app with: auditor --run-stage Chapter-1"

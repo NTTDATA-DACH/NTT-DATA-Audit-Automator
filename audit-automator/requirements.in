@@ -1,0 +1,18 @@
+# Direct runtime dependencies (top-level, human-edited).
+# requirements.txt is the PINNED lock generated from this file. Regenerate with:
+#   docker run --rm -v "$PWD":/w -w /w python:3.11-slim-bookworm \
+#     bash -c "pip install -q pip-tools && pip-compile --no-emit-index-url requirements.in -o requirements.txt"
+# (3.11 matches the Dockerfile base image, so the lock resolves against the deploy target.)
+
+# GCP and Vertex AI
+google-cloud-storage
+# Current Vertex AI / Gemini SDK (replaces deprecated google-cloud-aiplatform).
+# Capped to <2: the MAX-5b migration was live-tested against the 1.x line; bumping
+# to 2.x is a deliberate, separately-validated change, not an automatic lock refresh.
+google-genai>=1.68,<2
+google-cloud-documentai
+
+# For local development, to load .env files
+python-dotenv
+jsonschema  # For validating AI model outputs
+PyMuPDF  # For PDF processing (provides 'fitz' module)

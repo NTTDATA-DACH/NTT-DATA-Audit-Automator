@@ -1,7 +1,6 @@
 # src/audit/stages/stage_4_pruefplan.py
 import logging
 import json
-import asyncio
 from typing import Dict, Any
 from google.cloud.exceptions import NotFound
 
@@ -9,6 +8,7 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.audit.async_utils import gather_resilient
 from src.constants import GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
 class Chapter4Runner:
@@ -135,7 +135,7 @@ class Chapter4Runner:
             return {}
 
         tasks = [self._process_single_subchapter(name, definition) for name, definition in self.subchapter_definitions.items()]
-        results_list = await asyncio.gather(*tasks)
+        results_list = await gather_resilient(*tasks, context="Chapter-4: subchapters")
 
         aggregated_results = {}
         for res_dict in results_list:

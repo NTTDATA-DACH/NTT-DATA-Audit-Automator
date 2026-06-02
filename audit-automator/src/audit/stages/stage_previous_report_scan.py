@@ -1,12 +1,12 @@
 # src/audit/stages/stage_previous_report_scan.py
 import logging
 import json
-import asyncio
 from typing import Dict, Any
 
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
+from src.audit.async_utils import gather_resilient
 from src.constants import PROMPT_CONFIG_PATH
 
 class PreviousReportScanner:
@@ -74,8 +74,8 @@ class PreviousReportScanner:
         # 2. Define and run all extraction tasks in parallel
         extraction_tasks = ["extract_chapter_1", "extract_chapter_4", "extract_chapter_7"]
         coroutines = [self._run_extraction_task(task_name, report_uri) for task_name in extraction_tasks]
-        
-        results_list = await asyncio.gather(*coroutines)
+
+        results_list = await gather_resilient(*coroutines, context="Scan-Report: extractions")
 
         # 3. Aggregate results into a single dictionary
         final_result = {}

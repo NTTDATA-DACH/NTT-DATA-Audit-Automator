@@ -2,9 +2,13 @@
 Centralized constants for file paths and output organization.
 This ensures consistency across all stages and reduces magic strings.
 """
+import os
 
-CHUNK_PROCESSING_MODEL =  "gemini-2.5-flash-lite"
-GROUND_TRUTH_MODEL =  "gemini-2.5-pro"
+# Model IDs are config-driven (env override) with current-generation defaults.
+# On Vertex AI (project gpp-agentic-3, 2026-06) gemini-3.1-flash-lite is GA, but the
+# 3.1 pro tier is only available as a "-preview" model; there is no stable gemini-3.1-pro.
+CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", "gemini-3.1-flash-lite")
+GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro-preview")
 
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation
@@ -51,3 +55,7 @@ DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
 # ASSET PATHS
 # =============================================================================
 PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
+
+# JSON Schema for the fully-assembled audit report (used by ReportGenerator to
+# validate the report before saving). Replaces the former no-op structural check.
+REPORT_SCHEMA_PATH = "assets/schemas/master_report_schema.json"

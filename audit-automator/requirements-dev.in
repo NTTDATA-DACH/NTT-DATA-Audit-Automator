@@ -1,0 +1,6 @@
+# Development / test dependencies (top-level, human-edited).
+# requirements-dev.txt is the PINNED lock generated from this file. Regenerate with:
+#   docker run --rm -v "$PWD":/w -w /w python:3.11-slim-bookworm \
+#     bash -c "pip install -q pip-tools && pip-compile --no-emit-index-url requirements-dev.in -o requirements-dev.txt"
+-r requirements.in
+pytest

@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: audit-automator
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # matches the Dockerfile base image and the pinned lock
+          cache: pip
+          cache-dependency-path: |
+            audit-automator/requirements.txt
+            audit-automator/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        # Full requirements are installed here (incl. PyMuPDF/google SDKs), so the
+        # importorskip-gated tests (block grouper, ai_client) run rather than skip.
+        run: python -m pytest -q

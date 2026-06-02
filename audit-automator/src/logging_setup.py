@@ -10,31 +10,21 @@ def setup_logging(config: AppConfig):
     Args:
         config: The application configuration object.
     """
-    # In test mode, we want detailed logs at INFO level.
-    # In production, we want high-level INFO, with details at DEBUG.
-    log_level = logging.INFO if config.is_test_mode else logging.DEBUG
-    
+    # The application logs through the root logger at INFO in both modes. A previous
+    # version set the root to DEBUG here and then immediately overrode it back to INFO,
+    # so the promised app-level DEBUG logs never emitted. That contradiction is removed.
     logging.basicConfig(
-        level=log_level,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         stream=sys.stdout,
     )
 
-    # In production, set the root logger to INFO to see high-level status,
-    # while our application-specific logs can be at the DEBUG level.
-    if not config.is_test_mode:
-        logging.getLogger().setLevel(logging.INFO)
+    # Suppress noisy third-party library logs for cleaner output.
+    logging.getLogger("google.auth").setLevel(logging.WARNING)
+    logging.getLogger("google.api_core").setLevel(logging.WARNING)
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+    # Suppress verbose JSON decoder stack traces.
+    logging.getLogger("json").setLevel(logging.WARNING if config.is_test_mode else logging.ERROR)
 
-        # Suppress noisy third-party library logs for cleaner production output
-        logging.getLogger("google.auth").setLevel(logging.WARNING)
-        logging.getLogger("google.api_core").setLevel(logging.WARNING)
-        logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
-        
-        # Suppress verbose JSON decoder stack traces
-        logging.getLogger("json").setLevel(logging.ERROR)
-        
-        logging.info("Production logging enabled. Set root to INFO, app logs to DEBUG, and suppressed noisy libs.")
-    else:
-        # In test mode, also suppress JSON decoder noise but keep other details
-        logging.getLogger("json").setLevel(logging.WARNING)
-        logging.info("Test mode logging enabled. All INFO logs will be visible.")
+    mode = "Test" if config.is_test_mode else "Production"
+    logging.info(f"{mode} logging enabled at INFO; noisy third-party libraries suppressed.")

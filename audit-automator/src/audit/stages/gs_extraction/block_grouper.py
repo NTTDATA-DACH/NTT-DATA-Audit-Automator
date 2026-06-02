@@ -1,7 +1,6 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/block_grouper.py
 import logging
 import json
-import sys
 from typing import Dict, Any, List
 from collections import defaultdict
 
@@ -41,15 +40,24 @@ class BlockGrouper:
         
         # Flatten all blocks for consistent processing
         all_flattened_blocks = self._flatten_all_blocks(all_blocks)
-        block_id_to_block_map = {int(b['blockId']): b for b in all_flattened_blocks}
+        block_id_to_block_map = {}
+        for b in all_flattened_blocks:
+            raw_id = b.get('blockId')
+            try:
+                block_id_to_block_map[int(raw_id)] = b
+            except (TypeError, ValueError):
+                logging.warning(f"Skipping block with non-numeric blockId: {raw_id!r}")
 
         # Find Zielobjekt markers in the document
         markers = self._find_zielobjekt_markers(all_flattened_blocks, system_map)
         
         if not markers:
-            # If no markers found, all blocks are ungrouped
+            # No markers is a recoverable, empty-result condition. Keep all blocks
+            # ungrouped and continue rather than killing the whole process (previously
+            # this called sys.exit(), which aborted the pipeline with success code 0).
             logging.warning("No Zielobjekt markers found in document. All blocks will be marked as ungrouped.")
-            sys.exit()
+            for bid in sorted(block_id_to_block_map.keys()):
+                grouped_blocks["_UNGROUPED_"].append(block_id_to_block_map[bid])
         else:
             # Group blocks based on marker positions
             self._group_blocks_by_markers(markers, block_id_to_block_map, grouped_blocks)
