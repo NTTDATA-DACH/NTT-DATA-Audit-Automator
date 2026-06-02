@@ -55,6 +55,54 @@ Use this only if you need to start from a "scorched-earth" state, for example, f
     ```
 6.  **Manual Review and Finalization:** Open the generated `report-YYMMDD.json` from the `output/` GCS prefix in the `report_editor.html` tool to perform the final manual review and make any necessary adjustments.
 
+## Local Development & Smoke Testing
+
+For development you can drive the pipeline locally as a Python module against a real
+GCP project, without deploying the Cloud Run job. The pipeline still reads/writes GCS
+and calls Vertex AI + Document AI, so you need credentials and a bucket.
+
+1.  **Install dependencies and authenticate:**
+    ```bash
+    python -m venv venv && source venv/bin/activate     # or reuse the repo venv
+    pip install -r audit-automator/requirements.txt      # pinned lock
+    gcloud auth application-default login                # ADC for GCS/DocAI/Vertex
+    ```
+2.  **Set environment variables.** If you have Terraform state, `source audit-automator/envs.sh`
+    pulls project/bucket/region/DocAI from it, sets `TEST=true`, and defines an `auditor`
+    helper. Otherwise export the seven required vars manually (`GCP_PROJECT_ID`, `BUCKET_NAME`,
+    `REGION`, `DOC_AI_PROCESSOR_NAME`, `SOURCE_PREFIX=source_documents/`, `OUTPUT_PREFIX=output/`,
+    `AUDIT_TYPE`).
+3.  **Generate mock source documents** (no real customer data needed). Classification is
+    **filename-based**, so the generator names each PDF after the BSI category it represents and
+    drops them straight into `source_documents/`:
+    ```bash
+    # write PDFs to ./mock_documents (gitignored), then upload, in one step:
+    python scripts/make_mock_docs.py --bucket <BUCKET_NAME>
+    # or generate locally only:
+    python scripts/make_mock_docs.py
+    ```
+    The Grundschutz-Check mock carries fake Zielobjekt markers so the extraction stage has
+    structure to group on. Content is intentionally minimal — this exercises plumbing
+    (SDK calls, batching, report assembly/validation), **not** output quality.
+4.  **Run tasks locally** (dependency order; `--force` on the first run rebuilds the
+    filename→category map):
+    ```bash
+    cd audit-automator
+    python -m src.main --run-gs-check-extraction --force   # prerequisite (Document AI)
+    python -m src.main --run-stage Chapter-3 --force        # one AI stage (TEST mode = cheap)
+    python -m src.main --generate-report                    # assemble + JSON-Schema-validate report
+    # or the whole pipeline:  python -m src.main --run-all-stages --force
+    ```
+
+### Running the tests
+Unit tests are dependency-light and run from the `audit-automator/` directory; CI runs the
+same suite on every push/PR (`.github/workflows/ci.yml`):
+```bash
+cd audit-automator
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
 ## The Audit Stages Explained
 
 The audit pipeline runs in a strict, dependency-aware order.
