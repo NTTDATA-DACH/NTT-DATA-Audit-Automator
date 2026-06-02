@@ -9,7 +9,8 @@ fake-success), MAX-3 (findings path split), MAX-4 (over-broad retry `except`), M
 (2.5→3.1, now env-driven), MAX-6 (region log), MAX-10 (import-time `exit`), MAX-11 (junk files),
 MAX-12 (dead DEBUG logging), MAX-13 (dup/dead constants), MAX-14 (`read_json` typing/import),
 MAX-15a (`int(blockId)` guard), MAX-16 (`envs.sh` docs), MAX-17 (models config-driven),
-MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `google-genai`).
+MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `google-genai`),
+MAX-15b (guarded nested access on stage-3 targeted Q-handler AI responses).
 
 What remains below needs a real GCP environment, behavioral testing, or network access — so it was
 deliberately deferred rather than done blind.
@@ -56,21 +57,6 @@ plus [requirements-dev.txt](audit-automator/requirements-dev.txt). Still open:
 - no coverage yet for block grouping / marker detection, AI-response error handling, or report
   assembly (the path that hid MAX-1). These need cloud-SDK stubs/mocks, so they were deferred.
 - no CI config wired up.
-
----
-
-## 🟢 Low / polish
-
-### MAX-15b — Unguarded nested access on AI responses
-_from B-L4_
-
-`res['answers'][0]` / `res['finding']['category']` around
-[stage_3_dokumentenpruefung.py:145](audit-automator/src/audit/stages/stage_3_dokumentenpruefung.py#L145)
-(and sibling Q-handlers) rely entirely on schema enforcement → `IndexError`/`KeyError` on a degraded
-AI response. (The `int(blockId)` guard, MAX-15a, is already fixed.)
-
-**Fix:** guard before indexing / handle the validation failure explicitly. Deferred to a pass that
-can exercise the stage-3 handlers with representative malformed responses.
 
 ---
 

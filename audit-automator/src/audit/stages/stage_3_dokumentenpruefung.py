@@ -64,6 +64,34 @@ class Chapter3Runner:
                 raise
         return self._ground_truth_map
 
+    def _record_targeted_answer(
+        self, res: Dict[str, Any], answers: List, idx: int, findings: List, question_label: str
+    ) -> None:
+        """Safely apply a single-question AI response to `answers`/`findings`.
+
+        MAX-15b: the targeted Q-handlers use `generate_json_response` (schema is
+        requested but NOT validated), so a degraded or token-truncated reply can
+        be missing `answers`/`finding`. Guard the nested access here instead of
+        letting an IndexError/KeyError abort the whole stage. A malformed reply is
+        scored conservatively (answer = False) and flagged as an 'AG' finding so it
+        surfaces for human review rather than silently passing.
+        """
+        answer_list = res.get("answers") if isinstance(res, dict) else None
+        if isinstance(answer_list, list) and answer_list:
+            answers[idx] = answer_list[0]
+        else:
+            answers[idx] = False
+            logging.warning(f"[{question_label}] Malformed AI response: missing/empty 'answers'. Scoring as not fulfilled.")
+            findings.append({"category": "AG", "description": f"Die KI-Antwort für '{question_label}' war unvollständig (kein 'answers'-Feld) und wurde als nicht erfüllt gewertet."})
+
+        finding = res.get("finding") if isinstance(res, dict) else None
+        if isinstance(finding, dict):
+            if finding.get("category", "OK") != "OK":
+                findings.append(finding)
+        else:
+            logging.warning(f"[{question_label}] Malformed AI response: missing/invalid 'finding'.")
+            findings.append({"category": "AG", "description": f"Die KI-Antwort für '{question_label}' enthielt kein gültiges 'finding'-Objekt."})
+
     async def _process_details_zum_it_grundschutz_check(self) -> Dict[str, Any]:
         """
         Uses the pre-computed/refined data to answer the five questions with a mix of
@@ -142,7 +170,7 @@ class Chapter3Runner:
                 prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
             )
-            answers[1], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+            self._record_targeted_answer(res, answers, 1, findings, "3.6.1-Q2 (entbehrlich)")
         else:
             answers[1] = True
 
@@ -155,7 +183,7 @@ class Chapter3Runner:
                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
-            answers[2], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+            self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
         else:
             answers[2] = True
 
@@ -171,7 +199,7 @@ class Chapter3Runner:
                 prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
             )
-            answers[3], findings = (res['answers'][0], findings + [res['finding']] if res['finding']['category'] != 'OK' else findings)
+            self._record_targeted_answer(res, answers, 3, findings, "3.6.1-Q4 (nicht umgesetzt)")
         else:
             answers[3] = not unmet_items
             if unmet_items and not realisierungsplan_uris:
