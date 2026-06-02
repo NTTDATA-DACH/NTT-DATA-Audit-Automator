@@ -94,6 +94,18 @@ and calls Vertex AI + Document AI, so you need credentials and a bucket.
     # or the whole pipeline:  python -m src.main --run-all-stages --force
     ```
 
+### One-shot end-to-end test
+To provision a throwaway environment and run the whole pipeline against mock data in
+one go, use the harness script (idempotent; creates a bucket + Document AI processor,
+uploads mocks, runs all stages, prints cleanup commands):
+```bash
+# ⚠️ creates real GCS/DocAI resources and makes real Vertex/DocAI calls (costs money)
+scripts/test_full_run.sh                 # full run (prompts for confirmation)
+scripts/test_full_run.sh --report-only   # provision + assemble report only (no AI spend)
+scripts/test_full_run.sh --skip-run      # provision + upload mocks only
+```
+Override defaults via env, e.g. `BUCKET_NAME=my-test-bucket GCP_PROJECT_ID=… scripts/test_full_run.sh`.
+
 ### Running the tests
 Unit tests are dependency-light and run from the `audit-automator/` directory; CI runs the
 same suite on every push/PR (`.github/workflows/ci.yml`):
