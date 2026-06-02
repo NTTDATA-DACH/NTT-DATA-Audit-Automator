@@ -134,12 +134,8 @@ class ReportGenerator:
         # Populate the final aggregated findings last.
         self._populate_chapter_7_findings(report)
 
-        # Basic structural sanity check. NOTE: the previous implementation passed the
-        # *data template* (master_report_template.json) to jsonschema.validate as if it
-        # were a schema; because the template's keys are not JSON-Schema keywords, that
-        # check was a silent no-op that accepted any input. Until a real report JSON
-        # Schema exists, do a cheap, honest structural check instead.
-        if not isinstance(report, dict) or "bsiAuditReport" not in report:
+        # Basic structural sanity check (see _is_report_structurally_valid).
+        if not self._is_report_structurally_valid(report):
             logging.error("CRITICAL: Assembled report is malformed (missing 'bsiAuditReport' root). Report will not be saved.")
             return
         logging.info("Final report passed basic structural checks.")
@@ -152,7 +148,19 @@ class ReportGenerator:
             destination_blob_name=final_report_path
         )
         logging.info(f"Saving final report to {final_report_path}")
-        
+
+    @staticmethod
+    def _is_report_structurally_valid(report) -> bool:
+        """Cheap, honest structural check on the assembled report (MAX-1).
+
+        The previous implementation passed the *data template*
+        (master_report_template.json) to jsonschema.validate as if it were a
+        schema; because the template's keys are not JSON-Schema keywords, that
+        check was a silent no-op that accepted any input (including None / a
+        bare list). Until a real report JSON Schema exists, just confirm the
+        report is a dict carrying the expected 'bsiAuditReport' root.
+        """
+        return isinstance(report, dict) and "bsiAuditReport" in report
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 3 (Dokumentenprüfung) content into the report."""

@@ -64,8 +64,9 @@ class Chapter3Runner:
                 raise
         return self._ground_truth_map
 
+    @staticmethod
     def _record_targeted_answer(
-        self, res: Dict[str, Any], answers: List, idx: int, findings: List, question_label: str
+        res: Dict[str, Any], answers: List, idx: int, findings: List, question_label: str
     ) -> None:
         """Safely apply a single-question AI response to `answers`/`findings`.
 

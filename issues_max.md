@@ -11,7 +11,9 @@ MAX-12 (dead DEBUG logging), MAX-13 (dup/dead constants), MAX-14 (`read_json` ty
 MAX-15a (`int(blockId)` guard), MAX-16 (`envs.sh` docs), MAX-17 (models config-driven),
 MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `google-genai`),
 MAX-15b (guarded nested access on stage-3 targeted Q-handler AI responses),
-MAX-7 (unified `asyncio.gather` policy via `gather_resilient` helper + documented fail-fast sites).
+MAX-7 (unified `asyncio.gather` policy via `gather_resilient` helper + documented fail-fast sites),
+MAX-9 (removed empty placeholder; added unit tests for block grouping/marker detection, AI-response
+error handling, the Q-handler guard, and the report structural check; wired GitHub Actions CI).
 
 What remains below needs a real GCP environment, behavioral testing, or network access — so it was
 deliberately deferred rather than done blind.
@@ -29,19 +31,6 @@ breaking upstream SDK release silently breaks the next image rebuild (compounds 
 
 **Fix:** pin (`pkg==x.y.z`) or add a lockfile (`pip-compile` / `uv`). **Deferred because** correct
 pins require resolving against the real install set (`pip-compile`), which needs network.
-
-### MAX-9 — Expand test coverage _(partially done)_
-_from A#8 / B-M3_
-
-Dependency-light smoke tests were added ([tests/test_smoke.py](audit-automator/tests/test_smoke.py))
-plus [requirements-dev.txt](audit-automator/requirements-dev.txt). Still open:
-- the empty [tests/test_placeholder.py](audit-automator/tests/test_placeholder.py) (0 bytes) should
-  be removed once real tests exist;
-- no coverage yet for block grouping / marker detection, AI-response error handling, or report
-  assembly (the path that hid MAX-1). These need cloud-SDK stubs/mocks, so they were deferred.
-- no CI config wired up.
-
----
 
 ## 📝 Follow-up TODO (left in code)
 
