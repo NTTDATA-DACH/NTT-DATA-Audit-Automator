@@ -13,24 +13,14 @@ MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `
 MAX-15b (guarded nested access on stage-3 targeted Q-handler AI responses),
 MAX-7 (unified `asyncio.gather` policy via `gather_resilient` helper + documented fail-fast sites),
 MAX-9 (removed empty placeholder; added unit tests for block grouping/marker detection, AI-response
-error handling, the Q-handler guard, and the report structural check; wired GitHub Actions CI).
+error handling, the Q-handler guard, and the report structural check; wired GitHub Actions CI),
+MAX-8 (pinned deps via `requirements.in`→`requirements.txt` lockfile, compiled on Python 3.11 to
+match the Dockerfile; `google-genai` capped to the live-tested `<2`; lock validated in-container).
 
 What remains below needs a real GCP environment, behavioral testing, or network access — so it was
 deliberately deferred rather than done blind.
 
 ---
-
-## 🟡 Medium
-
-### MAX-8 — Dependencies unpinned / no lockfile
-**[requirements.txt](audit-automator/requirements.txt)** · _from A#6 / B-M1_
-
-Zero version constraints on `google-cloud-aiplatform`, `google-cloud-storage`,
-`google-cloud-documentai`, `PyMuPDF`, `jsonschema`, `python-dotenv`. Non-reproducible builds; a
-breaking upstream SDK release silently breaks the next image rebuild (compounds MAX-5b).
-
-**Fix:** pin (`pkg==x.y.z`) or add a lockfile (`pip-compile` / `uv`). **Deferred because** correct
-pins require resolving against the real install set (`pip-compile`), which needs network.
 
 ## 📝 Follow-up TODO (left in code)
 
