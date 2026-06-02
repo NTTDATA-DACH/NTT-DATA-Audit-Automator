@@ -3,12 +3,13 @@ import logging
 import json
 import asyncio
 from google.cloud.exceptions import NotFound
+from jsonschema import validate, ValidationError, SchemaError
 from typing import Dict, Any, List
 from datetime import datetime
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
-from src.constants import ALL_FINDINGS_PATH, STAGE_RESULTS_PATH
+from src.constants import ALL_FINDINGS_PATH, STAGE_RESULTS_PATH, REPORT_SCHEMA_PATH
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
@@ -134,11 +135,15 @@ class ReportGenerator:
         # Populate the final aggregated findings last.
         self._populate_chapter_7_findings(report)
 
-        # Basic structural sanity check (see _is_report_structurally_valid).
+        # Fast structural gate, then full JSON Schema validation (see the two
+        # helpers below). Either failing means the report is not saved.
         if not self._is_report_structurally_valid(report):
             logging.error("CRITICAL: Assembled report is malformed (missing 'bsiAuditReport' root). Report will not be saved.")
             return
-        logging.info("Final report passed basic structural checks.")
+        if not self._validate_report_against_schema(report):
+            logging.error("CRITICAL: Assembled report failed schema validation. Report will not be saved.")
+            return
+        logging.info("Final report passed structural and schema validation.")
 
         today = datetime.now()
         date_str = today.strftime("%y%m%d")
@@ -161,6 +166,36 @@ class ReportGenerator:
         report is a dict carrying the expected 'bsiAuditReport' root.
         """
         return isinstance(report, dict) and "bsiAuditReport" in report
+
+    @staticmethod
+    def _validate_report_against_schema(report) -> bool:
+        """Validate the assembled report against the real report JSON Schema.
+
+        Restores genuine validation (the former check passed the *data template*
+        to jsonschema.validate, which was a silent no-op — see MAX-1). Returns
+        True only if the report conforms.
+
+        - ValidationError -> the report is malformed; log and reject.
+        - SchemaError     -> our schema asset itself is broken; this is a code/asset
+          bug, so log it loudly and reject rather than saving an unvalidated report.
+        """
+        try:
+            with open(REPORT_SCHEMA_PATH, 'r', encoding='utf-8') as f:
+                schema = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logging.error(f"Could not load report schema '{REPORT_SCHEMA_PATH}': {e}")
+            return False
+
+        try:
+            validate(instance=report, schema=schema)
+            return True
+        except ValidationError as e:
+            location = " -> ".join(str(p) for p in e.absolute_path) or "<root>"
+            logging.error(f"Report schema validation failed at '{location}': {e.message}")
+            return False
+        except SchemaError as e:
+            logging.critical(f"Report schema '{REPORT_SCHEMA_PATH}' is itself invalid: {e.message}")
+            return False
 
     def _populate_chapter_3(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 3 (Dokumentenprüfung) content into the report."""

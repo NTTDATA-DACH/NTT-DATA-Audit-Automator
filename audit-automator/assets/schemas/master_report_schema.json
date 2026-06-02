@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BSI IT-Grundschutz Audit Report (assembled)",
+  "description": "Structural schema for the fully-assembled report produced by ReportGenerator. Validates the chapter skeleton and the Chapter 7.2 findings tables (the path that hid MAX-1) while staying lenient about free-text and AI-populated content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bsiAuditReport"],
+  "properties": {
+    "bsiAuditReport": {
+      "type": "object",
+      "required": [
+        "titlePage",
+        "allgemeines",
+        "voraudit",
+        "dokumentenpruefung",
+        "erstellungEinesPruefplans",
+        "vorOrtAudit",
+        "gesamtvotum",
+        "anhang"
+      ],
+      "properties": {
+        "titlePage": {
+          "type": "object",
+          "required": ["reportTitle"],
+          "properties": {
+            "reportTitle": { "type": "string" },
+            "auditedInstitution": { "type": "string" },
+            "certificationID": { "type": "string" }
+          }
+        },
+        "allgemeines": { "$ref": "#/definitions/chapter" },
+        "voraudit": { "$ref": "#/definitions/chapter" },
+        "dokumentenpruefung": { "$ref": "#/definitions/chapter" },
+        "erstellungEinesPruefplans": { "$ref": "#/definitions/chapter" },
+        "vorOrtAudit": { "$ref": "#/definitions/chapter" },
+        "gesamtvotum": { "$ref": "#/definitions/chapter" },
+        "anhang": {
+          "allOf": [
+            { "$ref": "#/definitions/chapter" },
+            {
+              "type": "object",
+              "required": ["abweichungenUndEmpfehlungen"],
+              "properties": {
+                "abweichungenUndEmpfehlungen": {
+                  "type": "object",
+                  "required": [
+                    "schwerwiegendeAbweichungen",
+                    "geringfuegigeAbweichungen",
+                    "empfehlungen"
+                  ],
+                  "properties": {
+                    "schwerwiegendeAbweichungen": { "$ref": "#/definitions/findingsTable" },
+                    "geringfuegigeAbweichungen": { "$ref": "#/definitions/findingsTable" },
+                    "empfehlungen": { "$ref": "#/definitions/findingsTable" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "definitions": {
+    "chapter": {
+      "type": "object",
+      "required": ["chapterNumber", "title"],
+      "properties": {
+        "chapterNumber": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "findingsTable": {
+      "type": "object",
+      "required": ["table"],
+      "properties": {
+        "table": {
+          "type": "object",
+          "required": ["rows"],
+          "properties": {
+            "rows": {
+              "type": "array",
+              "items": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

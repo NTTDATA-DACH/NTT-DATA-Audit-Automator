@@ -26,3 +26,39 @@ def test_rejects_non_dict_inputs():
     assert valid(None) is False
     assert valid([{"bsiAuditReport": {}}]) is False
     assert valid("bsiAuditReport") is False
+
+
+# --- Full JSON Schema validation (the real check that replaced the MAX-1 no-op) ---
+# These rely on the schema + template assets, so run from the audit-automator/ dir.
+import json
+import copy
+
+schema_validate = ReportGenerator._validate_report_against_schema
+
+
+def _load_template():
+    with open("assets/json/master_report_template.json", "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_real_template_passes_schema():
+    # The canonical assembled-report skeleton must satisfy the schema.
+    assert schema_validate(_load_template()) is True
+
+
+def test_schema_rejects_missing_chapter():
+    report = _load_template()
+    del report["bsiAuditReport"]["anhang"]
+    assert schema_validate(report) is False
+
+
+def test_schema_rejects_non_dict_and_missing_root():
+    assert schema_validate(None) is False
+    assert schema_validate({"somethingElse": 1}) is False
+
+
+def test_schema_rejects_findings_rows_not_an_array():
+    # Guards the Chapter 7.2 findings path that hid MAX-1.
+    report = _load_template()
+    report["bsiAuditReport"]["anhang"]["abweichungenUndEmpfehlungen"]["empfehlungen"]["table"]["rows"] = "oops"
+    assert schema_validate(report) is False

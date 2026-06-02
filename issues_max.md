@@ -24,10 +24,13 @@ deliberately deferred rather than done blind.
 
 ## 📝 Follow-up TODO (left in code)
 
-- **Author a real report JSON Schema.** MAX-1 replaced the no-op template-as-schema validation with
-  a cheap structural check (`"bsiAuditReport"` root present). A proper schema under
-  `assets/schemas/` would restore real validation of the assembled report; catch `SchemaError` (not
-  just `ValidationError`) when it's added.
+- ✅ **Done — Author a real report JSON Schema.** Added
+  [master_report_schema.json](audit-automator/assets/schemas/master_report_schema.json) (draft-07):
+  validates the `bsiAuditReport` chapter skeleton and the Chapter 7.2 findings tables (the path that
+  hid MAX-1) while staying lenient about free-text/AI-populated content. Wired into
+  `ReportGenerator._validate_report_against_schema`, which runs after the cheap structural gate and
+  catches both `ValidationError` (malformed report) and `SchemaError` (broken schema asset). Covered
+  by tests in [test_report_assembly.py](audit-automator/tests/test_report_assembly.py).
 
 ---
 

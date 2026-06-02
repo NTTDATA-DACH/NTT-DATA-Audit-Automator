@@ -55,3 +55,7 @@ DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
 # ASSET PATHS
 # =============================================================================
 PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
+
+# JSON Schema for the fully-assembled audit report (used by ReportGenerator to
+# validate the report before saving). Replaces the former no-op structural check.
+REPORT_SCHEMA_PATH = "assets/schemas/master_report_schema.json"
