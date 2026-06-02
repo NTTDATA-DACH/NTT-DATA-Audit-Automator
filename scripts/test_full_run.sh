@@ -27,7 +27,7 @@
 #     --report-only  provision + upload, then run ONLY --generate-report (no AI/DocAI cost)
 #
 # CONFIG (override via environment before running):
-#   GCP_PROJECT_ID   (default: gpp-agentic-3)
+#   GCP_PROJECT_ID   (default: $GOOGLE_CLOUD_PROJECT, else `gcloud config get-value project`)
 #   REGION           (default: europe-west3)         GCS / general region
 #   DOCAI_LOCATION   (default: eu)                   Document AI location (eu|us)
 #   BUCKET_NAME      (default: <project>-audit-test) globally-unique bucket name
@@ -35,13 +35,20 @@
 #
 set -euo pipefail
 
+say() { echo -e "\n🔹 $*"; }
+die() { echo -e "\n❌ $*" >&2; exit 1; }
+
 # --- Locate repo root (this script lives in <root>/scripts) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${ROOT_DIR}/audit-automator"
 
+# --- Resolve project id: explicit env -> Cloud Shell's GOOGLE_CLOUD_PROJECT -> gcloud config ---
+GCP_PROJECT_ID="${GCP_PROJECT_ID:-${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}}"
+[[ -n "${GCP_PROJECT_ID}" && "${GCP_PROJECT_ID}" != "(unset)" ]] \
+  || die "Could not determine project. Set GCP_PROJECT_ID, or run: gcloud config set project <id>"
+
 # --- Config (env-overridable) ---
-GCP_PROJECT_ID="${GCP_PROJECT_ID:-gpp-agentic-3}"
 REGION="${REGION:-europe-west3}"
 DOCAI_LOCATION="${DOCAI_LOCATION:-eu}"
 BUCKET_NAME="${BUCKET_NAME:-${GCP_PROJECT_ID}-audit-test}"
@@ -60,9 +67,6 @@ for arg in "$@"; do
     *) echo "Unknown argument: $arg"; exit 1 ;;
   esac
 done
-
-say() { echo -e "\n🔹 $*"; }
-die() { echo -e "\n❌ $*" >&2; exit 1; }
 
 # --- Prerequisite checks ---
 command -v gcloud >/dev/null  || die "gcloud not found on PATH."
