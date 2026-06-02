@@ -10,7 +10,8 @@ fake-success), MAX-3 (findings path split), MAX-4 (over-broad retry `except`), M
 MAX-12 (dead DEBUG logging), MAX-13 (dup/dead constants), MAX-14 (`read_json` typing/import),
 MAX-15a (`int(blockId)` guard), MAX-16 (`envs.sh` docs), MAX-17 (models config-driven),
 MAX-5b (migrated `ai_client` off the deprecated `vertexai`/`aiplatform` SDK to `google-genai`),
-MAX-15b (guarded nested access on stage-3 targeted Q-handler AI responses).
+MAX-15b (guarded nested access on stage-3 targeted Q-handler AI responses),
+MAX-7 (unified `asyncio.gather` policy via `gather_resilient` helper + documented fail-fast sites).
 
 What remains below needs a real GCP environment, behavioral testing, or network access — so it was
 deliberately deferred rather than done blind.
@@ -18,24 +19,6 @@ deliberately deferred rather than done blind.
 ---
 
 ## 🟡 Medium
-
-### MAX-7 — `asyncio.gather` exception policy is inconsistent
-_from B-M2_
-
-Most batch call sites use bare `asyncio.gather` (abort-all-on-first-failure, cancel siblings):
-[controller.py:190](audit-automator/src/audit/controller.py#L190),
-[document_processor.py:76](audit-automator/src/audit/stages/gs_extraction/document_processor.py#L76)/[:91](audit-automator/src/audit/stages/gs_extraction/document_processor.py#L91),
-[stage_3_dokumentenpruefung.py:309](audit-automator/src/audit/stages/stage_3_dokumentenpruefung.py#L309)/[:316](audit-automator/src/audit/stages/stage_3_dokumentenpruefung.py#L316),
-[stage_4_pruefplan.py:138](audit-automator/src/audit/stages/stage_4_pruefplan.py#L138),
-[ai_refiner.py:95](audit-automator/src/audit/stages/gs_extraction/ai_refiner.py#L95)/[:121](audit-automator/src/audit/stages/gs_extraction/ai_refiner.py#L121),
-[stage_previous_report_scan.py:78](audit-automator/src/audit/stages/stage_previous_report_scan.py#L78) —
-while [report_generator.py:124](audit-automator/src/audit/report_generator.py#L124) **does** use
-`return_exceptions=True`.
-
-**Fix:** pick one policy and apply it uniformly. For long, expensive AI batches prefer
-`return_exceptions=True` + per-item handling so one bad document doesn't discard completed work.
-**Deferred because** each site needs matching per-item error handling added downstream — a behavior
-change that should be validated against real batches, not applied blind.
 
 ### MAX-8 — Dependencies unpinned / no lockfile
 **[requirements.txt](audit-automator/requirements.txt)** · _from A#6 / B-M1_

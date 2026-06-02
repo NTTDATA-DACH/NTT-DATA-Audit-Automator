@@ -1,7 +1,6 @@
 # file: src/audit/stages/stage_3_dokumentenpruefung.py
 import logging
 import json
-import asyncio
 from typing import Dict, Any, List, Tuple
 from datetime import datetime, timedelta
 from google.cloud.exceptions import NotFound
@@ -12,6 +11,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.audit.async_utils import gather_resilient
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
 class Chapter3Runner:
@@ -334,14 +334,14 @@ class Chapter3Runner:
         
         if ai_tasks:
             ai_coroutines = [self._process_ai_subchapter(task) for task in ai_tasks]
-            ai_results = await asyncio.gather(*ai_coroutines)
+            ai_results = await gather_resilient(*ai_coroutines, context="Chapter-3: AI subchapters")
             processed_results.extend(ai_results)
             for res in ai_results: aggregated_results.update(res)
 
         if summary_tasks:
             findings_text = self._get_findings_from_results(processed_results)
             summary_coroutines = [self._process_summary_subchapter(task, findings_text) for task in summary_tasks]
-            for res in await asyncio.gather(*summary_coroutines): aggregated_results.update(res)
+            for res in await gather_resilient(*summary_coroutines, context="Chapter-3: summaries"): aggregated_results.update(res)
 
         logging.info(f"Successfully aggregated results for all of stage {self.STAGE_NAME}")
         return aggregated_results

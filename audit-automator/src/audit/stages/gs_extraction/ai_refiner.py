@@ -1,12 +1,12 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/ai_refiner.py
 import logging
 import json
-import asyncio
 import os
 from typing import Dict, Any, List, Tuple, Optional
 
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
+from src.audit.async_utils import gather_resilient
 from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH
 
 from .cache_manager import CacheManager
@@ -92,7 +92,8 @@ class AiRefiner:
             self._process_group_with_caching(kuerzel, blocks, zielobjekt_map, prompt_template, schema) 
             for kuerzel, blocks in valid_groups.items()
         ]
-        return await asyncio.gather(*tasks)
+        # Resilient: a single failed Zielobjekt group must not discard the rest.
+        return await gather_resilient(*tasks, context="ai_refiner: process_all_groups")
 
     async def _process_group_with_caching(self, kuerzel: str, blocks: List[Dict], zielobjekt_map: Dict[str, str], 
                                          prompt_template: str, schema: Dict[str, Any]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
@@ -118,8 +119,10 @@ class AiRefiner:
                     self._process_single_chunk(kuerzel, chunk, idx, len(chunks), prompt_template, schema) 
                     for idx, chunk in enumerate(chunks)
                 ]
-                chunk_results = await asyncio.gather(*chunk_tasks)
-                
+                # Resilient: keep the chunks that succeeded instead of losing the
+                # whole Zielobjekt group when one chunk fails.
+                chunk_results = await gather_resilient(*chunk_tasks, context=f"ai_refiner: chunks for '{kuerzel}'")
+
                 # Merge all anforderungen from chunks
                 all_anforderungen = []
                 for chunk_result in chunk_results:

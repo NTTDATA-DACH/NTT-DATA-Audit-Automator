@@ -189,6 +189,9 @@ class AuditController:
         # Step 1: Run initial independent stages in parallel.
         initial_parallel_stages = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-7"]
         logging.info(f"Step 1: Starting parallel execution for initial stages: {initial_parallel_stages}")
+        # Fail-fast (MAX-7): later steps (Chapter-4/5) depend on these stages' persisted
+        # output, so if one fails the run cannot produce a valid report. Surface the error
+        # immediately rather than masking it and proceeding into dependent stages.
         await asyncio.gather(
             *(self.run_single_stage(stage_name, force_overwrite=force_overwrite) for stage_name in initial_parallel_stages)
         )
