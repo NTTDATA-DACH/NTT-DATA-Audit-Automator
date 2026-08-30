@@ -125,13 +125,23 @@ class AiClient:
 
     @staticmethod
     def _extract_json(response: Any) -> Dict[str, Any]:
-        """Validate the response shape and parse its text payload as JSON."""
+        """Validate the response shape and parse its text payload as JSON.
+
+        Raises ValueError (which the retry loop catches) for every unusable response.
+        MAX_TOKENS counts as unusable: a truncated answer that still happens to parse
+        would flow into the report as if it were complete.
+        """
         if not response.candidates:
             raise ValueError("The model response contained no candidates.")
 
-        finish_reason = response.candidates[0].finish_reason.name
-        if finish_reason not in ["STOP", "MAX_TOKENS"]:
+        finish_reason = getattr(response.candidates[0].finish_reason, "name", None)
+        if finish_reason != "STOP":
             raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
+
+        # With thinking enabled a candidate can carry no text part at all; json.loads(None)
+        # would raise TypeError, which the retry loop does not catch.
+        if response.text is None:
+            raise ValueError("The model response contained no text part.")
 
         try:
             return json.loads(response.text)
@@ -218,7 +228,9 @@ class AiClient:
                 logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                 return response_json
 
-            except (genai_errors.APIError, ValueError, asyncio.TimeoutError) as e:
+            # TypeError/AttributeError are belt-and-braces for an unexpected response
+            # shape: without them a malformed reply would bypass the retries entirely.
+            except (genai_errors.APIError, ValueError, TypeError, AttributeError, asyncio.TimeoutError) as e:
                 wait_time = 2 ** attempt
                 if attempt == retries - 1:
                     logging.critical(f"[{request_context_log}] AI generation failed after all {retries} retries.", exc_info=True)

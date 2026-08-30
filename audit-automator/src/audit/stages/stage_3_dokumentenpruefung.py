@@ -11,6 +11,14 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.audit.stages.gs_extraction.anforderung_fields import (
+    STATUS_ENTBEHRLICH,
+    STATUS_NEIN,
+    STATUS_TEILWEISE,
+    VALID_STATUS,
+    normalize_anforderungen,
+    parse_pruefdatum,
+)
 from src.audit.async_utils import gather_resilient
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
@@ -106,6 +114,10 @@ class Chapter3Runner:
             logging.error(f"FATAL: The required intermediate file '{EXTRACTED_CHECK_DATA_PATH}' was not found. Please run the 'Grundschutz-Check-Extraction' stage first.")
             raise
 
+        # Statuses come from customer PDFs; normalise once so every check below can
+        # compare on the canonical spelling instead of matching raw casing.
+        anforderungen = normalize_anforderungen(anforderungen)
+
         answers = [None] * 5
         findings = []
         ground_truth_map = await self._get_ground_truth_map()
@@ -120,43 +132,40 @@ class Chapter3Runner:
             logging.warning(f"Coverage Check (Task E) failed: {desc}")
 
         # Q1: Status erhoben? (Deterministic)
-        answers[0] = all(a.get("umsetzungsstatus") for a in anforderungen)
-        if not answers[0]:
-            findings.append({"category": "AG", "description": "Nicht für alle Anforderungen wurde ein Umsetzungsstatus erhoben."})
+        unknown_status = [a for a in anforderungen if a.get("umsetzungsstatus") not in VALID_STATUS]
+        answers[0] = not unknown_status
+        if unknown_status:
+            findings.append({"category": "AG", "description": f"Für {len(unknown_status)} Anforderungen wurde kein auswertbarer Umsetzungsstatus erhoben."})
 
         # Q5: Prüfung < 12 Monate? (Deterministic)
         one_year_ago = datetime.now() - timedelta(days=365)
-        
+
         outdated = []
+        undatable = []
         for a in anforderungen:
-            date_str = a.get("datumLetztePruefung", "1970-01-01")
-            try:
-                # Try ISO format first
-                check_date = datetime.strptime(date_str, "%Y-%m-%d")
-            except ValueError:
-                try:
-                    # Try German format DD.MM.YYYY
-                    check_date = datetime.strptime(date_str, "%d.%m.%Y")
-                except ValueError:
-                    # If both fail, use default old date
-                    check_date = datetime.strptime("1970-01-01", "%Y-%m-%d")
-                    logging.warning(f"Could not parse date '{date_str}', using default 1970-01-01")
-            
-            if check_date < one_year_ago:
+            check_date = parse_pruefdatum(a.get("datumLetztePruefung"))
+            if check_date is None:
+                # Unknown is NOT old: substituting an old date here would report a
+                # deviation the document never showed. It is a data-quality issue.
+                undatable.append(a)
+            elif check_date < one_year_ago:
                 outdated.append(a)
 
-
-        answers[4] = not bool(outdated)
+        answers[4] = not outdated and not undatable
         if outdated:
             findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated)} Anforderungen liegt mehr als 12 Monate zurück."})
-            
+        if undatable:
+            logging.warning(f"{len(undatable)} requirements carry no assessable Prüfdatum.")
+            findings.append({"category": "AG", "description": f"Für {len(undatable)} Anforderungen ist das Datum der letzten Prüfung nicht auswertbar; die Aktualität konnte nicht bestätigt werden."})
+
+
         # Correctly load the configuration for targeted questions
         ch3_config = self.prompt_config["stages"]["Chapter-3"]
         targeted_prompt_template = ch3_config["targeted_question"]["prompt"]
         questions_config = ch3_config["questions"]
 
         # Q2: "entbehrlich" plausibel? (Targeted AI - Task D)
-        entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
+        entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == STATUS_ENTBEHRLICH]
         risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
         if entbehrlich_items and risikoanalyse_uris:
             for item in entbehrlich_items: # Enrich with the BSI level (B/S/H)
@@ -195,7 +204,7 @@ class Chapter3Runner:
             answers[2] = True
 
         # Q4: Nicht/teilweise umgesetzte in A.6? (Targeted AI)
-        unmet_items = [a for a in anforderungen if a.get("umsetzungsstatus") in ["Nein", "teilweise"]]
+        unmet_items = [a for a in anforderungen if a.get("umsetzungsstatus") in (STATUS_NEIN, STATUS_TEILWEISE)]
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"])
         if unmet_items and realisierungsplan_uris:
             prompt = targeted_prompt_template.format(

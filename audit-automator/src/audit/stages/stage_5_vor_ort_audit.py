@@ -8,6 +8,13 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.audit.stages.gs_extraction.anforderung_fields import (
+    STATUS_ENTBEHRLICH,
+    STATUS_JA,
+    STATUS_NEIN,
+    STATUS_TEILWEISE,
+    normalize_status,
+)
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 
 class Chapter5Runner:
@@ -114,10 +121,17 @@ class Chapter5Runner:
                 extracted_details = extracted_data_map.get(lookup_key, {})
                 
                 customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
-                bewertung_status_raw = extracted_details.get("umsetzungsstatus", "N/A")
 
-                status_map = {"Ja": "Umgesetzt", "Nein": "Nicht umgesetzt", "teilweise": "Teilweise umgesetzt", "entbehrlich": "Entbehrlich"}
-                final_bewertung_status = status_map.get(bewertung_status_raw, bewertung_status_raw)
+                # Normalise before mapping: raw casing from the customer document would
+                # otherwise be passed straight into the auditor's checklist.
+                status = normalize_status(extracted_details.get("umsetzungsstatus"))
+                status_map = {
+                    STATUS_JA: "Umgesetzt",
+                    STATUS_NEIN: "Nicht umgesetzt",
+                    STATUS_TEILWEISE: "Teilweise umgesetzt",
+                    STATUS_ENTBEHRLICH: "Entbehrlich",
+                }
+                final_bewertung_status = status_map.get(status, "N/A")
 
                 # The level suffix (B/S/H) is what the auditor needs to see next to the
                 # requirement; the official Kompendium carries it in the heading, not the title.

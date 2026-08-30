@@ -27,10 +27,11 @@ def test_extract_json_parses_valid_stop_response():
     assert result == {"a": 1, "b": [2, 3]}
 
 
-def test_extract_json_allows_max_tokens_finish_reason():
-    # MAX_TOKENS is treated as acceptable (truncation still parsed if valid JSON).
-    result = AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
-    assert result == {"a": 1}
+def test_extract_json_rejects_max_tokens_even_when_the_text_parses():
+    """A truncated answer that happens to be valid JSON is still incomplete; it must
+    be retried, not accepted into the report as a full answer."""
+    with pytest.raises(ValueError, match="MAX_TOKENS"):
+        AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
 
 
 def test_extract_json_raises_when_no_candidates():
@@ -41,6 +42,19 @@ def test_extract_json_raises_when_no_candidates():
 def test_extract_json_raises_on_bad_finish_reason():
     with pytest.raises(ValueError, match="non-OK reason"):
         AiClient._extract_json(_fake_response(finish_reason="SAFETY"))
+
+
+def test_extract_json_raises_valueerror_when_the_response_has_no_text():
+    """An all-thinking candidate has text=None. json.loads(None) would raise
+    TypeError, which used to escape the retry loop and kill the stage."""
+    with pytest.raises(ValueError, match="no text part"):
+        AiClient._extract_json(_fake_response(text=None))
+
+
+def test_extract_json_survives_a_missing_finish_reason():
+    response = types.SimpleNamespace(candidates=[types.SimpleNamespace(finish_reason=None)], text='{"a": 1}')
+    with pytest.raises(ValueError, match="non-OK reason"):
+        AiClient._extract_json(response)
 
 
 def test_extract_json_raises_on_malformed_json():
