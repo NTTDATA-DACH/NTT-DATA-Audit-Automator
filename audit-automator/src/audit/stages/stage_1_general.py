@@ -1,9 +1,9 @@
 # src/audit/stages/stage_1_general.py
 import logging
 import json
-import asyncio
 from typing import Dict, Any
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
@@ -17,11 +17,9 @@ class Chapter1Runner:
         self.config = config
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
         
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _process_informationsverbund(self) -> Dict[str, Any]:
         """Handles 1.4 Informationsverbund using a filtered document query."""
@@ -29,7 +27,7 @@ class Chapter1Runner:
         
         stage_config = self.prompt_config["stages"]["Chapter-1"]["informationsverbund"]
         prompt_template = stage_config["prompt"]
-        schema = self._load_asset_json(stage_config["schema_path"])
+        schema = load_asset_json(stage_config["schema_path"])
         
         source_categories = ['Informationsverbund', 'Strukturanalyse']
         gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)

@@ -63,10 +63,7 @@ class BlockGrouper:
             self._group_blocks_by_markers(markers, block_id_to_block_map, grouped_blocks)
 
         # Save grouped blocks
-        await self.gcs_client.upload_from_string_async(
-            json.dumps({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, indent=2, ensure_ascii=False),
-            GROUPED_BLOCKS_PATH
-        )
+        await self.gcs_client.write_json_async({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, GROUPED_BLOCKS_PATH)
         logging.info(f"Saved grouped layout blocks to {GROUPED_BLOCKS_PATH}")
 
     def _flatten_all_blocks(self, blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

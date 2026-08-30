@@ -62,6 +62,39 @@ def test_extract_json_raises_on_malformed_json():
         AiClient._extract_json(_fake_response(text='{"a": 1,'))  # truncated/invalid
 
 
+# --- Schema validation of replies ---------------------------------------------------
+# Constrained decoding makes a mismatch rare, but an unvalidated reply reaches the
+# report, where a missing key becomes a silently wrong audit statement.
+
+QUESTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answers": {"type": "array", "items": {"type": "boolean"}, "minItems": 1},
+        "finding": {"type": "object"},
+    },
+    "required": ["answers", "finding"],
+}
+
+
+def test_valid_payload_passes_validation():
+    AiClient._validate_against_schema({"answers": [True], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_missing_required_key_raises_valueerror_so_the_retry_loop_catches_it():
+    with pytest.raises(ValueError, match="does not match the requested schema"):
+        AiClient._validate_against_schema({"answers": [True]}, QUESTION_SCHEMA, "test")
+
+
+def test_wrong_type_reports_the_offending_path():
+    with pytest.raises(ValueError, match="answers"):
+        AiClient._validate_against_schema({"answers": ["ja"], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_a_broken_schema_asset_raises_rather_than_passing_silently():
+    with pytest.raises(ValueError, match="Invalid JSON schema"):
+        AiClient._validate_against_schema({}, {"type": "not-a-real-type"}, "test")
+
+
 # --- Generation config -------------------------------------------------------------
 # _build_generation_config needs only self.system_message, so an uninitialised instance
 # exercises it without a Vertex client, credentials or prompt assets.

@@ -44,6 +44,9 @@ class _FakeGcsClient:
     def upload_from_string(self, content, destination_blob_name):
         self.stored[destination_blob_name] = content
 
+    def write_json(self, data, destination_blob_name):
+        self.upload_from_string(json.dumps(data, indent=2, ensure_ascii=False), destination_blob_name)
+
 
 class _FakeAiClient:
     """Returns a canned classification and records the prompts it was given."""

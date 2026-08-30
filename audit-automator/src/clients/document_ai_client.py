@@ -153,8 +153,7 @@ class DocumentAiClient:
                     raise RuntimeError(f"No valid blocks found after merging shards for '{input_filename}'")
                 
                 # Upload merged result to clean path
-                merged_json_str = json.dumps(merged_data, ensure_ascii=False)
-                await self.gcs_client.upload_from_string_async(merged_json_str, gcs_output_json_path)
+                await self.gcs_client.write_json_async(merged_data, gcs_output_json_path)
                 logging.info(f"Saved merged result for chunk to: {gcs_output_json_path}")
                 
                 # Clean up: Delete the raw shard files and any other blobs in the output folder

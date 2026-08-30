@@ -40,7 +40,6 @@ ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
 # =============================================================================
 TEMP_BASE = "output/temp"
 TEMP_PDF_CHUNKS_PREFIX = f"{TEMP_BASE}/pdf_chunks/"
-DOC_AI_BATCH_RESULTS_PREFIX = f"{TEMP_BASE}/doc_ai_results/"
 
 # =============================================================================
 # INTERMEDIARY PATHS - Idempotent saves organized by stage

@@ -1,8 +1,8 @@
 # src/audit/stages/control_catalog.py
 import logging
-import json
 from typing import List, Dict, Any, Optional
 
+from src.assets_loader import load_asset_json
 from src.constants import CONTROL_CATALOG_PATH
 
 
@@ -28,8 +28,7 @@ class ControlCatalog:
 
     def _load_and_parse_catalog(self):
         """Loads the catalog JSON and builds the Baustein and control lookup maps."""
-        with open(self.catalog_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        data = load_asset_json(self.catalog_path)
 
         self._baustein_titles = {b["id"]: b.get("titel", "") for b in data.get("bausteine", [])}
         self._baustein_map = {baustein_id: [] for baustein_id in self._baustein_titles}

@@ -4,6 +4,7 @@ import logging
 import json
 from typing import Dict, Any
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
@@ -20,12 +21,9 @@ class PreviousReportScanner:
         self.config = config
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
     async def _run_extraction_task(self, task_name: str, gcs_uri: str) -> Dict[str, Any]:
         """
@@ -47,7 +45,7 @@ class PreviousReportScanner:
         try:
             task_config = self.prompt_config["stages"][self.STAGE_NAME][task_name]
             prompt = task_config["prompt"]
-            schema = self._load_asset_json(task_config["schema_path"])
+            schema = load_asset_json(task_config["schema_path"])
 
             return await self.ai_client.generate_checked_json_response(
                 prompt=prompt,

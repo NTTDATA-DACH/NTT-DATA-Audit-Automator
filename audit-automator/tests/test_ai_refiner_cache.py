@@ -18,6 +18,8 @@ import pytest
 pytest.importorskip("google.genai")
 pytest.importorskip("fitz")
 
+from google.cloud.exceptions import NotFound
+
 from src.audit.stages.gs_extraction.ai_refiner import AiRefiner
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUPED_BLOCKS_PATH, INDIVIDUAL_RESULTS_PREFIX
 
@@ -36,10 +38,15 @@ class _FakeGcsClient:
         return path in self.stored
 
     async def read_json_async(self, path):
+        if path not in self.stored:
+            raise NotFound(path)
         return self.stored[path]
 
     async def upload_from_string_async(self, content, destination_blob_name):
         self.stored[destination_blob_name] = json.loads(content)
+
+    async def write_json_async(self, data, destination_blob_name):
+        await self.upload_from_string_async(json.dumps(data, indent=2, ensure_ascii=False), destination_blob_name)
 
 
 def _refiner(gcs, per_kuerzel_results):

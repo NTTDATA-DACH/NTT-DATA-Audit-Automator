@@ -1,11 +1,11 @@
 # file: src/audit/stages/stage_3_dokumentenpruefung.py
 import logging
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from google.cloud.exceptions import NotFound
-from collections import defaultdict
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -32,36 +32,19 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
-    SUMMARY_DEPENDENCIES = {
-        "ergebnisDerStrukturanalyse": [
-            "definitionDesInformationsverbundes", "bereinigterNetzplan", "listeDerGeschaeftsprozesse",
-            "listeDerAnwendungen", "listeDerItSysteme", "listeDerRaeumeGebaeudeStandorte",
-            "listeDerKommunikationsverbindungen", "stichprobenDokuStrukturanalyse", "listeDerDienstleister"
-        ],
-        "ergebnisDerSchutzbedarfsfeststellung": [
-            "definitionDerSchutzbedarfskategorien", "schutzbedarfGeschaeftsprozesse", "schutzbedarfAnwendungen",
-            "schutzbedarfItSysteme", "schutzbedarfRaeume", "schutzbedarfKommunikationsverbindungen",
-            "stichprobenDokuSchutzbedarf"
-        ],
-        "ergebnisDerModellierung": ["modellierungsdetails"],
-        "ergebnisItGrundschutzCheck": ["detailsZumItGrundschutzCheck", "benutzerdefinierteBausteine"],
-        # 'ergebnisDerDokumentenpruefung' is the final summary and will use all findings by default.
-    }
-    
+
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
         self._ground_truth_map = None # Lazy loaded
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME} with dynamic execution plan.")
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _get_ground_truth_map(self) -> Dict[str, Any]:
         """Lazy loads the ground truth map and caches it."""
@@ -79,10 +62,10 @@ class Chapter3Runner:
     ) -> None:
         """Safely apply a single-question AI response to `answers`/`findings`.
 
-        MAX-15b: the targeted Q-handlers use `generate_json_response` (schema is
-        requested but NOT validated), so a degraded or token-truncated reply can
-        be missing `answers`/`finding`. Guard the nested access here instead of
-        letting an IndexError/KeyError abort the whole stage. A malformed reply is
+        The AI client now validates every reply against the schema it sent, so a
+        response missing `answers`/`finding` is retried there first. This stays as the
+        last line of defence — it also fixes the policy for a laxer schema: rather
+        than letting an IndexError/KeyError abort the whole stage, a malformed reply is
         scored conservatively (answer = False) and flagged as an 'AG' finding so it
         surfaces for human review rather than silently passing.
         """
@@ -180,7 +163,7 @@ class Chapter3Runner:
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
             res = await self.ai_client.generate_checked_json_response(
-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"),
+                prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"),
                 gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
             )
             self._record_targeted_answer(res, answers, 1, findings, "3.6.1-Q2 (entbehrlich)")
@@ -204,7 +187,7 @@ class Chapter3Runner:
                 question=questions_config["muss_anforderungen"],
                 json_data=json.dumps(muss_anforderungen, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
+            res = await self.ai_client.generate_checked_json_response(prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
             self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
         else:
             answers[2] = True
@@ -234,7 +217,7 @@ class Chapter3Runner:
                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_checked_json_response(
-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
             )
             self._record_targeted_answer(res, answers, 3, findings, "3.6.1-Q4 (nicht umgesetzt)")
@@ -270,7 +253,7 @@ class Chapter3Runner:
     def _build_execution_plan_from_template(self) -> List[Dict[str, Any]]:
         """Parses master_report_template.json to build a dynamic list of tasks."""
         plan = []
-        template = self._load_asset_json(self.TEMPLATE_PATH)
+        template = load_asset_json(self.TEMPLATE_PATH)
         ch3_template = template.get("bsiAuditReport", {}).get("dokumentenpruefung", {})
         
         for subchapter_name, subchapter_data in ch3_template.items():
@@ -332,7 +315,7 @@ class Chapter3Runner:
         if not uris and task.get("source_categories") is not None:
              return {key: {"error": f"No source documents for categories: {task.get('source_categories')}"}}
         try:
-            data = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
+            data = await self.ai_client.generate_checked_json_response(prompt, load_asset_json(schema_path), uris, f"Chapter-3: {key}")
             if key == "aktualitaetDerReferenzdokumente":
                 coverage_finding = self._check_document_coverage()
                 if coverage_finding['category'] != 'OK': data['finding'] = coverage_finding
@@ -346,7 +329,7 @@ class Chapter3Runner:
         key = task["key"]
         prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
         try:
-            return {key: await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
+            return {key: await self.ai_client.generate_checked_json_response(prompt, load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
         except Exception as e:
             return {key: {"error": str(e)}}
 
@@ -371,19 +354,20 @@ class Chapter3Runner:
         ai_tasks = [t for t in self.execution_plan if t and (t.get("type") == "ai_driven" or t.get("key") == "modellierungsdetails")]
         summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
 
+        # The 3.6.1 block and the ~22 AI subchapters are independent, so they run in the
+        # same gather instead of the 3.6.1 block gating the rest of the stage.
+        coroutines = []
         for task in custom_tasks:
-            key = task['key']
-            logging.info(f"--- Processing custom logic task: {key} ---")
-            if key == 'detailsZumItGrundschutzCheck':
-                result = await self._process_details_zum_it_grundschutz_check()
-                processed_results.append(result)
-                aggregated_results.update(result)
-        
-        if ai_tasks:
-            ai_coroutines = [self._process_ai_subchapter(task) for task in ai_tasks]
-            ai_results = await gather_resilient(*ai_coroutines, context="Chapter-3: AI subchapters")
-            processed_results.extend(ai_results)
-            for res in ai_results: aggregated_results.update(res)
+            if task['key'] == 'detailsZumItGrundschutzCheck':
+                logging.info(f"--- Queuing custom logic task: {task['key']} ---")
+                coroutines.append(self._process_details_zum_it_grundschutz_check())
+        coroutines.extend(self._process_ai_subchapter(task) for task in ai_tasks)
+
+        if coroutines:
+            results = await gather_resilient(*coroutines, context="Chapter-3: subchapters")
+            processed_results.extend(results)
+            for res in results:
+                aggregated_results.update(res)
 
         if summary_tasks:
             findings_text = self._get_findings_from_results(processed_results)

@@ -196,7 +196,7 @@
         "schema_path": "assets/schemas/scan_report_ch1_schema.json"
       },
       "extract_chapter_4": {
-        "prompt": "You are an expert data extraction system. From the attached previous audit report, extract the 'Auswahl Bausteine' tables from subchapters 4.1.1 and 4.1.2, and the 'Auswahl Standorte' table from 4.1.4. Capture all rows from all three tables.",
+        "prompt": "You are an expert data extraction system. From the attached previous audit report, extract the 'Auswahl Bausteine' tables from subchapters 4.1.1 and 4.1.2, and the 'Auswahl Standorte' table from 4.1.4. Capture all rows from all three tables.\n\nThe Baustein tables of older reports often hold the Zielobjekt in a single column. Split it: put the descriptive name in 'Zielobjekt-Name' and the Kürzel/ID in 'Zielobjekt-Kürzel'. If only one of the two is documented, repeat that value in both fields rather than leaving one empty.",
         "schema_path": "assets/schemas/scan_report_ch4_schema.json"
       },
       "extract_chapter_7": {

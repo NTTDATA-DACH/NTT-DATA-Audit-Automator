@@ -55,9 +55,9 @@ and calls Vertex AI + Document AI, so you need credentials and a bucket.
     gcloud auth application-default login                # ADC for GCS/DocAI/Vertex
     ```
 2.  **Set environment variables.** If you have Terraform state, `source audit-automator/envs.sh`
-    pulls project/bucket/region/DocAI from it, sets `TEST=true`, and defines an `auditor`
-    helper. Otherwise export the seven required vars manually (`GCP_PROJECT_ID`, `BUCKET_NAME`,
-    `REGION`, `DOC_AI_PROCESSOR_NAME`, `SOURCE_PREFIX=source_documents/`, `OUTPUT_PREFIX=output/`,
+    pulls project/bucket/DocAI from it, sets `TEST=true`, and defines an `auditor`
+    helper. Otherwise export the six required vars manually (`GCP_PROJECT_ID`, `BUCKET_NAME`,
+    `DOC_AI_PROCESSOR_NAME`, `SOURCE_PREFIX=source_documents/`, `OUTPUT_PREFIX=output/`,
     `AUDIT_TYPE`).
 3.  **Generate mock source documents** (no real customer data needed). Classification is
     **filename-based**, so the generator names each PDF after the BSI category it represents and

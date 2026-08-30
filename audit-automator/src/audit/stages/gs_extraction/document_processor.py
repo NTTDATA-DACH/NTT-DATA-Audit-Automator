@@ -122,10 +122,7 @@ class DocumentProcessor:
         }
         
         # Save to GCS
-        await self.gcs_client.upload_from_string_async(
-            json.dumps(final_layout_json, indent=2, ensure_ascii=False),
-            FINAL_MERGED_LAYOUT_PATH
-        )
+        await self.gcs_client.write_json_async(final_layout_json, FINAL_MERGED_LAYOUT_PATH)
         logging.info(f"Successfully merged, re-indexed, and saved final layout to {FINAL_MERGED_LAYOUT_PATH}")
 
     def _reindex_and_prune_blocks(self, blocks: List[Dict[str, Any]]):

@@ -111,8 +111,7 @@ This is a critical architectural pattern for ensuring reliability.
 | :--- | :---: | :--- | :--- |
 | `GCP_PROJECT_ID` | Yes | Terraform | The Google Cloud Project ID. |
 | `BUCKET_NAME` | Yes | Terraform | The GCS bucket for all I/O operations. |
-| `REGION` | Yes | Terraform | Region for GCS and Document AI (Vertex AI calls use the `global` endpoint). |
-| `DOC_AI_PROCESSOR_NAME` | Yes | Terraform | Full resource name of the Document AI Layout Parser. |
+| `DOC_AI_PROCESSOR_NAME` | Yes | Terraform | Full resource name of the Document AI Layout Parser (its location is derived from this name). |
 | `AUDIT_TYPE` | Yes | User Input | Specifies the audit type (e.g., "Zertifizierungsaudit"). |
 | `SOURCE_PREFIX` | Yes | Script | GCS prefix for source documents (e.g., `source_documents/`). |
 | `OUTPUT_PREFIX` | Yes | Script | GCS prefix for generated files (e.g., `output/`). |

@@ -35,11 +35,13 @@ fi
 echo "🔹 Fetching infrastructure details from Terraform..."
 
 # --- Dynamic Values from Terraform ---
-export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-export REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
-export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
-export DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
-# NEW: Fetch the public domain if it exists, otherwise set to empty string.
+# Assign first, export second (SC2155): `export VAR="$(cmd)"` hides the command's exit
+# status from `set -e`, so a failing terraform output would leave the variable empty and
+# still print the success banner below.
+GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
+BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
+DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
+export GCP_PROJECT_ID BUCKET_NAME DOC_AI_PROCESSOR_NAME
 
 # --- Static Values for Local Development ---
 # These prefixes now reflect the simpler GCS layout.
@@ -65,6 +67,13 @@ auditor() {
     python -m src.main "$@"
 }
 
+
+for required in GCP_PROJECT_ID BUCKET_NAME DOC_AI_PROCESSOR_NAME; do
+    if [ -z "${!required}" ]; then
+        echo "❌ Error: '${required}' is empty — the corresponding terraform output returned nothing."
+        return 1
+    fi
+done
 
 set +e
 echo "✅ Environment variables configured successfully'."

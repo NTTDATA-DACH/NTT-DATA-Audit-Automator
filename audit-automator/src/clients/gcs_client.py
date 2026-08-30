@@ -86,6 +86,24 @@ class GcsClient:
         blob.upload_from_string(content, content_type=content_type)
         logging.info(f"Upload complete for {destination_blob_name}.")
 
+    def write_json(self, data: Any, destination_blob_name: str) -> None:
+        """Serializes `data` and uploads it as a JSON object.
+
+        One place decides the serialisation options, so the audit artefacts stay
+        consistently formatted and readable (indent + real umlauts).
+        """
+        self.upload_from_string(
+            content=json.dumps(data, indent=2, ensure_ascii=False),
+            destination_blob_name=destination_blob_name
+        )
+
+    async def write_json_async(self, data: Any, destination_blob_name: str) -> None:
+        """Asynchronous counterpart of `write_json`."""
+        await self.upload_from_string_async(
+            content=json.dumps(data, indent=2, ensure_ascii=False),
+            destination_blob_name=destination_blob_name
+        )
+
     async def read_json_async(self, blob_name: str) -> Any:
         """Asynchronously downloads and parses a JSON file from GCS."""
         loop = asyncio.get_running_loop()
@@ -99,27 +117,8 @@ class GcsClient:
         content = blob.download_as_text() # This raises NotFound if not present.
         return json.loads(content)
 
-    def read_text_file(self, blob_name: str) -> str:
-        """Downloads and returns the content of a text-based file from GCS."""
-        logging.info(f"Attempting to read text from: gs://{self.bucket.name}/{blob_name}")
-        blob = self.bucket.blob(blob_name)
-        return blob.download_as_text()
-
     def blob_exists(self, blob_name: str) -> bool:
         """Checks if a blob exists in the GCS bucket."""
         logging.debug(f"Checking for existence of blob: gs://{self.bucket.name}/{blob_name}")
         blob = self.bucket.blob(blob_name)
         return blob.exists()
-
-    def copy_blob(self, source_blob_name: str, destination_blob_name: str):
-        """Copies a blob within the same bucket."""
-        source_blob = self.bucket.blob(source_blob_name)
-        self.bucket.copy_blob(source_blob, self.bucket, destination_blob_name)
-        logging.info(f"Copied gs://{self.bucket.name}/{source_blob_name} to gs://{self.bucket.name}/{destination_blob_name}")
-
-    async def copy_blob_async(self, source_blob_name: str, destination_blob_name: str):
-        """Asynchronously copies a blob within the same bucket."""
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None, self.copy_blob, source_blob_name, destination_blob_name
-        )

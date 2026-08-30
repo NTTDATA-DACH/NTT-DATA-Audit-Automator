@@ -1,11 +1,11 @@
 # src/clients/rag_client.py
 import logging
 import json
-import asyncio
 from typing import List, Dict, Any, Optional
 
 from google.cloud.exceptions import NotFound
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -29,7 +29,7 @@ class RagClient:
         self.ai_client = ai_client
         self._document_category_map: Optional[Dict[str, List[str]]] = None
         self._all_source_files: List[str] = []
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
     @classmethod
     async def create(cls, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, force_remap: bool = False):
@@ -44,8 +44,6 @@ class RagClient:
         self._all_source_files = [blob.name for blob in self.gcs_client.list_files()]
         await self._ensure_document_map_exists(force_remap=force_remap)
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _classify_files(self, files_to_classify: List[str]) -> List[Dict[str, str]]:
         """
@@ -66,7 +64,7 @@ class RagClient:
 
         etl_config = self.prompt_config["stages"]["ETL"]["classify_documents"]
         prompt_template = etl_config["prompt"]
-        schema = self._load_asset_json(etl_config["schema_path"])
+        schema = load_asset_json(etl_config["schema_path"])
         
         filenames_json = json.dumps(filenames, indent=2)
         prompt = prompt_template.format(filenames_json=filenames_json)
@@ -116,10 +114,7 @@ class RagClient:
             )
             document_map = [{"filename": full_path, "category": "Sonstiges"} for full_path in self._all_source_files]
 
-        self.gcs_client.upload_from_string(
-            content=json.dumps({"document_map": document_map}, indent=2, ensure_ascii=False),
-            destination_blob_name=DOC_MAP_PATH
-        )
+        self.gcs_client.write_json({"document_map": document_map}, DOC_MAP_PATH)
         logging.info(f"Saved document map to '{DOC_MAP_PATH}'.")
 
     async def _ensure_document_map_exists(self, force_remap: bool = False) -> None:
@@ -199,10 +194,7 @@ class RagClient:
                 kept.extend({"filename": name, "category": "Sonstiges"} for name in unclassified)
 
         if stale or unclassified:
-            self.gcs_client.upload_from_string(
-                content=json.dumps({"document_map": kept}, indent=2, ensure_ascii=False),
-                destination_blob_name=DOC_MAP_PATH
-            )
+            self.gcs_client.write_json({"document_map": kept}, DOC_MAP_PATH)
             logging.info(f"Updated document map at '{DOC_MAP_PATH}' after reconciliation with the bucket.")
 
         return kept

@@ -19,7 +19,6 @@ class AppConfig:
     source_prefix: str
     output_prefix: str
     audit_type: str
-    region: str
     doc_ai_processor_name: str
     max_concurrent_ai_requests: int
     is_test_mode: bool
@@ -40,8 +39,12 @@ def load_config_from_env() -> AppConfig:
     # will be set directly.
     load_dotenv()
 
+    # REGION is deliberately absent: nothing in the application reads it. Vertex AI is
+    # pinned to the "global" endpoint, GCS takes no region, and Document AI derives its
+    # location from the processor name. The deploy scripts still use their own REGION
+    # for `gcloud run jobs --region`.
     required_vars = [
-        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "REGION", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME"
+        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME"
     ]
     
     config_values = {}

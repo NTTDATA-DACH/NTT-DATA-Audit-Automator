@@ -4,6 +4,7 @@ import json
 import os
 from typing import Dict, Any, List, Tuple, Optional
 
+from src.assets_loader import load_asset_json
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
 from src.audit.async_utils import gather_resilient
@@ -26,12 +27,8 @@ class AiRefiner:
         self.cache_manager = CacheManager(gcs_client)
         self.chunk_processor = ChunkProcessor()
         self.data_processor = DataProcessor()
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
-    def _load_asset_json(self, path: str) -> dict:
-        """Load JSON configuration from assets."""
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
     async def refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
         """
@@ -53,7 +50,7 @@ class AiRefiner:
         
         refine_config = self.prompt_config["stages"]["Chapter-3"]["refine_layout_parser_group"]
         prompt_template = refine_config["prompt"]
-        schema = self._load_asset_json(refine_config["schema_path"])
+        schema = load_asset_json(refine_config["schema_path"])
         
         zielobjekt_map = {z['kuerzel']: z['name'] for z in system_map.get("zielobjekte", [])}
 
@@ -90,10 +87,7 @@ class AiRefiner:
             final_output = self.data_processor.assemble_final_results(results)
 
         # Save consolidated results
-        await self.gcs_client.upload_from_string_async(
-            json.dumps(final_output, indent=2, ensure_ascii=False), 
-            EXTRACTED_CHECK_DATA_PATH
-        )
+        await self.gcs_client.write_json_async(final_output, EXTRACTED_CHECK_DATA_PATH)
         logging.info(f"Saved final refined check data with {len(final_output['anforderungen'])} requirements")
 
     async def _process_all_groups(self, valid_groups: Dict[str, List[Dict]], zielobjekt_map: Dict[str, str],

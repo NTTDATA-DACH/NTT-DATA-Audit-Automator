@@ -9,8 +9,9 @@ from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
-from jsonschema import validate, ValidationError
+from jsonschema import validate, SchemaError, ValidationError
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.constants import (
     CHECKER_MODEL,
@@ -36,8 +37,7 @@ class AiClient:
     def __init__(self, config: AppConfig):
         self.config = config
 
-        with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-            prompt_config = json.load(f)
+        prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
         base_system_message = prompt_config.get("system_message", "")
         if not base_system_message:
@@ -47,8 +47,9 @@ class AiClient:
         current_date = datetime.date.today().strftime("%Y-%m-%d")
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        # Vertex AI location. "global" is intentional here for broad Gemini model
-        # availability; config.region still drives other GCP resources (GCS, Document AI).
+        # Vertex AI location. "global" is intentional for broad Gemini model availability.
+        # No other client takes a region either: GCS is addressed by bucket name and
+        # Document AI derives its location from the processor name.
         vertex_location = "global"
         self.client = genai.Client(
             vertexai=True,
@@ -149,32 +150,22 @@ class AiClient:
             # Clean JSON error without the full traceback
             raise ValueError(f"Failed to parse model response as JSON: {str(e).split(':')[0]}")
 
-    async def generate_json_response_single_attempt(
-        self,
-        prompt: str,
-        json_schema: Dict[str, Any],
-        gcs_uris: List[str] = None,
-        request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Single attempt JSON generation - used for model fallback scenarios.
-        Fails fast on JSON errors rather than retrying 5 times.
-        """
-        model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
-        gen_config = self._build_generation_config(json_schema, model_to_use)
-        contents = self._build_contents(prompt, gcs_uris)
+    @staticmethod
+    def _validate_against_schema(payload: Any, json_schema: Dict[str, Any], request_context_log: str) -> None:
+        """Validates a model reply against the schema that was sent with the request.
 
-        logging.info(f"[{request_context_log}] Single attempt with model '{model_to_use}'...")
-        response = await self.client.aio.models.generate_content(
-            model=model_to_use,
-            contents=contents,
-            config=gen_config,
-        )
-
-        response_json = self._extract_json(response)
-        logging.info(f"[{request_context_log}] Successfully generated JSON response.")
-        return response_json
+        Raises ValueError on a mismatch so the caller's retry loop treats it like any
+        other bad response. A broken schema asset is a code bug, not a model failure,
+        so it is logged as critical and also raised rather than silently skipped.
+        """
+        try:
+            validate(instance=payload, schema=json_schema)
+        except ValidationError as e:
+            location = " -> ".join(str(p) for p in e.absolute_path) or "<root>"
+            raise ValueError(f"Response does not match the requested schema at '{location}': {e.message}")
+        except SchemaError as e:
+            logging.critical(f"[{request_context_log}] The requested JSON schema is itself invalid: {e.message}")
+            raise ValueError(f"Invalid JSON schema supplied: {e.message}") from e
 
     async def generate_json_response(
         self,
@@ -190,6 +181,11 @@ class AiClient:
         optionally providing GCS files as context. Implements an async retry loop
         with exponential backoff and connection limiting.
 
+        The reply is validated against the schema that was sent, and a mismatch is
+        retried like any other failure. Constrained decoding makes that rare, but
+        "rare" is not "never" — and an unvalidated reply reaches the report, where a
+        missing key becomes a silently wrong audit statement.
+
         Args:
             prompt: The text prompt for the model.
             json_schema: The JSON schema to enforce on the model's output.
@@ -199,7 +195,7 @@ class AiClient:
             max_retries: Optional override for the number of retries (defaults to MAX_RETRIES).
 
         Returns:
-            The parsed JSON response from the model.
+            The parsed, schema-valid JSON response from the model.
         """
         retries = max_retries if max_retries is not None else MAX_RETRIES
 
@@ -225,6 +221,7 @@ class AiClient:
                     )
 
                 response_json = self._extract_json(response)
+                self._validate_against_schema(response_json, json_schema, request_context_log)
                 logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                 return response_json
 
@@ -386,29 +383,3 @@ class AiClient:
         self._record_checker_verdict(request_context_log, False, problems, True)
         return correction
 
-    async def generate_validated_json_response(
-        self,
-        prompt: str,
-        json_schema: Dict[str, Any],
-        gcs_uris: List[str] = None,
-        request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Generates and validates a JSON response from the AI model.
-
-        Raises:
-            ValidationError: If the response doesn't match the provided schema
-
-        Returns:
-            The validated JSON response from the model
-        """
-        try:
-            result = await self.generate_json_response(prompt, json_schema, gcs_uris, request_context_log, model_override)
-            validate(instance=result, schema=json_schema)
-            return result
-        except ValidationError as e:
-            # Clean validation error message
-            clean_msg = e.message.split('\n')[0] if '\n' in e.message else e.message
-            logging.error(f"[{request_context_log}] Schema validation failed: {clean_msg}")
-            raise ValidationError(f"Response validation failed: {clean_msg}")

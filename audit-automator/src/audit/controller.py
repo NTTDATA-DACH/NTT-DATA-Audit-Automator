@@ -41,14 +41,15 @@ class AuditController:
             "Chapter-5": Chapter5Runner,
             "Chapter-7": Chapter7Runner,
         }
-        # This defines the exact order of dependencies for each runner's constructor.
+        # The exact order of dependencies for each runner's constructor. The extraction
+        # stage is absent on purpose: its Document AI client is built per run (see
+        # run_single_stage), so an entry here would never be reached.
         self.runner_dependencies = {
             "Scan-Report": (self.config, self.ai_client, self.rag_client),
-            "Grundschutz-Check-Extraction": (self.config, self.gcs_client, None, self.ai_client, self.rag_client), # Placeholder for doc_ai_client
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.gcs_client, self.ai_client, self.rag_client),
-            "Chapter-5": (self.config, self.gcs_client, self.ai_client),
+            "Chapter-5": (self.config, self.gcs_client),
             "Chapter-7": (self.config, self.gcs_client),
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")
@@ -184,10 +185,7 @@ class AuditController:
 
         # Single source of truth: write to the same constant the readers use
         # (run_single_stage and ReportGenerator), so the write/read paths can't drift.
-        self.gcs_client.upload_from_string(
-            content=json.dumps(merged, indent=2, ensure_ascii=False),
-            destination_blob_name=ALL_FINDINGS_PATH
-        )
+        self.gcs_client.write_json(merged, ALL_FINDINGS_PATH)
         logging.info(
             f"Saved {len(merged)} findings to {ALL_FINDINGS_PATH} "
             f"({len(stage_findings)} from stage '{stage_name}')."
@@ -218,10 +216,7 @@ class AuditController:
 
         combined = [e for e in existing if e.get("stage") != stage_name] + new_entries
 
-        self.gcs_client.upload_from_string(
-            content=json.dumps(combined, indent=2, ensure_ascii=False),
-            destination_blob_name=CHECKER_LOG_PATH
-        )
+        self.gcs_client.write_json(combined, CHECKER_LOG_PATH)
         corrections = sum(1 for e in new_entries if e.get("korrektur_uebernommen"))
         logging.info(
             f"Checker log for '{stage_name}': {len(new_entries)} verdict(s), "
@@ -328,10 +323,7 @@ class AuditController:
                 result_data = await stage_runner.run(force_overwrite=force_overwrite)
 
                 if stage_name != "Grundschutz-Check-Extraction":
-                    self.gcs_client.upload_from_string(
-                        content=json.dumps(result_data, indent=2, ensure_ascii=False),
-                        destination_blob_name=stage_output_path
-                    )
+                    self.gcs_client.write_json(result_data, stage_output_path)
                     logging.info(f"Successfully saved results for stage '{stage_name}'.")
             except Exception as e:
                 logging.error(f"Stage '{stage_name}' failed: {e}", exc_info=True)

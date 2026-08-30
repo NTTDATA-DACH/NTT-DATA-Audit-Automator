@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any
 from google.cloud.exceptions import NotFound
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -24,14 +25,11 @@ class Chapter4Runner:
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         self.subchapter_definitions = self._load_subchapter_definitions()
         self.ground_truth_map = None
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
     def _load_ground_truth_map(self) -> None:
         """Loads the ground truth system structure map from GCS."""
@@ -93,7 +91,7 @@ class Chapter4Runner:
         ground_truth_json_str = json.dumps(self.ground_truth_map, indent=2, ensure_ascii=False)
         prompt = prompt_template.replace("{ground_truth_map_json}", ground_truth_json_str)
         
-        schema = self._load_asset_json(definition["schema_path"])
+        schema = load_asset_json(definition["schema_path"])
         
         # Check if this task needs document context
         gcs_uris = []

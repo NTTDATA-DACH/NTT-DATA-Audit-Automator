@@ -50,7 +50,6 @@ def _build_config() -> AppConfig:
         source_prefix="",
         output_prefix="",
         audit_type="",
-        region=os.getenv("REGION", "europe-west3"),
         doc_ai_processor_name="",
         max_concurrent_ai_requests=1,
         is_test_mode=True,
@@ -94,11 +93,15 @@ async def _run() -> int:
         # Report what is actually sent: this script is the gate for the model refresh
         # (current model IDs, temperature 1, thinking level, JSON-Schema field).
         effective = client._build_generation_config(schema, model_id)
-        schema_field = "response_json_schema" if effective.response_json_schema else "response_schema"
-        thinking = effective.thinking_config.thinking_level if effective.thinking_config else None
+        # getattr, not attribute access: _build_generation_config falls back to the older
+        # fields when the installed SDK lacks them, and reading them directly would make
+        # this script fail on exactly the SDKs the fallback exists for.
+        schema_field = "response_json_schema" if getattr(effective, "response_json_schema", None) else "response_schema"
+        thinking_config = getattr(effective, "thinking_config", None)
+        thinking = thinking_config.thinking_level if thinking_config else None
         print(f"    config: temperature={effective.temperature}, thinking_level={thinking}, schema via {schema_field}")
         try:
-            result = await client.generate_validated_json_response(
+            result = await client.generate_json_response(
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=gcs_uris,

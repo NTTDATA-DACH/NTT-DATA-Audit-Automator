@@ -1,6 +1,5 @@
 # bsi-audit-automator/src/audit/stages/stage_gs_check_extraction.py
 import logging
-import json
 from typing import Dict, Any
 
 from src.config import AppConfig
@@ -8,7 +7,6 @@ from src.clients.gcs_client import GcsClient
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
-from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 
 from .gs_extraction.ground_truth_mapper import GroundTruthMapper
 from .gs_extraction.document_processor import DocumentProcessor

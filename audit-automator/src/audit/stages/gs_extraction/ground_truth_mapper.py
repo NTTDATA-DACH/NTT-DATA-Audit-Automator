@@ -1,9 +1,9 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/ground_truth_mapper.py
 import logging
 import json
-import os
 from typing import Dict, Any, List
 
+from src.assets_loader import load_asset_json
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.clients.gcs_client import GcsClient
@@ -20,12 +20,8 @@ class GroundTruthMapper:
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.gcs_client = gcs_client
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
-    def _load_asset_json(self, path: str) -> dict:
-        """Load JSON configuration from assets."""
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
     def _structure_mappings(self, flat_mappings: List[Dict[str, str]]) -> Dict[str, List[str]]:
         """Convert flat mapping list from AI into structured dict of Baustein ID to Zielobjekt Kürzel list."""
@@ -79,7 +75,7 @@ class GroundTruthMapper:
                 )
             zielobjekte_result = await self.ai_client.generate_checked_json_response(
                 prompt=z_task_config["prompt"], 
-                json_schema=self._load_asset_json(z_task_config["schema_path"]), 
+                json_schema=load_asset_json(z_task_config["schema_path"]), 
                 gcs_uris=z_uris, 
                 request_context_log="GT: extract_zielobjekte",
                 model_override=GROUND_TRUTH_MODEL
@@ -95,7 +91,7 @@ class GroundTruthMapper:
                 )
             mappings_result = await self.ai_client.generate_checked_json_response(
                 prompt=m_task_config["prompt"], 
-                json_schema=self._load_asset_json(m_task_config["schema_path"]), 
+                json_schema=load_asset_json(m_task_config["schema_path"]), 
                 gcs_uris=m_uris, 
                 request_context_log="GT: extract_baustein_mappings",
                 model_override=GROUND_TRUTH_MODEL
@@ -117,10 +113,7 @@ class GroundTruthMapper:
                 )
 
             # Save to GCS
-            await self.gcs_client.upload_from_string_async(
-                json.dumps(system_map, indent=2, ensure_ascii=False), 
-                GROUND_TRUTH_MAP_PATH
-            )
+            await self.gcs_client.write_json_async(system_map, GROUND_TRUTH_MAP_PATH)
             logging.info(f"Successfully created and saved system structure map to {GROUND_TRUTH_MAP_PATH}.")
             
             return system_map
