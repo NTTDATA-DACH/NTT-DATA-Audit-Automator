@@ -93,6 +93,48 @@ scripts/test_full_run.sh --skip-run      # provision + upload mocks only
 ```
 Override defaults via env, e.g. `BUCKET_NAME=my-test-bucket GCP_PROJECT_ID=… scripts/test_full_run.sh`.
 
+### Updating the BSI requirement catalog
+The audit checks against the **official BSI IT-Grundschutz-Kompendium, Edition 2023**. The
+runtime does not parse XML: a build-time converter turns the official BSI XML into the lean
+catalog at `audit-automator/assets/json/bsi_kompendium_ed2023.json`, which is committed.
+
+```bash
+cd audit-automator
+python -m src.tools.build_bsi_catalog        # downloads the pinned XML once into .cache/ed23/
+```
+
+The source URL is sha256-pinned in `src/tools/ed23_xml.py`, and the converter asserts the
+reference counts of that edition (111 Bausteine, 1,834 active requirements, 290 ENTFALLEN)
+plus canonical IDs and valid B/S/H levels. If the BSI publishes a new edition, the hash check
+fails on purpose — update the pin and the expected counts deliberately, then commit the
+regenerated JSON. `tests/test_catalog_invariants.py` re-checks the committed file in CI.
+
+Requirements from Bausteine the institution defined itself are not part of the official
+Kompendium; they resolve to level `unbekannt` and are handled by a dedicated prompt rule.
+
+### AI configuration and the maker/checker pass
+Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`):
+
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `GROUND_TRUTH_MODEL` | `gemini-3.1-pro` | Default model for document reasoning |
+| `CHUNK_PROCESSING_MODEL` | `gemini-3.7-flash` | High-volume path in the AI refiner |
+| `THINKING_LEVEL` | `minimal` | `minimal`/`low`/`medium`/`high`; clamped to `low` on pro models |
+| `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
+| `CHECKER_MODEL` | = `GROUND_TRUTH_MODEL` | Model used for that second opinion |
+
+With the maker/checker enabled, every answer that reaches the report or produces a finding is
+re-judged by a second, independent call against the same source documents: it checks evidence,
+AG/AS/E categorisation and completeness, and may replace the answer with a corrected one. Every
+verdict is written to `output/intermediate/checker_log.json` as the QS trail of the audit —
+review it alongside the report. This roughly doubles the AI calls on those stages; set
+`ENABLE_MAKER_CHECKER=false` to fall back to a single pass.
+
+Before rolling out changed model IDs, verify them against the real project:
+```bash
+cd audit-automator && GCP_PROJECT_ID=<project> python tests/manual/live_ai_smoke.py
+```
+
 ### Running the tests
 Unit tests are dependency-light and run from the `audit-automator/` directory; CI runs the
 same suite on every push/PR (`.github/workflows/ci.yml`):
@@ -106,7 +148,7 @@ python -m pytest
 
 The audit pipeline runs in a strict, dependency-aware order.
 
-*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/document_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages.
+*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/intermediate/rag/document_category_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages.
 
 *   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis.
     * It is important to check the results of this stage, as they lay theground truth for all the following ones! Check /output/intermediate/gs_extraction/system_structure_map.json for the correct name of the "Informationsverbund" and at least do a qs of extracted_grundschutz_check_merged.json as well.

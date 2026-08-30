@@ -43,9 +43,9 @@ Together, these files allow the audit process to be modified and extended by sim
 
 **Objective:** To create a persistent, intelligent index of all source documents. This map is the foundation for finding targeted documents in later phases. This is a one-time, on-demand setup step.
 
-1.  **Trigger & Idempotency Check:** The `RagClient` (acting as the "Document Finder") first checks GCS for `output/document_map.json`. If this map already exists, the entire classification phase is skipped, making the process efficient and idempotent.
+1.  **Trigger & Idempotency Check:** The `RagClient` (acting as the "Document Finder") first checks GCS for `output/intermediate/rag/document_category_map.json`. If this map already exists, the entire classification phase is skipped, making the process efficient and idempotent.
 2.  **On-Demand Creation:** If the map is missing, the `RagClient` orchestrates its creation:
-    *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to `gemini-2.5-pro` with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
+    *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to the configured model (`GROUND_TRUTH_MODEL`) with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
     *   **Robust Fallback:** This step is designed for resilience. If the AI call fails for any reason (e.g., API error, invalid response), the application does not halt. Instead, the `RagClient` logs a critical warning and generates a **fallback map**, classifying every document as "Sonstiges" (Miscellaneous). This ensures the pipeline can always proceed, with the known consequence of reduced precision in document selection.
 3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous lookup of document URIs for all subsequent audit tasks.
 
@@ -109,7 +109,7 @@ The goal is to convert the semi-structured `Grundschutz-Check` PDF into structur
 1.  **Load All Components:** The `ReportGenerator` loads the `master_report_template.json`, all individual stage result files (e.g., `Chapter-3.json`, `Chapter-4.json`), and the central `all_findings.json`.
 2.  **Merge and Populate:** It systematically traverses the master template's structure and injects the content from the corresponding stage results.
 3.  **Populate Findings Tables:** It specifically populates the deviation and recommendation tables in Chapter 7.2 by iterating through the `all_findings.json` file.
-4.  **Save Final Report:** The fully assembled, validated JSON report is saved to `output/final_audit_report.json`.
+4.  **Save Final Report:** The fully assembled, validated JSON report is saved to `output/results/report_<YYMMDD>.json`.
 
 ## **Phase 1: Staged AI-Driven Analysis & Report Generation**
 
