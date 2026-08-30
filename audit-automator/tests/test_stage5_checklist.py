@@ -64,14 +64,37 @@ def test_previously_broken_baustein_now_produces_rows(runner):
     assert all(a["nummer"].startswith("INF.5.A") for a in anforderungen)
 
 
-def test_custom_baustein_yields_an_empty_but_valid_subchapter(runner):
-    """Custom Bausteine are gone from the catalog: an empty list, not a crash."""
+def test_custom_baustein_is_filled_from_the_extracted_check_data(runner):
+    """A custom Baustein is not in the Kompendium, but its requirements are in the
+    customer's Grundschutz-Check — dropping them would shrink the audited scope."""
+    extracted = {
+        ("ORP.6.A1", "SVR-01"): {
+            "titel": "Zugriffsrechte in der Cloud",
+            "umsetzungsstatus": "teilweise",
+            "umsetzungserlaeuterung": "IAM-Rollen sind teilweise dokumentiert.",
+        },
+        ("ORP.6.A2", "SVR-01"): {"titel": "Rezertifizierung", "umsetzungsstatus": "Nein"},
+        ("ORP.6.A1", "APP-02"): {"titel": "Anderes Zielobjekt"},  # must not leak in
+    }
+    result = runner._generate_control_checklist(
+        _chapter_4("ORP.6 Benutzerdefiniert: Cloud-IAM"), {}, extracted
+    )
+    pruefung = _pruefungen(result)[0]
+
+    assert [a["nummer"] for a in pruefung["anforderungen"]] == ["ORP.6.A1", "ORP.6.A2"]
+    assert pruefung["anforderungen"][0]["bewertung"] == "Teilweise umgesetzt"
+    assert pruefung["anforderungen"][0]["dokuAntragsteller"] == "IAM-Rollen sind teilweise dokumentiert."
+    assert pruefung["baustein"] == "ORP.6 Benutzerdefiniert: Cloud-IAM"
+
+
+def test_unresolvable_baustein_gets_a_visible_note_not_an_empty_list(runner):
+    """An empty subchapter reads as 'nothing to audit'; the gap must be stated."""
     result = runner._generate_control_checklist(
         _chapter_4("ORP.6 Benutzerdefiniert: Cloud-IAM"), {}, {}
     )
-    pruefung = _pruefungen(result)[0]
-    assert pruefung["anforderungen"] == []
-    assert pruefung["baustein"] == "ORP.6 Benutzerdefiniert: Cloud-IAM"
+    anforderungen = _pruefungen(result)[0]["anforderungen"]
+    assert len(anforderungen) == 1
+    assert "manuell zu ergänzen" in anforderungen[0]["anforderung"]
 
 
 def test_missing_customer_data_falls_back_to_a_placeholder(runner):

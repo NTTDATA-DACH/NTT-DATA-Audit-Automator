@@ -72,6 +72,26 @@ class Chapter5Runner:
             logging.error(f"Failed to load or parse refined check data: {e}", exc_info=True)
             return {}
 
+    @staticmethod
+    def _controls_from_extracted_data(
+        baustein_id: str,
+        zielobjekt_kuerzel: str,
+        extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Reconstructs a custom Baustein's requirements from the extracted check data.
+
+        Matches on the requirement ID prefix ('ORP.6.' for Baustein 'ORP.6'), which is
+        the numbering convention the BSI mandates and customer catalogs follow.
+        """
+        if not zielobjekt_kuerzel:
+            return []
+        prefix = f"{baustein_id}."
+        return [
+            {"id": control_id, "titel": item.get("titel") or control_id, "level": "benutzerdefiniert"}
+            for (control_id, kuerzel), item in sorted(extracted_data_map.items())
+            if kuerzel == zielobjekt_kuerzel and control_id.startswith(prefix)
+        ]
+
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], system_structure_map: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
@@ -112,7 +132,18 @@ class Chapter5Runner:
                 logging.warning(f"Could not find 'Zielobjekt-Kürzel' in audit plan for Baustein '{baustein_id}'. Specific details for its controls will be missing.")
 
             controls = self.control_catalog.get_controls_for_baustein_id(baustein_id)
-            
+            if not controls and not self.control_catalog.is_known_baustein(baustein_id):
+                # An institution's own Baustein is not in the Kompendium. Its requirements
+                # exist only in the customer's Grundschutz-Check, so build the rows from
+                # there — emitting an empty subchapter would drop it from the audit.
+                controls = self._controls_from_extracted_data(
+                    baustein_id, planned_zielobjekt_kuerzel, extracted_data_map
+                )
+                logging.warning(
+                    f"Baustein '{baustein_id}' is not in the official Kompendium; "
+                    f"derived {len(controls)} requirement(s) from the extracted Grundschutz-Check."
+                )
+
             anforderungen_list = []
             for control in controls:
                 control_id = control.get("id", "N/A")
@@ -148,7 +179,25 @@ class Chapter5Runner:
                     "auditfeststellung": "",
                     "abweichungen": ""
                 })
-            
+
+            if not anforderungen_list:
+                # An empty subchapter reads as "nothing to audit here". Say why instead,
+                # so the gap is visible in the report the auditor works from.
+                logging.warning(f"No requirements could be listed for Baustein '{baustein_id_full}'.")
+                anforderungen_list.append({
+                    "nummer": baustein_id,
+                    "anforderung": (
+                        "Für diesen Baustein konnten keine Anforderungen ermittelt werden "
+                        "(nicht im amtlichen Kompendium und nicht im Grundschutz-Check gefunden). "
+                        "Die Prüfung ist manuell zu ergänzen."
+                    ),
+                    "bewertung": "N/A",
+                    "dokuAntragsteller": "",
+                    "pruefmethode": {"D": False, "I": False, "C": False, "S": False, "A": False, "B": False},
+                    "auditfeststellung": "",
+                    "abweichungen": ""
+                })
+
             # Create the new subchapter structure
             baustein_pruefungen_list.append({
                 "subchapterNumber": f"5.5.2.{i+1}",

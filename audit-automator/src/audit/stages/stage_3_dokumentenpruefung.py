@@ -13,6 +13,7 @@ from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
 from src.audit.stages.gs_extraction.anforderung_fields import (
     STATUS_ENTBEHRLICH,
+    STATUS_JA,
     STATUS_NEIN,
     STATUS_TEILWEISE,
     VALID_STATUS,
@@ -192,16 +193,37 @@ class Chapter3Runner:
 
         # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
         muss_ids = set(self.control_catalog.get_muss_control_ids())
-        muss_anforderungen = [a for a in anforderungen if a.get("id") in muss_ids]
+        # Only the requirements that are actually in question need to be transmitted;
+        # a status of 'Ja' cannot violate a MUSS obligation.
+        muss_anforderungen = [
+            a for a in anforderungen
+            if a.get("id") in muss_ids and a.get("umsetzungsstatus") != STATUS_JA
+        ]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
                 question=questions_config["muss_anforderungen"],
-                json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
+                json_data=json.dumps(muss_anforderungen, ensure_ascii=False)
             )
             res = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
             self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
         else:
             answers[2] = True
+
+        # Requirements of the institution's own Bausteine are not in the official
+        # Kompendium, so no MUSS check above can cover them. Losing them silently would
+        # shrink the audited scope without anybody noticing; name them in the report.
+        custom_anforderungen = [a for a in anforderungen if not self.control_catalog.is_known_control(a.get("id", ""))]
+        if custom_anforderungen:
+            custom_ids = sorted({a.get("id") for a in custom_anforderungen if a.get("id")})
+            logging.warning(f"{len(custom_ids)} requirements are not part of the official Kompendium: {custom_ids}")
+            findings.append({
+                "category": "AS",
+                "description": (
+                    f"{len(custom_ids)} Anforderungen stammen aus benutzerdefinierten Bausteinen und sind nicht "
+                    f"im amtlichen IT-Grundschutz-Kompendium enthalten. Sie werden von der automatisierten "
+                    f"MUSS-Prüfung nicht erfasst und sind manuell zu prüfen: {', '.join(custom_ids)}."
+                )
+            })
 
         # Q4: Nicht/teilweise umgesetzte in A.6? (Targeted AI)
         unmet_items = [a for a in anforderungen if a.get("umsetzungsstatus") in (STATUS_NEIN, STATUS_TEILWEISE)]

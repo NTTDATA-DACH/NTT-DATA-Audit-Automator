@@ -50,6 +50,19 @@ class ControlCatalog:
             f"({entfallen_count} ENTFALLEN)."
         )
 
+    def is_known_baustein(self, baustein_id: str) -> bool:
+        """Whether this Baustein is part of the official Kompendium.
+
+        False for the institution's own ('benutzerdefinierte') Bausteine, whose
+        requirements exist only in the customer's documents. Callers must make that
+        gap visible in the report rather than dropping the Baustein.
+        """
+        return baustein_id in self._baustein_titles
+
+    def is_known_control(self, control_id: str) -> bool:
+        """Whether this requirement ID is part of the official Kompendium."""
+        return control_id in self._control_map
+
     def get_controls_for_baustein_id(self, baustein_id: str) -> List[Dict[str, Any]]:
         """
         Retrieves the active (non-ENTFALLEN) requirements of a Baustein.
@@ -60,7 +73,8 @@ class ControlCatalog:
         Returns:
             A list of requirement objects, or an empty list if the Baustein is unknown.
             Bausteine the institution defined itself are not part of the official
-            Kompendium and therefore return an empty list.
+            Kompendium and therefore return an empty list; use `is_known_baustein` to
+            tell "custom Baustein" apart from "Baustein without active requirements".
         """
         controls = self._baustein_map.get(baustein_id, [])
         if not controls:

@@ -61,6 +61,7 @@ def _runner(anforderungen, rag_client=None, ai_client=None):
     runner.control_catalog = types.SimpleNamespace(
         get_control_level=lambda control_id: "B",
         get_muss_control_ids=lambda: [],
+        is_known_control=lambda control_id: True,
     )
     runner._ground_truth_map = {"zielobjekte": [], "baustein_to_zielobjekt_mapping": {}}
     return runner
@@ -130,3 +131,16 @@ def test_recent_dates_and_met_requirements_pass_cleanly():
 
     assert result["finding"]["category"] == "OK"
     assert result["answers"][0] is True and result["answers"][4] is True
+
+
+def test_requirements_outside_the_official_catalog_are_named_in_the_report():
+    """Custom Bausteine are not in the Kompendium, so no MUSS check covers them.
+    Losing them silently would shrink the audited scope."""
+    runner = _runner([_anforderung("ORP.6.A1", "Ja"), _anforderung("ISMS.1.A1", "Ja")])
+    runner.control_catalog.is_known_control = lambda control_id: control_id.startswith("ISMS.")
+
+    result = _run(runner)
+
+    assert result["finding"]["category"] == "AS"
+    assert "ORP.6.A1" in result["finding"]["description"]
+    assert "ISMS.1.A1" not in result["finding"]["description"]
