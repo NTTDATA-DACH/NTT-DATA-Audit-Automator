@@ -43,7 +43,7 @@
       },
       "aktualitaetDerReferenzdokumente": {
         "schema_path": "assets/schemas/stage_3_1_aktualitaet_schema.json",
-        "prompt": "Ignore the missing A.4 GRundschutz-Check.",
+        "prompt": "The A.4 Grundschutz-Check is processed in a separate stage and is deliberately not attached here. Do not report it as missing and do not let its absence influence your answers.",
         "source_categories": ["Sicherheitsleitlinie", "Organisations-Richtlinie", "Netzplan", "Strukturanalyse", "Dienstleister-Liste", "Realisierungsplan", "Risikoanalyse", "Schutzbedarfsfeststellung", "Modellierung"]
       },
       "sicherheitsleitlinieUndRichtlinienInA0": {
@@ -177,9 +177,15 @@
           
           "schema_path": "assets/schemas/stage_4_1_3_auswahl_bausteine_ueberwachung_schema.json"
       },
+      "auswahlStandorte": {
+        "key": "4.1.4",
+        "prompt": "You are a BSI Lead Auditor planning the on-site audit. List the sites (Standorte, Gebäude, Rechenzentren) that belong to the Informationsverbund and decide for each whether it is visited during the initial/re-certification audit and during the two surveillance audits.\n\n**CRITICAL:** Use ONLY sites that appear in the attached Strukturanalyse document(s) or in the 'System Structure Map' below. Never invent a site, and never emit a generic placeholder such as 'Hauptstandort'. If no site can be identified from the provided material, return an empty 'rows' list — the auditor will then complete this table manually.\n\n**System Structure Map (Ground Truth):**\n---\n{ground_truth_map_json}\n---\n\nFor each site give a concise, risk-oriented justification ('Begründung für die Auswahl') that refers to what is actually operated there (e.g. central infrastructure, server rooms, business processes). Use exactly 'Ja' or 'Nein' for the three audit columns.",
+        "schema_path": "assets/schemas/stage_4_1_4_auswahl_standorte_schema.json",
+        "source_categories": ["Strukturanalyse", "Informationsverbund"]
+      },
       "auswahlMassnahmenAusRisikoanalyse": {
         "key": "4.1.5",
-        "prompt": "You are a BSI Lead Auditor planning an audit. Based on the attached Risikoanalyse document, representative sample of 6 additional security measures that were identified for assets with \"high\" or \"very high\" protection needs. Make sure you find the correct Zielobjekt. These are measures BEYOND the standard IT-Grundschutz baseline requirements.\n\nIf the Risikoanalyse document is not available or doesn't contain specific additional measures, generate plausible examples based on typical high-protection scenarios.\n\nFor each selected measure, provide a plausible and risk-oriented justification (key: 'Begründung zur Auswahl') for its inclusion in the on-site audit plan.\n\nExamples of good justifications:\n- \"To verify the effectiveness of the advanced DDoS mitigation for the public-facing web application, which is a critical business process.\"\n- \"To check the implementation of database encryption, as this measure was identified to protect highly sensitive customer PII.\"\n- \"To confirm the sandboxing of the email attachment analysis system, a key control against advanced persistent threats.\"",
+        "prompt": "You are a BSI Lead Auditor planning an audit. Based on the attached Risikoanalyse document, select a representative sample of up to 6 additional security measures that were identified for assets with \"high\" or \"very high\" protection needs. Make sure you find the correct Zielobjekt. These are measures BEYOND the standard IT-Grundschutz baseline requirements.\n\n**CRITICAL:** Every row you return MUST be traceable to the attached Risikoanalyse document. Never invent measures, Zielobjekte or document references, and never fill the table with typical or plausible examples. If the attached document contains no additional measures, or if no Risikoanalyse document is attached at all, return an empty 'rows' list. An empty table is the correct answer in that case; a fabricated one would make the auditor verify measures the customer never documented.\n\nFor each selected measure, provide a risk-oriented justification (key: 'Begründung zur Auswahl') for its inclusion in the on-site audit plan, derived from the risk described in the document.\n\nExamples of good justifications (style only — do not copy their content):\n- \"To verify the effectiveness of the advanced DDoS mitigation for the public-facing web application, which is a critical business process.\"\n- \"To check the implementation of database encryption, as this measure was identified to protect highly sensitive customer PII.\"\n- \"To confirm the sandboxing of the email attachment analysis system, a key control against advanced persistent threats.\"",
         "schema_path": "assets/schemas/stage_4_1_5_auswahl_massnahmen_risiko_schema.json",
         "source_categories": ["Risikoanalyse"]
       }

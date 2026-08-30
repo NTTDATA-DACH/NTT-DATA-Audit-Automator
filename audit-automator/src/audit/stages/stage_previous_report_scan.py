@@ -1,4 +1,5 @@
 # src/audit/stages/stage_previous_report_scan.py
+import asyncio
 import logging
 import json
 from typing import Dict, Any
@@ -6,7 +7,6 @@ from typing import Dict, Any
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
-from src.audit.async_utils import gather_resilient
 from src.constants import PROMPT_CONFIG_PATH
 
 class PreviousReportScanner:
@@ -37,23 +37,27 @@ class PreviousReportScanner:
 
         Returns:
             A dictionary containing the extracted data for that task.
+
+        Raises:
+            Exception: propagated. The stage result is persisted and pinned by the
+            skip-on-exists logic, so an error stub saved as a result would silently
+            drop the previous audit's findings from every later run.
         """
         logging.info(f"Starting extraction for task: {task_name}")
         try:
             task_config = self.prompt_config["stages"][self.STAGE_NAME][task_name]
             prompt = task_config["prompt"]
             schema = self._load_asset_json(task_config["schema_path"])
-            
-            response = await self.ai_client.generate_checked_json_response(
+
+            return await self.ai_client.generate_checked_json_response(
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=[gcs_uri],
                 request_context_log=f"{self.STAGE_NAME}: {task_name}"
             )
-            return response
         except Exception as e:
             logging.error(f"Extraction task '{task_name}' failed: {e}", exc_info=True)
-            return {task_name: {"error": str(e)}} # Return error structure
+            raise
 
     async def run(self, force_overwrite: bool = False) -> dict:
         """
@@ -75,12 +79,23 @@ class PreviousReportScanner:
         extraction_tasks = ["extract_chapter_1", "extract_chapter_4", "extract_chapter_7"]
         coroutines = [self._run_extraction_task(task_name, report_uri) for task_name in extraction_tasks]
 
-        results_list = await gather_resilient(*coroutines, context="Scan-Report: extractions")
+        # Fail-fast (MAX-7): the merged result is persisted AND pinned — later runs skip
+        # this stage because the file exists. A partial result would permanently drop the
+        # previous audit's baseline data from the report.
+        results_list = await asyncio.gather(*coroutines)
 
         # 3. Aggregate results into a single dictionary
         final_result = {}
         for result in results_list:
             final_result.update(result)
-            
+
+        # The schema declares 'all_findings' as required; without it chapter 7.2 would
+        # silently lose every deviation carried over from the previous audit.
+        if "all_findings" not in final_result:
+            raise ValueError(
+                "Scan-Report result is missing the required 'all_findings' key. "
+                "Refusing to persist an incomplete scan of the previous audit report."
+            )
+
         logging.info(f"Successfully completed all extractions for stage {self.STAGE_NAME}")
         return final_result

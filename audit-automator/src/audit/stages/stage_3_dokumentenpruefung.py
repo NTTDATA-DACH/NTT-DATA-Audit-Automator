@@ -158,24 +158,28 @@ class Chapter3Runner:
         # Q2: "entbehrlich" plausibel? (Targeted AI - Task D)
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
         risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
-        if entbehrlich_items:
+        if entbehrlich_items and risikoanalyse_uris:
             for item in entbehrlich_items: # Enrich with the BSI level (B/S/H)
                 # Requirements from the institution's own Bausteine are not in the official
                 # Kompendium; the prompt has a dedicated rule for 'unbekannt'.
                 item['level'] = self.control_catalog.get_control_level(item.get('id')) or "unbekannt"
-            
+
             question = questions_config["entbehrlich"]
             prompt = targeted_prompt_template.format(
                 question=question,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
             res = await self.ai_client.generate_checked_json_response(
-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"),
                 gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
             )
             self._record_targeted_answer(res, answers, 1, findings, "3.6.1-Q2 (entbehrlich)")
         else:
-            answers[1] = True
+            # Without the Risikoanalyse there is no evidence to judge plausibility against;
+            # asking the model anyway would produce an unsourced verdict.
+            answers[1] = not entbehrlich_items
+            if entbehrlich_items and not risikoanalyse_uris:
+                findings.append({"category": "AG", "description": "Es gibt als 'entbehrlich' deklarierte Anforderungen, aber die Risikoanalyse wurde nicht gefunden, um die Begründungen zu überprüfen."})
 
         # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
         muss_ids = set(self.control_catalog.get_muss_control_ids())
@@ -261,10 +265,19 @@ class Chapter3Runner:
 
         if task["type"] == "ai_driven" or key == 'modellierungsdetails':
             generic_prompt = self.prompt_config["stages"]["Chapter-3"]["generic_question"]["prompt"]
-            # For modellierungsdetails, the prompt is custom in the config
-            task['prompt'] = task_config.get('prompt', generic_prompt)
             questions = [item["questionText"] for item in data.get("content", []) if item.get("type") == "question"]
             task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
+
+            # A custom prompt EXTENDS the generic one; it must never replace it, or the
+            # model would answer questions it was never shown (the schema still demands
+            # one answer per question, so it would guess).
+            custom_prompt = task_config.get('prompt')
+            if not custom_prompt:
+                task['prompt'] = generic_prompt
+            elif "{questions}" in custom_prompt or not questions:
+                task['prompt'] = custom_prompt
+            else:
+                task['prompt'] = f"{custom_prompt}\n\n{generic_prompt}"
         elif task["type"] == "summary":
             task["prompt"] = self.prompt_config["stages"]["Chapter-3"]["generic_summary"]["prompt"]
             task["summary_topic"] = data.get("title", key)

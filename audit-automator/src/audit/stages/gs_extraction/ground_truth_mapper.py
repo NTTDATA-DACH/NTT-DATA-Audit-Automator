@@ -71,6 +71,12 @@ class GroundTruthMapper:
             # Extract Zielobjekte from Strukturanalyse (A.1)
             z_task_config = gt_config["extract_zielobjekte"]
             z_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
+            if not z_uris:
+                raise FileNotFoundError(
+                    "No document classified as 'Strukturanalyse' (A.1). The ground truth map "
+                    "cannot be derived without it; extracting Zielobjekte from unrelated "
+                    "documents would invent the system structure."
+                )
             zielobjekte_result = await self.ai_client.generate_checked_json_response(
                 prompt=z_task_config["prompt"], 
                 json_schema=self._load_asset_json(z_task_config["schema_path"]), 
@@ -82,6 +88,11 @@ class GroundTruthMapper:
             # Extract Mappings from Modellierung (A.3)
             m_task_config = gt_config["extract_baustein_mappings"]
             m_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
+            if not m_uris:
+                raise FileNotFoundError(
+                    "No document classified as 'Modellierung' (A.3). The Baustein-to-Zielobjekt "
+                    "mapping cannot be derived without it."
+                )
             mappings_result = await self.ai_client.generate_checked_json_response(
                 prompt=m_task_config["prompt"], 
                 json_schema=self._load_asset_json(m_task_config["schema_path"]), 
@@ -96,7 +107,15 @@ class GroundTruthMapper:
                 "baustein_to_zielobjekt_mapping": self._structure_mappings(mappings_result.get("mappings", [])),
                 "informationsverbund_name": zielobjekte_result.get("informationsverbund_name", "Gesamter Informationsverbund")
             }
-            
+
+            # Same guard the load path applies: an empty map lets 3.6.1 pass vacuously and
+            # makes the next resumed run fail on the file this method wrote.
+            if not system_map["zielobjekte"]:
+                raise ValueError(
+                    "No Zielobjekte could be extracted from the Strukturanalyse. "
+                    "Cannot proceed with an empty system structure map."
+                )
+
             # Save to GCS
             await self.gcs_client.upload_from_string_async(
                 json.dumps(system_map, indent=2, ensure_ascii=False), 

@@ -1,0 +1,23 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Subchapter 4.1.4 Auswahl Standorte",
+    "type": "object",
+    "properties": {
+      "rows": {
+        "type": "array",
+        "description": "A list of the sites (Standorte) of the Informationsverbund and whether each is visited in the respective audit.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Standort": { "type": "string", "description": "The site as documented in the Strukturanalyse, e.g. 'Rechenzentrum Frankfurt (RZ-01)'." },
+            "Erst- bzw. Rezertifizierung": { "type": "string", "description": "Whether this site is audited during the initial or re-certification audit.", "enum": ["Ja", "Nein"] },
+            "1. Überwachungsaudit": { "type": "string", "description": "Whether this site is audited during the first surveillance audit.", "enum": ["Ja", "Nein"] },
+            "2. Überwachungsaudit": { "type": "string", "description": "Whether this site is audited during the second surveillance audit.", "enum": ["Ja", "Nein"] },
+            "Begründung für die Auswahl": { "type": "string", "description": "The risk-based justification for auditing (or not auditing) this specific site." }
+          },
+          "required": ["Standort", "Erst- bzw. Rezertifizierung", "1. Überwachungsaudit", "2. Überwachungsaudit", "Begründung für die Auswahl"]
+        }
+      }
+    },
+    "required": ["rows"]
+  }

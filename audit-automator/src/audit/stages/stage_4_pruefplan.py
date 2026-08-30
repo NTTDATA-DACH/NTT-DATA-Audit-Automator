@@ -68,13 +68,7 @@ class Chapter4Runner:
             logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
             
         # Common parts for all audit types
-        definitions["auswahlStandorte"] = {
-            "key": "4.1.4",
-            "type": "deterministic",
-            "table": {
-                "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
-            }
-        }
+        definitions["auswahlStandorte"] = ch4_config["auswahlStandorte"]
         definitions["auswahlMassnahmenAusRisikoanalyse"] = ch4_config["auswahlMassnahmenAusRisikoanalyse"]
 
         # Mark the type for processing
@@ -90,7 +84,8 @@ class Chapter4Runner:
         
         if definition.get("type") == "deterministic":
             logging.info(f"Processing '{name}' deterministically.")
-            return {name: {"table": definition["table"]}}
+            # Same shape as the AI branch — _populate_chapter_4 reads 'rows'.
+            return {name: {"rows": definition["table"]["rows"]}}
 
         # AI-driven
         prompt_template = definition["prompt"]
@@ -106,7 +101,15 @@ class Chapter4Runner:
         if source_categories:
             logging.info(f"Loading document context for categories: {source_categories}")
             gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
-        
+            if not gcs_uris:
+                # Without the source documents the model could only invent rows; an empty
+                # table plus a warning is the auditable answer.
+                logging.warning(
+                    f"No documents found for categories {source_categories}. "
+                    f"Subchapter {definition.get('key', name)} stays empty and must be completed manually."
+                )
+                return {name: {"rows": []}}
+
         try:
             generated_data = await self.ai_client.generate_checked_json_response(
                 prompt=prompt,
