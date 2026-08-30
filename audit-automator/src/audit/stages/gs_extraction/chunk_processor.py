@@ -1,4 +1,5 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/chunk_processor.py
+import copy
 import logging
 from typing import List, Dict
 
@@ -7,7 +8,6 @@ class ChunkProcessor:
     """Handles chunking logic for processing large block collections."""
 
     MAX_BLOCKS_PER_CHUNK = 200
-    MIN_BLOCKS_PER_CHUNK = 50
 
     @staticmethod
     def chunk_blocks(blocks: List[Dict], max_blocks: int = MAX_BLOCKS_PER_CHUNK) -> List[List[Dict]]:
@@ -39,26 +39,45 @@ class ChunkProcessor:
         logging.info(f"Split {len(blocks)} blocks into {len(chunks)} chunks with {overlap_size}-block overlap ({overlap_size/max_blocks*100:.1f}%)")
         return chunks
 
+    MAX_TEXT_LENGTH = 2000
+    TRUNCATED_TEXT_LENGTH = 1800
+    TRUNCATION_MARKER = "... [gekürzt durch die Vorverarbeitung]"
+
     @staticmethod
     def preprocess_blocks_for_ai(blocks: List[Dict]) -> List[Dict]:
-        """Preprocess blocks to avoid JSON generation issues."""
-        processed_blocks = []
-        
-        for block in blocks:
-            # Create a clean copy of the block
-            clean_block = block.copy()
-            
-            # Clean text content to prevent JSON issues
-            if 'textBlock' in clean_block and 'text' in clean_block['textBlock']:
-                text = clean_block['textBlock']['text']
-                # Remove or escape problematic characters
-                text = text.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-                text = text.replace('"', '\\"').replace('\t', ' ')
-                # Limit extremely long text blocks that might cause issues
-                if len(text) > 2000:
-                    text = text[:1800] + "... [truncated]"
-                clean_block['textBlock']['text'] = text
-            
-            processed_blocks.append(clean_block)
-        
+        """Normalize block text for the prompt without touching the source blocks.
+
+        Chunks overlap and nested blocks appear both inside their parent and as their
+        own entry, so the blocks are shared objects: a copy must be deep, or a block
+        would be re-processed (and re-truncated) once per chunk that contains it.
+
+        Quotes are deliberately NOT escaped here — the caller runs json.dumps over the
+        result, which escapes them once and correctly.
+        """
+        processed_blocks = [copy.deepcopy(block) for block in blocks]
+        truncated_ids = []
+
+        def clean_recursive(block_list: List[Dict]) -> None:
+            for block in block_list:
+                text_block = block.get('textBlock')
+                if not isinstance(text_block, dict):
+                    continue
+                text = text_block.get('text')
+                if isinstance(text, str):
+                    text = text.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+                    if len(text) > ChunkProcessor.MAX_TEXT_LENGTH:
+                        text = text[:ChunkProcessor.TRUNCATED_TEXT_LENGTH] + ChunkProcessor.TRUNCATION_MARKER
+                        truncated_ids.append(block.get('blockId'))
+                    text_block['text'] = text
+                if isinstance(text_block.get('blocks'), list):
+                    clean_recursive(text_block['blocks'])
+
+        clean_recursive(processed_blocks)
+
+        if truncated_ids:
+            logging.warning(
+                f"Truncated the text of {len(truncated_ids)} block(s) to "
+                f"{ChunkProcessor.TRUNCATED_TEXT_LENGTH} characters before extraction: {truncated_ids}"
+            )
+
         return processed_blocks
