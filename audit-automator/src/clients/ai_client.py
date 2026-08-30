@@ -12,9 +12,12 @@ from google.genai import errors as genai_errors
 from jsonschema import validate, SchemaError, ValidationError
 
 from src.assets_loader import load_asset_json
+from src.clients.context_cache import ContextCacheManager
 from src.config import AppConfig
 from src.constants import (
     CHECKER_MODEL,
+    CONTEXT_CACHE_TTL_SECONDS,
+    ENABLE_CONTEXT_CACHE,
     ENABLE_MAKER_CHECKER,
     GROUND_TRUTH_MODEL,
     PROMPT_CONFIG_PATH,
@@ -70,12 +73,29 @@ class AiClient:
         # Protocol of every checker verdict; the controller persists it per stage.
         self.checker_log: List[Dict[str, Any]] = []
 
+        # Pins repeatedly-attached document sets server-side. The system message lives in
+        # the cache, so a cached request must not send it again.
+        self.cache_manager = ContextCacheManager(
+            client=self.client,
+            system_instruction=self.system_message,
+            ttl_seconds=CONTEXT_CACHE_TTL_SECONDS,
+            enabled=ENABLE_CONTEXT_CACHE,
+        )
+
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' (Vertex AI location '{vertex_location}').")
         logging.info(f"System Message Context includes today's date: {current_date}")
         logging.info(
             f"Maker/checker is {'enabled' if self.checker_enabled else 'disabled'}"
             + (f" (checker model '{CHECKER_MODEL}')." if self.checker_enabled else ".")
         )
+        logging.info(
+            f"Context caching is {'enabled' if ENABLE_CONTEXT_CACHE else 'disabled'}"
+            + (f" (TTL {CONTEXT_CACHE_TTL_SECONDS}s)." if ENABLE_CONTEXT_CACHE else ".")
+        )
+
+    async def release_context_caches(self) -> None:
+        """Deletes the context caches this run created. Safe to call more than once."""
+        await self.cache_manager.release_all()
 
     @staticmethod
     def _resolve_thinking_level(model: str) -> str:
@@ -85,8 +105,16 @@ class AiClient:
             return "low"
         return level
 
-    def _build_generation_config(self, json_schema: Dict[str, Any], model: str) -> types.GenerateContentConfig:
-        """Build the GenerateContentConfig, enforcing JSON output against the given schema."""
+    def _build_generation_config(
+        self, json_schema: Dict[str, Any], model: str, cached_content: Optional[str] = None
+    ) -> types.GenerateContentConfig:
+        """Build the GenerateContentConfig, enforcing JSON output against the given schema.
+
+        Args:
+            cached_content: resource name of a context cache holding this request's
+                documents. The cache also carries the system instruction, so it must
+                not be sent again alongside it.
+        """
         try:
             schema_for_api = json.loads(json.dumps(json_schema))
             schema_for_api.pop("$schema", None)
@@ -96,12 +124,15 @@ class AiClient:
 
         config_fields = types.GenerateContentConfig.model_fields
         kwargs: Dict[str, Any] = {
-            "system_instruction": self.system_message,
             "response_mime_type": "application/json",
             "max_output_tokens": 65535,
             # Gemini 3.x is tuned for temperature 1; lowering it degrades reasoning quality.
             "temperature": 1,
         }
+        if cached_content:
+            kwargs["cached_content"] = cached_content
+        else:
+            kwargs["system_instruction"] = self.system_message
 
         # The assets are real JSON Schemas, so hand them to the field that speaks that
         # dialect; response_schema (OpenAPI subset) is the fallback for older SDKs.
@@ -186,6 +217,10 @@ class AiClient:
         "rare" is not "never" — and an unvalidated reply reaches the report, where a
         missing key becomes a silently wrong audit statement.
 
+        When the same documents have already been pinned in a context cache, the request
+        references that cache instead of re-sending them. If the cache turns out to be
+        unusable, the call falls back to attaching the documents and retries.
+
         Args:
             prompt: The text prompt for the model.
             json_schema: The JSON schema to enforce on the model's output.
@@ -201,12 +236,16 @@ class AiClient:
 
         # Select the appropriate model; it also decides the thinking level.
         model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
-        gen_config = self._build_generation_config(json_schema, model_to_use)
 
-        # Build the content list. The system message is handled via the generation config.
-        contents = self._build_contents(prompt, gcs_uris)
+        # A cache holds the documents AND the system instruction, so the request carries
+        # neither: it sends only this call's prompt.
+        cache_name = await self.cache_manager.get_or_create(model_to_use, gcs_uris)
+        gen_config = self._build_generation_config(json_schema, model_to_use, cached_content=cache_name)
+        contents = self._build_contents(prompt, None if cache_name else gcs_uris)
         if gcs_uris and self.config.is_test_mode:
-            logging.info(f"Attaching {len(gcs_uris)} GCS files to the prompt.")
+            logging.info(
+                f"{'Referencing cached' if cache_name else 'Attaching'} {len(gcs_uris)} GCS file(s) for the prompt."
+            )
 
         for attempt in range(retries):
             try:
@@ -229,6 +268,22 @@ class AiClient:
             # shape: without them a malformed reply would bypass the retries entirely.
             except (genai_errors.APIError, ValueError, TypeError, AttributeError, asyncio.TimeoutError) as e:
                 wait_time = 2 ** attempt
+
+                # A cache can expire or be deleted between building the request and
+                # sending it. Drop it and rebuild with the documents attached, so this
+                # costs one retry instead of the whole call. Only while an attempt is
+                # left — on the last one, fall through and raise the real error.
+                if cache_name and isinstance(e, genai_errors.APIError) and attempt < retries - 1:
+                    logging.warning(
+                        f"[{request_context_log}] Call using context cache '{cache_name}' failed "
+                        f"({e.message}). Retrying with the documents attached directly."
+                    )
+                    await self.cache_manager.invalidate(cache_name)
+                    cache_name = None
+                    gen_config = self._build_generation_config(json_schema, model_to_use)
+                    contents = self._build_contents(prompt, gcs_uris)
+                    continue
+
                 if attempt == retries - 1:
                     logging.critical(f"[{request_context_log}] AI generation failed after all {retries} retries.", exc_info=True)
                     raise

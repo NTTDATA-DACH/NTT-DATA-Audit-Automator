@@ -122,3 +122,5 @@ This is a critical architectural pattern for ensuring reliability.
 | `THINKING_LEVEL` | No | Env | `minimal`/`low`/`medium`/`high`. Defaults to `minimal` (clamped to `low` on pro models). |
 | `ENABLE_MAKER_CHECKER` | No | Env | Second-opinion pass over report-relevant answers. Defaults to `true`. |
 | `CHECKER_MODEL` | No | Env | Model for that second opinion. Defaults to `GROUND_TRUTH_MODEL`. |
+| `ENABLE_CONTEXT_CACHE` | No | Env | Pin repeatedly-attached source PDFs in a Vertex context cache instead of re-sending them per call. Defaults to `true`. |
+| `CONTEXT_CACHE_TTL_SECONDS` | No | Env | Lifetime of those caches. Defaults to `9000` (2.5 h); they are deleted at the end of a run anyway. |

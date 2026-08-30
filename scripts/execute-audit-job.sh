@@ -37,6 +37,9 @@ MAX_CONCURRENT_AI_REQUESTS=5
 # Maker/checker (Vier-Augen-Prinzip): every report-relevant AI answer is verified by a
 # second call. Set to "false" to halve the AI calls at the cost of that verification.
 ENABLE_MAKER_CHECKER="true"
+# Pins repeatedly-attached source PDFs in a Vertex context cache rather than re-sending
+# them on every call. Cheaper and faster; "false" restores per-request attachment.
+ENABLE_CONTEXT_CACHE="true"
 
 # --- Dynamic Values from Terraform ---
 echo "🔹 Fetching infrastructure details from Terraform..."
@@ -160,7 +163,7 @@ echo ""
 gcloud run jobs execute "${JOB_NAME}" \
   --region "${REGION}" \
   --project "${GCP_PROJECT_ID}" \
-  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},ENABLE_MAKER_CHECKER=${ENABLE_MAKER_CHECKER},DOC_AI_PROCESSOR_NAME=${DOC_AI_PROCESSOR_NAME}" \
+  --update-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},SOURCE_PREFIX=source_documents/,OUTPUT_PREFIX=output/,AUDIT_TYPE=${AUDIT_TYPE},TEST=${TEST},MAX_CONCURRENT_AI_REQUESTS=${MAX_CONCURRENT_AI_REQUESTS},ENABLE_MAKER_CHECKER=${ENABLE_MAKER_CHECKER},ENABLE_CONTEXT_CACHE=${ENABLE_CONTEXT_CACHE},DOC_AI_PROCESSOR_NAME=${DOC_AI_PROCESSOR_NAME}" \
   --args="${FULL_TASK_ARGS}"
 
 echo ""

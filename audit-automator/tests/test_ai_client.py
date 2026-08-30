@@ -114,6 +114,23 @@ def test_generation_config_uses_temperature_one():
     assert config.temperature == 1
 
 
+def test_uncached_request_carries_the_system_instruction():
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
+    assert config.system_instruction == "Du bist ein BSI-Auditor."
+    assert config.cached_content is None
+
+
+def test_cached_request_references_the_cache_and_drops_the_system_instruction():
+    """The cache already holds the system instruction; sending it again alongside
+    cached_content is redundant at best and rejected at worst."""
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash", cached_content="caches/42")
+    assert config.cached_content == "caches/42"
+    assert config.system_instruction is None
+    # The schema and decoding settings must survive the cached path unchanged.
+    assert config.temperature == 1
+    assert (config.response_json_schema or config.response_schema) is not None
+
+
 def test_generation_config_strips_meta_schema_key():
     config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
     sent_schema = config.response_json_schema or config.response_schema

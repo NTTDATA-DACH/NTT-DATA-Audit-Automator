@@ -59,6 +59,10 @@ export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 # export THINKING_LEVEL="minimal"          # minimal | low | medium | high
 # export CHECKER_MODEL="gemini-3.1-pro"    # second opinion in the maker/checker pass
 export ENABLE_MAKER_CHECKER="true"         # "false" halves the AI calls (no verification)
+# Pins repeatedly-attached source PDFs server-side instead of re-sending them on every
+# call (Strukturanalyse alone is context for 24 calls per run). "false" to disable.
+export ENABLE_CONTEXT_CACHE="true"
+# export CONTEXT_CACHE_TTL_SECONDS="9000"  # caches are deleted at the end of a run
 
 # --- NEW: Helper function for correct execution ---
 # This alias ensures we always run the application as a module,
