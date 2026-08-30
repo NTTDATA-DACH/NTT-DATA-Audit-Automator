@@ -8,7 +8,7 @@ from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
-from src.clients.ai_client import AiClient
+from src.clients.ai_client import AiClient, current_stage
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
 from src.constants import STAGE_RESULTS_PATH, ALL_FINDINGS_PATH, EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, CHECKER_LOG_PATH
@@ -28,8 +28,9 @@ class AuditController:
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.all_findings: List[Dict[str, Any]] = []
-        self.finding_counters = defaultdict(int)
+        # Stages run concurrently; the findings list and the checker log are
+        # read-modify-written files, so their updates are serialized behind this lock.
+        self._state_lock = asyncio.Lock()
 
         self.stage_runner_classes = {
             "Scan-Report": PreviousReportScanner,
@@ -64,21 +65,17 @@ class AuditController:
         except (ValueError, IndexError):
             return None, 0
 
-    def _process_previous_findings(self, previous_findings: List[Dict[str, Any]]):
-        """Processes findings from a previous report scan, preserving their IDs and updating counters."""
+    @staticmethod
+    def _process_previous_findings(previous_findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Converts findings of a previous report scan, preserving their IDs."""
         logging.info(f"Processing {len(previous_findings)} findings from previous audit report.")
+        converted = []
         for finding in previous_findings:
             finding_id = finding.get("nummer")
             if not finding_id:
                 continue
 
-            category, num = self._parse_finding_id(finding_id)
-            if category and num > 0:
-                # Update the counter to the highest number seen for this category
-                self.finding_counters[category] = max(self.finding_counters[category], num)
-
-            # Add the finding to the central list with its ID and details preserved
-            self.all_findings.append({
+            converted.append({
                 "id": finding_id,
                 "category": finding.get("category"),
                 "description": finding.get("beschreibung", "No description provided."),
@@ -86,17 +83,17 @@ class AuditController:
                 "status": finding.get("status"),
                 "behebungsfrist": finding.get("behebungsfrist")
             })
+        return converted
 
-    def _process_new_finding(self, finding: Dict[str, Any], stage_name: str):
-        """Processes a newly generated finding, adding it to the central list to await ID assignment."""
-        source_ref = stage_name.replace('Chapter-', '')
-        # Add to central list without an ID, which will be assigned at the end.
-        self.all_findings.append({
+    @staticmethod
+    def _process_new_finding(finding: Dict[str, Any], stage_name: str) -> Dict[str, Any]:
+        """Converts a newly generated finding; the ID is assigned when it is persisted."""
+        logging.info(f"Collected new finding from {stage_name}: {finding.get('category')}")
+        return {
             "category": finding.get("category"),
             "description": finding.get("description"),
-            "source_chapter": source_ref
-        })
-        logging.info(f"Collected new finding from {stage_name}: {finding.get('category')}")
+            "source_chapter": stage_name.replace('Chapter-', '')
+        }
 
     def _extract_findings_recursive(self, data: Any) -> List[Dict[str, Any]]:
         """
@@ -120,70 +117,97 @@ class AuditController:
         
         return found
 
-    def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> None:
+    def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Parses stage results, finds all structured `finding` objects recursively,
-        and adds them to the central collection.
+        Parses stage results and returns all structured `finding` objects found in them.
+
+        The findings are returned rather than accumulated on the controller: stages run
+        concurrently and would otherwise overwrite each other's collection.
         """
         if not result_data:
-            return
+            return []
 
         # Special handling for Scan-Report which has a flat list of previous findings
         if stage_name == "Scan-Report" and 'all_findings' in result_data:
-            self._process_previous_findings(result_data['all_findings'])
-            # We don't do a recursive search for this stage type to avoid double counting
-            return
+            # No recursive search for this stage type, to avoid double counting.
+            return self._process_previous_findings(result_data['all_findings'])
 
         # For the extraction stage, there are no findings to process.
         if stage_name == "Grundschutz-Check-Extraction":
-            return
+            return []
 
         # Standard recursive search for newly generated findings
-        newly_discovered_findings = self._extract_findings_recursive(result_data)
-        for finding in newly_discovered_findings:
+        return [
             self._process_new_finding(finding, stage_name)
+            for finding in self._extract_findings_recursive(result_data)
+        ]
 
-    def _save_all_findings(self) -> None:
+    def _save_stage_findings(self, stage_name: str, stage_findings: List[Dict[str, Any]]) -> None:
         """
-        Saves the centrally collected list of all findings. It preserves existing IDs
-        from previous reports and assigns new, sequential IDs for new findings.
+        Merges one stage's findings into the central list and persists it.
+
+        Load, merge and save happen here as one step under `_state_lock`, so parallel
+        stages cannot interleave: each replaces only its own previous entries, IDs are
+        assigned exactly once, and the assigned IDs are part of what is written back
+        (so a later save can never renumber them).
         """
-        if not self.all_findings:
+        current_findings = []
+        try:
+            if self.gcs_client.blob_exists(ALL_FINDINGS_PATH):
+                current_findings = self.gcs_client.read_json(ALL_FINDINGS_PATH)
+        except Exception as e:
+            logging.warning(f"Could not load or parse existing findings file: {e}. Starting with an empty list.")
+
+        if stage_name == "Scan-Report":
+            kept = [f for f in current_findings if not str(f.get("source_chapter", "")).startswith("Previous Audit")]
+        else:
+            kept = [f for f in current_findings if f.get("source_chapter") != stage_name.replace('Chapter-', '')]
+
+        counters = defaultdict(int)
+        for finding in kept + stage_findings:
+            category, num = self._parse_finding_id(finding.get("id"))
+            if category and num > 0:
+                counters[category] = max(counters[category], num)
+
+        merged = list(kept)
+        for finding in stage_findings:
+            if finding.get("id"):
+                merged.append(finding)  # ID preserved from a previous report
+                continue
+            category = finding["category"]
+            counters[category] += 1
+            merged.append({"id": f"{category}-{counters[category]}", **finding})
+
+        if not merged:
             logging.info("No findings were collected during the audit. Skipping save.")
             return
 
-        findings_with_ids = []
-        for finding in self.all_findings:
-            if 'id' in finding and finding['id']:
-                # This is a finding from a previous report or an earlier run, ID is already set.
-                findings_with_ids.append(finding)
-            else:
-                # This is a new finding, assign a new ID.
-                category = finding['category']
-                self.finding_counters[category] += 1
-                finding_id = f"{category}-{self.finding_counters[category]}"
-                
-                # Add the new ID to the finding object
-                finding_with_id = {"id": finding_id, **finding}
-                findings_with_ids.append(finding_with_id)
-
         # Single source of truth: write to the same constant the readers use
         # (run_single_stage and ReportGenerator), so the write/read paths can't drift.
-        findings_path = ALL_FINDINGS_PATH
         self.gcs_client.upload_from_string(
-            content=json.dumps(findings_with_ids, indent=2, ensure_ascii=False),
-            destination_blob_name=findings_path
+            content=json.dumps(merged, indent=2, ensure_ascii=False),
+            destination_blob_name=ALL_FINDINGS_PATH
         )
-        logging.info(f"Successfully saved {len(findings_with_ids)} findings with sequential IDs to {findings_path}")
+        logging.info(
+            f"Saved {len(merged)} findings to {ALL_FINDINGS_PATH} "
+            f"({len(stage_findings)} from stage '{stage_name}')."
+        )
 
     def _save_checker_log(self, stage_name: str) -> None:
         """Persists the maker/checker verdicts of this stage as the audit's QS trail.
 
-        Entries of the stage being (re-)run replace their predecessors, mirroring how
-        findings are handled, so a repeated run does not duplicate the protocol.
+        Only this stage's verdicts are harvested from the shared in-memory log — the
+        other stages running in parallel keep theirs until they persist them. Entries of
+        the stage being (re-)run replace their predecessors, mirroring how findings are
+        handled, so a repeated run does not duplicate the protocol.
         """
-        new_entries = [{"stage": stage_name, **entry} for entry in self.ai_client.checker_log]
-        self.ai_client.checker_log.clear()
+        new_entries = [e for e in self.ai_client.checker_log if e.get("stage") == stage_name]
+        if not new_entries:
+            # A skipped stage ran no AI calls. Rewriting the log here would strip this
+            # stage's persisted verdicts from a previous run — the QS trail must survive
+            # a no-op re-run.
+            return
+        self.ai_client.checker_log[:] = [e for e in self.ai_client.checker_log if e.get("stage") != stage_name]
 
         existing = []
         try:
@@ -192,10 +216,7 @@ class AuditController:
         except Exception as e:
             logging.warning(f"Could not read existing checker log: {e}. Starting a new one.")
 
-        kept = [e for e in existing if e.get("stage") != stage_name]
-        combined = kept + new_entries
-        if not combined:
-            return
+        combined = [e for e in existing if e.get("stage") != stage_name] + new_entries
 
         self.gcs_client.upload_from_string(
             content=json.dumps(combined, indent=2, ensure_ascii=False),
@@ -206,6 +227,23 @@ class AuditController:
             f"Checker log for '{stage_name}': {len(new_entries)} verdict(s), "
             f"{corrections} correction(s) applied. Saved to {CHECKER_LOG_PATH}"
         )
+
+    async def _persist_stage_state(self, stage_name: str, stage_findings: List[Dict[str, Any]]) -> None:
+        """Persists a stage's findings and checker verdicts as one serialized step.
+
+        Both files are read-modify-written, so concurrent stages must not interleave.
+        Failures are logged, never raised: on the error path this runs inside an
+        `except` block and must not replace the original stage error.
+        """
+        async with self._state_lock:
+            try:
+                self._save_stage_findings(stage_name, stage_findings)
+            except Exception as e:
+                logging.error(f"Failed to save findings for stage '{stage_name}': {e}", exc_info=True)
+            try:
+                self._save_checker_log(stage_name)
+            except Exception as e:
+                logging.error(f"Failed to save the checker log for stage '{stage_name}': {e}", exc_info=True)
 
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
@@ -242,38 +280,20 @@ class AuditController:
 
     async def run_single_stage(self, stage_name: str, force_overwrite: bool = False) -> Dict[str, Any]:
         """
-        Runs a single, specified audit stage. It manages the central findings list by
-        loading it, removing any previous findings from this specific stage, running
-        the stage (or skipping if results exist), adding the new/existing findings
-        back, and saving the updated central list.
+        Runs a single, specified audit stage: runs it (or skips it if results exist),
+        collects the findings it produced, and merges them into the central findings
+        list, which replaces only this stage's previous entries.
         """
         if stage_name not in self.stage_runner_classes:
             logging.error(f"Unknown stage '{stage_name}'. Available: {list(self.stage_runner_classes.keys())}")
             raise ValueError(f"Unknown stage: {stage_name}")
 
-        # 1. Load and filter the central findings list
-        findings_path = ALL_FINDINGS_PATH
-        current_findings = []
-        try:
-            if self.gcs_client.blob_exists(findings_path):
-                current_findings = self.gcs_client.read_json(findings_path)
-        except Exception as e:
-            logging.warning(f"Could not load or parse existing findings file: {e}. Starting with an empty list.")
+        # Tag every AI call this stage makes, so its checker verdicts are attributed to
+        # it even while other stages run concurrently on the same client. asyncio.gather
+        # gives each stage its own task context, so this does not leak between stages.
+        current_stage.set(stage_name)
 
-        source_ref_to_remove = stage_name.replace('Chapter-', '')
-        
-        if stage_name == "Scan-Report":
-            self.all_findings = [f for f in current_findings if not str(f.get("source_chapter", "")).startswith("Previous Audit")]
-        else:
-            self.all_findings = [f for f in current_findings if f.get("source_chapter") != source_ref_to_remove]
-        
-        self.finding_counters = defaultdict(int)
-        for finding in self.all_findings:
-            category, num = self._parse_finding_id(finding.get("id"))
-            if category and num > 0:
-                self.finding_counters[category] = max(self.finding_counters[category], num)
-
-        # 2. Execute the stage logic
+        # 1. Execute the stage logic
         stage_output_path = STAGE_RESULTS_PATH.format(stage_name=stage_name)
         result_data = None
 
@@ -315,15 +335,15 @@ class AuditController:
                     logging.info(f"Successfully saved results for stage '{stage_name}'.")
             except Exception as e:
                 logging.error(f"Stage '{stage_name}' failed: {e}", exc_info=True)
-                self._save_all_findings() # Save findings state even on failure
-                self._save_checker_log(stage_name)
+                # Persist what the stage produced before it failed, then re-raise the
+                # original error (the saves swallow their own failures on purpose).
+                await self._persist_stage_state(stage_name, [])
                 raise
 
-        # 3. Process findings from the result (either newly generated or from the skipped file)
-        self._extract_and_store_findings(stage_name, result_data)
+        # 2. Collect findings from the result (either newly generated or from the skipped file)
+        stage_findings = self._extract_and_store_findings(stage_name, result_data)
 
-        # 4. Save the final, updated list of all findings and the maker/checker trail
-        self._save_all_findings()
-        self._save_checker_log(stage_name)
+        # 3. Merge them into the central findings list and persist the maker/checker trail
+        await self._persist_stage_state(stage_name, stage_findings)
 
         return result_data

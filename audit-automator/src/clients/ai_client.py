@@ -2,6 +2,7 @@
 import logging
 import json
 import asyncio
+import contextvars
 import datetime
 from typing import List, Dict, Any, Optional
 
@@ -20,6 +21,13 @@ from src.constants import (
 )
 
 MAX_RETRIES = 5
+
+# The audit stage whose work the current coroutine belongs to. Stages run concurrently
+# and share one AiClient, so the owner of a checker verdict must be recorded when the
+# verdict is appended — not when a stage happens to persist the log. asyncio copies the
+# context into every task it creates, so a value set in run_single_stage reaches all
+# AI calls that stage spawns, and only those.
+current_stage: contextvars.ContextVar[str] = contextvars.ContextVar("current_stage", default="unknown")
 
 
 class AiClient:
@@ -265,8 +273,13 @@ class AiClient:
     def _record_checker_verdict(
         self, request_context_log: str, freigabe: Optional[bool], probleme: List[str], correction_taken: bool
     ) -> None:
-        """Appends one checker verdict to the in-memory protocol."""
+        """Appends one checker verdict to the in-memory protocol.
+
+        The owning stage is stamped here, not when the log is persisted: stages run
+        concurrently, so by persist time the list holds other stages' verdicts too.
+        """
         self.checker_log.append({
+            "stage": current_stage.get(),
             "task": request_context_log,
             "checker_model": CHECKER_MODEL,
             "freigabe": freigabe,
