@@ -56,6 +56,10 @@ DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
 # =============================================================================
 PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 
+# BSI IT-Grundschutz-Kompendium, Edition 2023. Generated from the sha256-pinned official
+# BSI XML by `python -m src.tools.build_bsi_catalog`; see readme.md ("Katalog aktualisieren").
+CONTROL_CATALOG_PATH = "assets/json/bsi_kompendium_ed2023.json"
+
 # JSON Schema for the fully-assembled audit report (used by ReportGenerator to
 # validate the report before saving). Replaces the former no-op structural check.
 REPORT_SCHEMA_PATH = "assets/schemas/master_report_schema.json"

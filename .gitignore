@@ -40,6 +40,10 @@ crash.*.log
 .terraformrc
 terraform.rc
 
+# Pinned downloads of the official BSI XML-Kompendium (rebuildable, sha256-pinned in
+# src/tools/ed23_xml.py). The catalog derived from it IS committed.
+audit-automator/.cache/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
