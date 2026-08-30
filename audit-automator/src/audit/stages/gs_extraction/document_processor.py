@@ -50,9 +50,11 @@ class DocumentProcessor:
         pdf_bytes = self.gcs_client.download_blob_as_bytes(self.gcs_client.bucket.blob(source_blob_name))
         
         chunk_count = await self._split_and_upload_pdf(pdf_bytes)
-        
-        # Process all chunks with Document AI
-        await self._process_pdf_chunks(chunk_count)
+
+        # Process all chunks with Document AI. force_overwrite must reach this layer too:
+        # a replaced source PDF re-splits into the same chunk names, so cached OCR results
+        # of the previous document version would otherwise be merged with fresh ones.
+        await self._process_pdf_chunks(chunk_count, force_overwrite)
         
         # Merge and finalize results
         await self._merge_and_save_results(chunk_count)
@@ -83,12 +85,13 @@ class DocumentProcessor:
         logging.info(f"Split PDF into {chunk_count} chunks and uploaded to GCS.")
         return chunk_count
 
-    async def _process_pdf_chunks(self, chunk_count: int):
+    async def _process_pdf_chunks(self, chunk_count: int, force_overwrite: bool = False):
         """Process all PDF chunks with Document AI."""
         processing_tasks = [
             self.doc_ai_client.process_document_chunk_async(
-                f"gs://{self.config.bucket_name}/{TEMP_PDF_CHUNKS_PREFIX}chunk_{i}.pdf", 
-                DOC_AI_CHUNK_RESULTS_PREFIX
+                f"gs://{self.config.bucket_name}/{TEMP_PDF_CHUNKS_PREFIX}chunk_{i}.pdf",
+                DOC_AI_CHUNK_RESULTS_PREFIX,
+                force_overwrite=force_overwrite
             ) for i in range(chunk_count)
         ]
         # Fail-fast (MAX-7): _merge_and_save_results reads every chunk_i.json; a missing
@@ -119,10 +122,7 @@ class DocumentProcessor:
         }
         
         # Save to GCS
-        await self.gcs_client.upload_from_string_async(
-            json.dumps(final_layout_json, indent=2, ensure_ascii=False),
-            FINAL_MERGED_LAYOUT_PATH
-        )
+        await self.gcs_client.write_json_async(final_layout_json, FINAL_MERGED_LAYOUT_PATH)
         logging.info(f"Successfully merged, re-indexed, and saved final layout to {FINAL_MERGED_LAYOUT_PATH}")
 
     def _reindex_and_prune_blocks(self, blocks: List[Dict[str, Any]]):

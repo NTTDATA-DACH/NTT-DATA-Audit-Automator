@@ -63,10 +63,7 @@ class BlockGrouper:
             self._group_blocks_by_markers(markers, block_id_to_block_map, grouped_blocks)
 
         # Save grouped blocks
-        await self.gcs_client.upload_from_string_async(
-            json.dumps({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, indent=2, ensure_ascii=False),
-            GROUPED_BLOCKS_PATH
-        )
+        await self.gcs_client.write_json_async({"zielobjekt_grouped_blocks": dict(grouped_blocks)}, GROUPED_BLOCKS_PATH)
         logging.info(f"Saved grouped layout blocks to {GROUPED_BLOCKS_PATH}")
 
     def _flatten_all_blocks(self, blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -94,30 +91,56 @@ class BlockGrouper:
         return flattened
 
     def _find_zielobjekt_markers(self, all_flattened_blocks: List[Dict[str, Any]], system_map: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Find Zielobjekt markers in the flattened blocks."""
-        zielobjekte = system_map.get("zielobjekte", [])
-        kuerzel_list = [item['name'] for item in zielobjekte if 'name' in item]
-        if "informationsverbund_name" in system_map:
-            kuerzel_list.append(system_map["informationsverbund_name"])
+        """Find Zielobjekt markers in the flattened blocks.
 
-        remaining_kuerzel = kuerzel_list.copy()
+        A section heading may carry either the Kürzel ('SVR-01') or the descriptive
+        name ('Main Web Server'), so both are accepted as markers — but a marker is
+        always labelled with the Kürzel, because every consumer (ai_refiner,
+        data_processor, stage 3's coverage check, stage 5's checklist) joins on it.
+
+        A Zielobjekt may head several sections (A.4 exports are usually sorted by
+        Baustein), so every exact match becomes a marker; consecutive duplicates are
+        collapsed since they would only produce empty ranges.
+        """
+        text_to_kuerzel = {}
+        for item in system_map.get("zielobjekte", []):
+            kuerzel = (item.get("kuerzel") or "").strip()
+            name = (item.get("name") or "").strip()
+            identifier = kuerzel or name
+            if not identifier:
+                continue
+            # Kürzel wins on collision: it is the value the rest of the pipeline uses.
+            if kuerzel:
+                text_to_kuerzel[kuerzel] = identifier
+            if name and name not in text_to_kuerzel:
+                text_to_kuerzel[name] = identifier
+
+        verbund_name = (system_map.get("informationsverbund_name") or "").strip()
+        if verbund_name and verbund_name not in text_to_kuerzel:
+            text_to_kuerzel[verbund_name] = verbund_name
+
         markers = []
-        
-        # Search for exact matches of Zielobjekt kürzel in block text
+        found_identifiers = set()
+
+        # Search for exact matches of Zielobjekt Kürzel/names in block text
         for block in all_flattened_blocks:
             direct_text = ""
             if 'textBlock' in block and 'text' in block['textBlock']:
                 direct_text = block['textBlock']['text'].strip()
-            
-            if direct_text:
-                for kuerzel in remaining_kuerzel.copy():
-                    if direct_text == kuerzel:
-                        block_id = int(block.get('blockId', 0))
-                        markers.append({'kuerzel': kuerzel, 'block_id': block_id})
-                        remaining_kuerzel.remove(kuerzel)
-                        break
-        
-        logging.info(f"Found {len(markers)} Zielobjekt markers. Unfound kürzel ({len(remaining_kuerzel)}): {remaining_kuerzel}")
+
+            kuerzel = text_to_kuerzel.get(direct_text) if direct_text else None
+            if not kuerzel:
+                continue
+            if markers and markers[-1]['kuerzel'] == kuerzel:
+                continue  # repeated heading with nothing in between
+            markers.append({'kuerzel': kuerzel, 'block_id': int(block.get('blockId', 0))})
+            found_identifiers.add(kuerzel)
+
+        unfound = sorted(set(text_to_kuerzel.values()) - found_identifiers)
+        logging.info(
+            f"Found {len(markers)} Zielobjekt markers for {len(found_identifiers)} Zielobjekte. "
+            f"Unfound ({len(unfound)}): {unfound}"
+        )
         return markers
 
     def _group_blocks_by_markers(self, markers: List[Dict[str, Any]], block_id_to_block_map: Dict[int, Dict[str, Any]], grouped_blocks: defaultdict):

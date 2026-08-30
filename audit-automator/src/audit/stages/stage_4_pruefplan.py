@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any
 from google.cloud.exceptions import NotFound
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
@@ -24,14 +25,11 @@ class Chapter4Runner:
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         self.subchapter_definitions = self._load_subchapter_definitions()
         self.ground_truth_map = None
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME}")
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
 
     def _load_ground_truth_map(self) -> None:
         """Loads the ground truth system structure map from GCS."""
@@ -68,13 +66,7 @@ class Chapter4Runner:
             logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
             
         # Common parts for all audit types
-        definitions["auswahlStandorte"] = {
-            "key": "4.1.4",
-            "type": "deterministic",
-            "table": {
-                "rows": [{"Standort": "Hauptstandort", "Erst- bzw. Rezertifizierung": "Ja", "1. Überwachungsaudit": "Ja", "2. Überwachungsaudit": "Ja", "Begründung für die Auswahl": "Zentraler Standort mit kritischer Infrastruktur."}]
-            }
-        }
+        definitions["auswahlStandorte"] = ch4_config["auswahlStandorte"]
         definitions["auswahlMassnahmenAusRisikoanalyse"] = ch4_config["auswahlMassnahmenAusRisikoanalyse"]
 
         # Mark the type for processing
@@ -90,7 +82,8 @@ class Chapter4Runner:
         
         if definition.get("type") == "deterministic":
             logging.info(f"Processing '{name}' deterministically.")
-            return {name: {"table": definition["table"]}}
+            # Same shape as the AI branch — _populate_chapter_4 reads 'rows'.
+            return {name: {"rows": definition["table"]["rows"]}}
 
         # AI-driven
         prompt_template = definition["prompt"]
@@ -98,7 +91,7 @@ class Chapter4Runner:
         ground_truth_json_str = json.dumps(self.ground_truth_map, indent=2, ensure_ascii=False)
         prompt = prompt_template.replace("{ground_truth_map_json}", ground_truth_json_str)
         
-        schema = self._load_asset_json(definition["schema_path"])
+        schema = load_asset_json(definition["schema_path"])
         
         # Check if this task needs document context
         gcs_uris = []
@@ -106,7 +99,15 @@ class Chapter4Runner:
         if source_categories:
             logging.info(f"Loading document context for categories: {source_categories}")
             gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
-        
+            if not gcs_uris:
+                # Without the source documents the model could only invent rows; an empty
+                # table plus a warning is the auditable answer.
+                logging.warning(
+                    f"No documents found for categories {source_categories}. "
+                    f"Subchapter {definition.get('key', name)} stays empty and must be completed manually."
+                )
+                return {name: {"rows": []}}
+
         try:
             generated_data = await self.ai_client.generate_checked_json_response(
                 prompt=prompt,

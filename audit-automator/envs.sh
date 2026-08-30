@@ -35,11 +35,13 @@ fi
 echo "🔹 Fetching infrastructure details from Terraform..."
 
 # --- Dynamic Values from Terraform ---
-export GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
-export REGION="$(terraform -chdir=${TERRAFORM_DIR} output -raw region)"
-export BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
-export DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
-# NEW: Fetch the public domain if it exists, otherwise set to empty string.
+# Assign first, export second (SC2155): `export VAR="$(cmd)"` hides the command's exit
+# status from `set -e`, so a failing terraform output would leave the variable empty and
+# still print the success banner below.
+GCP_PROJECT_ID="$(terraform -chdir=${TERRAFORM_DIR} output -raw project_id)"
+BUCKET_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw gcs_bucket_name)"
+DOC_AI_PROCESSOR_NAME="$(terraform -chdir=${TERRAFORM_DIR} output -raw documentai_processor_name)"
+export GCP_PROJECT_ID BUCKET_NAME DOC_AI_PROCESSOR_NAME
 
 # --- Static Values for Local Development ---
 # These prefixes now reflect the simpler GCS layout.
@@ -57,6 +59,10 @@ export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 # export THINKING_LEVEL="minimal"          # minimal | low | medium | high
 # export CHECKER_MODEL="gemini-3.1-pro"    # second opinion in the maker/checker pass
 export ENABLE_MAKER_CHECKER="true"         # "false" halves the AI calls (no verification)
+# Pins repeatedly-attached source PDFs server-side instead of re-sending them on every
+# call (Strukturanalyse alone is context for 24 calls per run). "false" to disable.
+export ENABLE_CONTEXT_CACHE="true"
+# export CONTEXT_CACHE_TTL_SECONDS="9000"  # caches are deleted at the end of a run
 
 # --- NEW: Helper function for correct execution ---
 # This alias ensures we always run the application as a module,
@@ -65,6 +71,13 @@ auditor() {
     python -m src.main "$@"
 }
 
+
+for required in GCP_PROJECT_ID BUCKET_NAME DOC_AI_PROCESSOR_NAME; do
+    if [ -z "${!required}" ]; then
+        echo "❌ Error: '${required}' is empty — the corresponding terraform output returned nothing."
+        return 1
+    fi
+done
 
 set +e
 echo "✅ Environment variables configured successfully'."

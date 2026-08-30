@@ -2,17 +2,22 @@
 import logging
 import json
 import asyncio
+import contextvars
 import datetime
 from typing import List, Dict, Any, Optional
 
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
-from jsonschema import validate, ValidationError
+from jsonschema import validate, SchemaError, ValidationError
 
+from src.assets_loader import load_asset_json
+from src.clients.context_cache import ContextCacheManager
 from src.config import AppConfig
 from src.constants import (
     CHECKER_MODEL,
+    CONTEXT_CACHE_TTL_SECONDS,
+    ENABLE_CONTEXT_CACHE,
     ENABLE_MAKER_CHECKER,
     GROUND_TRUTH_MODEL,
     PROMPT_CONFIG_PATH,
@@ -21,6 +26,13 @@ from src.constants import (
 
 MAX_RETRIES = 5
 
+# The audit stage whose work the current coroutine belongs to. Stages run concurrently
+# and share one AiClient, so the owner of a checker verdict must be recorded when the
+# verdict is appended — not when a stage happens to persist the log. asyncio copies the
+# context into every task it creates, so a value set in run_single_stage reaches all
+# AI calls that stage spawns, and only those.
+current_stage: contextvars.ContextVar[str] = contextvars.ContextVar("current_stage", default="unknown")
+
 
 class AiClient:
     """A client for all Vertex AI model interactions, using the google-genai SDK."""
@@ -28,8 +40,7 @@ class AiClient:
     def __init__(self, config: AppConfig):
         self.config = config
 
-        with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-            prompt_config = json.load(f)
+        prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
         base_system_message = prompt_config.get("system_message", "")
         if not base_system_message:
@@ -39,8 +50,9 @@ class AiClient:
         current_date = datetime.date.today().strftime("%Y-%m-%d")
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        # Vertex AI location. "global" is intentional here for broad Gemini model
-        # availability; config.region still drives other GCP resources (GCS, Document AI).
+        # Vertex AI location. "global" is intentional for broad Gemini model availability.
+        # No other client takes a region either: GCS is addressed by bucket name and
+        # Document AI derives its location from the processor name.
         vertex_location = "global"
         self.client = genai.Client(
             vertexai=True,
@@ -61,12 +73,29 @@ class AiClient:
         # Protocol of every checker verdict; the controller persists it per stage.
         self.checker_log: List[Dict[str, Any]] = []
 
+        # Pins repeatedly-attached document sets server-side. The system message lives in
+        # the cache, so a cached request must not send it again.
+        self.cache_manager = ContextCacheManager(
+            client=self.client,
+            system_instruction=self.system_message,
+            ttl_seconds=CONTEXT_CACHE_TTL_SECONDS,
+            enabled=ENABLE_CONTEXT_CACHE,
+        )
+
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' (Vertex AI location '{vertex_location}').")
         logging.info(f"System Message Context includes today's date: {current_date}")
         logging.info(
             f"Maker/checker is {'enabled' if self.checker_enabled else 'disabled'}"
             + (f" (checker model '{CHECKER_MODEL}')." if self.checker_enabled else ".")
         )
+        logging.info(
+            f"Context caching is {'enabled' if ENABLE_CONTEXT_CACHE else 'disabled'}"
+            + (f" (TTL {CONTEXT_CACHE_TTL_SECONDS}s)." if ENABLE_CONTEXT_CACHE else ".")
+        )
+
+    async def release_context_caches(self) -> None:
+        """Deletes the context caches this run created. Safe to call more than once."""
+        await self.cache_manager.release_all()
 
     @staticmethod
     def _resolve_thinking_level(model: str) -> str:
@@ -76,8 +105,16 @@ class AiClient:
             return "low"
         return level
 
-    def _build_generation_config(self, json_schema: Dict[str, Any], model: str) -> types.GenerateContentConfig:
-        """Build the GenerateContentConfig, enforcing JSON output against the given schema."""
+    def _build_generation_config(
+        self, json_schema: Dict[str, Any], model: str, cached_content: Optional[str] = None
+    ) -> types.GenerateContentConfig:
+        """Build the GenerateContentConfig, enforcing JSON output against the given schema.
+
+        Args:
+            cached_content: resource name of a context cache holding this request's
+                documents. The cache also carries the system instruction, so it must
+                not be sent again alongside it.
+        """
         try:
             schema_for_api = json.loads(json.dumps(json_schema))
             schema_for_api.pop("$schema", None)
@@ -87,12 +124,15 @@ class AiClient:
 
         config_fields = types.GenerateContentConfig.model_fields
         kwargs: Dict[str, Any] = {
-            "system_instruction": self.system_message,
             "response_mime_type": "application/json",
             "max_output_tokens": 65535,
             # Gemini 3.x is tuned for temperature 1; lowering it degrades reasoning quality.
             "temperature": 1,
         }
+        if cached_content:
+            kwargs["cached_content"] = cached_content
+        else:
+            kwargs["system_instruction"] = self.system_message
 
         # The assets are real JSON Schemas, so hand them to the field that speaks that
         # dialect; response_schema (OpenAPI subset) is the fallback for older SDKs.
@@ -117,13 +157,23 @@ class AiClient:
 
     @staticmethod
     def _extract_json(response: Any) -> Dict[str, Any]:
-        """Validate the response shape and parse its text payload as JSON."""
+        """Validate the response shape and parse its text payload as JSON.
+
+        Raises ValueError (which the retry loop catches) for every unusable response.
+        MAX_TOKENS counts as unusable: a truncated answer that still happens to parse
+        would flow into the report as if it were complete.
+        """
         if not response.candidates:
             raise ValueError("The model response contained no candidates.")
 
-        finish_reason = response.candidates[0].finish_reason.name
-        if finish_reason not in ["STOP", "MAX_TOKENS"]:
+        finish_reason = getattr(response.candidates[0].finish_reason, "name", None)
+        if finish_reason != "STOP":
             raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
+
+        # With thinking enabled a candidate can carry no text part at all; json.loads(None)
+        # would raise TypeError, which the retry loop does not catch.
+        if response.text is None:
+            raise ValueError("The model response contained no text part.")
 
         try:
             return json.loads(response.text)
@@ -131,32 +181,22 @@ class AiClient:
             # Clean JSON error without the full traceback
             raise ValueError(f"Failed to parse model response as JSON: {str(e).split(':')[0]}")
 
-    async def generate_json_response_single_attempt(
-        self,
-        prompt: str,
-        json_schema: Dict[str, Any],
-        gcs_uris: List[str] = None,
-        request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Single attempt JSON generation - used for model fallback scenarios.
-        Fails fast on JSON errors rather than retrying 5 times.
-        """
-        model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
-        gen_config = self._build_generation_config(json_schema, model_to_use)
-        contents = self._build_contents(prompt, gcs_uris)
+    @staticmethod
+    def _validate_against_schema(payload: Any, json_schema: Dict[str, Any], request_context_log: str) -> None:
+        """Validates a model reply against the schema that was sent with the request.
 
-        logging.info(f"[{request_context_log}] Single attempt with model '{model_to_use}'...")
-        response = await self.client.aio.models.generate_content(
-            model=model_to_use,
-            contents=contents,
-            config=gen_config,
-        )
-
-        response_json = self._extract_json(response)
-        logging.info(f"[{request_context_log}] Successfully generated JSON response.")
-        return response_json
+        Raises ValueError on a mismatch so the caller's retry loop treats it like any
+        other bad response. A broken schema asset is a code bug, not a model failure,
+        so it is logged as critical and also raised rather than silently skipped.
+        """
+        try:
+            validate(instance=payload, schema=json_schema)
+        except ValidationError as e:
+            location = " -> ".join(str(p) for p in e.absolute_path) or "<root>"
+            raise ValueError(f"Response does not match the requested schema at '{location}': {e.message}")
+        except SchemaError as e:
+            logging.critical(f"[{request_context_log}] The requested JSON schema is itself invalid: {e.message}")
+            raise ValueError(f"Invalid JSON schema supplied: {e.message}") from e
 
     async def generate_json_response(
         self,
@@ -172,6 +212,15 @@ class AiClient:
         optionally providing GCS files as context. Implements an async retry loop
         with exponential backoff and connection limiting.
 
+        The reply is validated against the schema that was sent, and a mismatch is
+        retried like any other failure. Constrained decoding makes that rare, but
+        "rare" is not "never" — and an unvalidated reply reaches the report, where a
+        missing key becomes a silently wrong audit statement.
+
+        When the same documents have already been pinned in a context cache, the request
+        references that cache instead of re-sending them. If the cache turns out to be
+        unusable, the call falls back to attaching the documents and retries.
+
         Args:
             prompt: The text prompt for the model.
             json_schema: The JSON schema to enforce on the model's output.
@@ -181,18 +230,22 @@ class AiClient:
             max_retries: Optional override for the number of retries (defaults to MAX_RETRIES).
 
         Returns:
-            The parsed JSON response from the model.
+            The parsed, schema-valid JSON response from the model.
         """
         retries = max_retries if max_retries is not None else MAX_RETRIES
 
         # Select the appropriate model; it also decides the thinking level.
         model_to_use = model_override if model_override else GROUND_TRUTH_MODEL
-        gen_config = self._build_generation_config(json_schema, model_to_use)
 
-        # Build the content list. The system message is handled via the generation config.
-        contents = self._build_contents(prompt, gcs_uris)
+        # A cache holds the documents AND the system instruction, so the request carries
+        # neither: it sends only this call's prompt.
+        cache_name = await self.cache_manager.get_or_create(model_to_use, gcs_uris)
+        gen_config = self._build_generation_config(json_schema, model_to_use, cached_content=cache_name)
+        contents = self._build_contents(prompt, None if cache_name else gcs_uris)
         if gcs_uris and self.config.is_test_mode:
-            logging.info(f"Attaching {len(gcs_uris)} GCS files to the prompt.")
+            logging.info(
+                f"{'Referencing cached' if cache_name else 'Attaching'} {len(gcs_uris)} GCS file(s) for the prompt."
+            )
 
         for attempt in range(retries):
             try:
@@ -207,11 +260,30 @@ class AiClient:
                     )
 
                 response_json = self._extract_json(response)
+                self._validate_against_schema(response_json, json_schema, request_context_log)
                 logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                 return response_json
 
-            except (genai_errors.APIError, ValueError, asyncio.TimeoutError) as e:
+            # TypeError/AttributeError are belt-and-braces for an unexpected response
+            # shape: without them a malformed reply would bypass the retries entirely.
+            except (genai_errors.APIError, ValueError, TypeError, AttributeError, asyncio.TimeoutError) as e:
                 wait_time = 2 ** attempt
+
+                # A cache can expire or be deleted between building the request and
+                # sending it. Drop it and rebuild with the documents attached, so this
+                # costs one retry instead of the whole call. Only while an attempt is
+                # left — on the last one, fall through and raise the real error.
+                if cache_name and isinstance(e, genai_errors.APIError) and attempt < retries - 1:
+                    logging.warning(
+                        f"[{request_context_log}] Call using context cache '{cache_name}' failed "
+                        f"({e.message}). Retrying with the documents attached directly."
+                    )
+                    await self.cache_manager.invalidate(cache_name)
+                    cache_name = None
+                    gen_config = self._build_generation_config(json_schema, model_to_use)
+                    contents = self._build_contents(prompt, gcs_uris)
+                    continue
+
                 if attempt == retries - 1:
                     logging.critical(f"[{request_context_log}] AI generation failed after all {retries} retries.", exc_info=True)
                     raise
@@ -265,8 +337,13 @@ class AiClient:
     def _record_checker_verdict(
         self, request_context_log: str, freigabe: Optional[bool], probleme: List[str], correction_taken: bool
     ) -> None:
-        """Appends one checker verdict to the in-memory protocol."""
+        """Appends one checker verdict to the in-memory protocol.
+
+        The owning stage is stamped here, not when the log is persisted: stages run
+        concurrently, so by persist time the list holds other stages' verdicts too.
+        """
         self.checker_log.append({
+            "stage": current_stage.get(),
             "task": request_context_log,
             "checker_model": CHECKER_MODEL,
             "freigabe": freigabe,
@@ -361,29 +438,3 @@ class AiClient:
         self._record_checker_verdict(request_context_log, False, problems, True)
         return correction
 
-    async def generate_validated_json_response(
-        self,
-        prompt: str,
-        json_schema: Dict[str, Any],
-        gcs_uris: List[str] = None,
-        request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Generates and validates a JSON response from the AI model.
-
-        Raises:
-            ValidationError: If the response doesn't match the provided schema
-
-        Returns:
-            The validated JSON response from the model
-        """
-        try:
-            result = await self.generate_json_response(prompt, json_schema, gcs_uris, request_context_log, model_override)
-            validate(instance=result, schema=json_schema)
-            return result
-        except ValidationError as e:
-            # Clean validation error message
-            clean_msg = e.message.split('\n')[0] if '\n' in e.message else e.message
-            logging.error(f"[{request_context_log}] Schema validation failed: {clean_msg}")
-            raise ValidationError(f"Response validation failed: {clean_msg}")

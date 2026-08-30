@@ -111,8 +111,7 @@ This is a critical architectural pattern for ensuring reliability.
 | :--- | :---: | :--- | :--- |
 | `GCP_PROJECT_ID` | Yes | Terraform | The Google Cloud Project ID. |
 | `BUCKET_NAME` | Yes | Terraform | The GCS bucket for all I/O operations. |
-| `REGION` | Yes | Terraform | Region for GCS and Document AI (Vertex AI calls use the `global` endpoint). |
-| `DOC_AI_PROCESSOR_NAME` | Yes | Terraform | Full resource name of the Document AI Layout Parser. |
+| `DOC_AI_PROCESSOR_NAME` | Yes | Terraform | Full resource name of the Document AI Layout Parser (its location is derived from this name). |
 | `AUDIT_TYPE` | Yes | User Input | Specifies the audit type (e.g., "Zertifizierungsaudit"). |
 | `SOURCE_PREFIX` | Yes | Script | GCS prefix for source documents (e.g., `source_documents/`). |
 | `OUTPUT_PREFIX` | Yes | Script | GCS prefix for generated files (e.g., `output/`). |
@@ -123,3 +122,5 @@ This is a critical architectural pattern for ensuring reliability.
 | `THINKING_LEVEL` | No | Env | `minimal`/`low`/`medium`/`high`. Defaults to `minimal` (clamped to `low` on pro models). |
 | `ENABLE_MAKER_CHECKER` | No | Env | Second-opinion pass over report-relevant answers. Defaults to `true`. |
 | `CHECKER_MODEL` | No | Env | Model for that second opinion. Defaults to `GROUND_TRUTH_MODEL`. |
+| `ENABLE_CONTEXT_CACHE` | No | Env | Pin repeatedly-attached source PDFs in a Vertex context cache instead of re-sending them per call. Defaults to `true`. |
+| `CONTEXT_CACHE_TTL_SECONDS` | No | Env | Lifetime of those caches. Defaults to `9000` (2.5 h); they are deleted at the end of a run anyway. |

@@ -18,6 +18,16 @@ THINKING_LEVEL = os.getenv("THINKING_LEVEL", "minimal")
 # a finding is re-judged by a second, independent call against the same source documents.
 # Roughly doubles the calls on those stages — set to "false" to fall back to single-pass.
 ENABLE_MAKER_CHECKER = os.getenv("ENABLE_MAKER_CHECKER", "true").lower() in ("true", "1", "yes")
+
+# Explicit context caching: the same customer PDFs are context for many calls (and for
+# every checker second opinion), so they are pinned server-side once and referenced by
+# name afterwards. Cached input tokens are billed at a fraction of fresh ones and are
+# not re-processed. Purely an optimisation — "false" attaches documents per request.
+ENABLE_CONTEXT_CACHE = os.getenv("ENABLE_CONTEXT_CACHE", "true").lower() in ("true", "1", "yes")
+# Lifetime of those caches. They are deleted at the end of a run; this is the backstop
+# for a crashed run, so it only needs to outlive one pipeline invocation (job timeout
+# is 2h) without leaving storage billing behind for long.
+CONTEXT_CACHE_TTL_SECONDS = int(os.getenv("CONTEXT_CACHE_TTL_SECONDS", "9000"))
 # The checker deliberately runs on the stronger model, whatever the maker used.
 CHECKER_MODEL = os.getenv("CHECKER_MODEL", GROUND_TRUTH_MODEL)
 
@@ -40,7 +50,6 @@ ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
 # =============================================================================
 TEMP_BASE = "output/temp"
 TEMP_PDF_CHUNKS_PREFIX = f"{TEMP_BASE}/pdf_chunks/"
-DOC_AI_BATCH_RESULTS_PREFIX = f"{TEMP_BASE}/doc_ai_results/"
 
 # =============================================================================
 # INTERMEDIARY PATHS - Idempotent saves organized by stage

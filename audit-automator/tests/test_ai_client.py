@@ -27,10 +27,11 @@ def test_extract_json_parses_valid_stop_response():
     assert result == {"a": 1, "b": [2, 3]}
 
 
-def test_extract_json_allows_max_tokens_finish_reason():
-    # MAX_TOKENS is treated as acceptable (truncation still parsed if valid JSON).
-    result = AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
-    assert result == {"a": 1}
+def test_extract_json_rejects_max_tokens_even_when_the_text_parses():
+    """A truncated answer that happens to be valid JSON is still incomplete; it must
+    be retried, not accepted into the report as a full answer."""
+    with pytest.raises(ValueError, match="MAX_TOKENS"):
+        AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
 
 
 def test_extract_json_raises_when_no_candidates():
@@ -43,9 +44,55 @@ def test_extract_json_raises_on_bad_finish_reason():
         AiClient._extract_json(_fake_response(finish_reason="SAFETY"))
 
 
+def test_extract_json_raises_valueerror_when_the_response_has_no_text():
+    """An all-thinking candidate has text=None. json.loads(None) would raise
+    TypeError, which used to escape the retry loop and kill the stage."""
+    with pytest.raises(ValueError, match="no text part"):
+        AiClient._extract_json(_fake_response(text=None))
+
+
+def test_extract_json_survives_a_missing_finish_reason():
+    response = types.SimpleNamespace(candidates=[types.SimpleNamespace(finish_reason=None)], text='{"a": 1}')
+    with pytest.raises(ValueError, match="non-OK reason"):
+        AiClient._extract_json(response)
+
+
 def test_extract_json_raises_on_malformed_json():
     with pytest.raises(ValueError, match="Failed to parse"):
         AiClient._extract_json(_fake_response(text='{"a": 1,'))  # truncated/invalid
+
+
+# --- Schema validation of replies ---------------------------------------------------
+# Constrained decoding makes a mismatch rare, but an unvalidated reply reaches the
+# report, where a missing key becomes a silently wrong audit statement.
+
+QUESTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answers": {"type": "array", "items": {"type": "boolean"}, "minItems": 1},
+        "finding": {"type": "object"},
+    },
+    "required": ["answers", "finding"],
+}
+
+
+def test_valid_payload_passes_validation():
+    AiClient._validate_against_schema({"answers": [True], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_missing_required_key_raises_valueerror_so_the_retry_loop_catches_it():
+    with pytest.raises(ValueError, match="does not match the requested schema"):
+        AiClient._validate_against_schema({"answers": [True]}, QUESTION_SCHEMA, "test")
+
+
+def test_wrong_type_reports_the_offending_path():
+    with pytest.raises(ValueError, match="answers"):
+        AiClient._validate_against_schema({"answers": ["ja"], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_a_broken_schema_asset_raises_rather_than_passing_silently():
+    with pytest.raises(ValueError, match="Invalid JSON schema"):
+        AiClient._validate_against_schema({}, {"type": "not-a-real-type"}, "test")
 
 
 # --- Generation config -------------------------------------------------------------
@@ -65,6 +112,23 @@ def test_generation_config_uses_temperature_one():
     """Gemini 3.x expects temperature 1; lower values degrade reasoning quality."""
     config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
     assert config.temperature == 1
+
+
+def test_uncached_request_carries_the_system_instruction():
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
+    assert config.system_instruction == "Du bist ein BSI-Auditor."
+    assert config.cached_content is None
+
+
+def test_cached_request_references_the_cache_and_drops_the_system_instruction():
+    """The cache already holds the system instruction; sending it again alongside
+    cached_content is redundant at best and rejected at worst."""
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash", cached_content="caches/42")
+    assert config.cached_content == "caches/42"
+    assert config.system_instruction is None
+    # The schema and decoding settings must survive the cached path unchanged.
+    assert config.temperature == 1
+    assert (config.response_json_schema or config.response_schema) is not None
 
 
 def test_generation_config_strips_meta_schema_key():
