@@ -32,7 +32,8 @@ CHECKER_MODEL = os.getenv("CHECKER_MODEL", GROUND_TRUTH_MODEL)
 RESULTS_BASE = "output/results"
 STAGE_RESULTS_PATH = f"{RESULTS_BASE}/{{stage_name}}.json"  # Format with stage_name
 ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
-FINAL_REPORT_PATH = f"{RESULTS_BASE}/final_audit_report.json"
+# The assembled report is written as results/report_<YYMMDD>.json (ReportGenerator);
+# the date stamp is deliberate, so there is no single constant path for it.
 
 # =============================================================================
 # TEMPORARY PATHS - Short-lived processing files

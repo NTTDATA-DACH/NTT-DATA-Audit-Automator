@@ -4,33 +4,20 @@ This project automates BSI Grundschutz security audits by transforming customer 
 
 ## End-to-End Workflow
 
-### Managing Audit Data: Refresh vs. Reset
-Before starting, choose the correct method to prepare your environment.
+### Managing Audit Data: Resetting Between Runs
+One script covers both cases; the infrastructure is never touched, so no `terraform apply` is needed afterwards.
 
-#### **Option 1: Fast Refresh (Recommended for Data Updates)**
-Use this when you get new source files for an audit and want to start over without touching the cloud infrastructure.
+**New documents for the same audit** — wipes everything the pipeline generated, keeps the customer's documents:
+```bash
+bash ./scripts/reset_audit_data.sh
+```
 
-1.  **Run the Refresh Script:** This moves old data to an archive.
-    ```bash
-    bash ./scripts/refresh_audit_data.sh
-    ```
-2.  **Confirm the Action:** Type `y` to proceed.
-3.  **Proceed to the Standard Workflow below.**
+**New customer / new document set** — additionally deletes `source_documents/`:
+```bash
+bash ./scripts/reset_audit_data.sh --with-sources
+```
 
-#### **Option 2: Full Reset (For Infrastructure Changes)**
-Use this only if you need to start from a "scorched-earth" state, for example, for a new customer or if you've changed the Terraform configuration.
-
-1.  **Run the Reset Script:** This wipes all GCS data.
-    ```bash
-    bash ./scripts/reset_audit.sh
-    ```
-2.  **Recreate Infrastructure (if needed):** Follow the script's instructions to run `terraform apply`.
-    ```bash
-    cd ../terraform
-    terraform apply -auto-approve
-    cd ..
-    ```
-3.  **Proceed to the Standard Workflow below.**
+Confirm with `y` (or pass `-y`), then proceed to the Standard Workflow below. The bucket is read from the Terraform state; override it with `BUCKET_NAME=... bash ./scripts/reset_audit_data.sh`.
 
 ### Standard Workflow
 
