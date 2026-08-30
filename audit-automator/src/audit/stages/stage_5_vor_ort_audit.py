@@ -119,9 +119,15 @@ class Chapter5Runner:
                 status_map = {"Ja": "Umgesetzt", "Nein": "Nicht umgesetzt", "teilweise": "Teilweise umgesetzt", "entbehrlich": "Entbehrlich"}
                 final_bewertung_status = status_map.get(bewertung_status_raw, bewertung_status_raw)
 
+                # The level suffix (B/S/H) is what the auditor needs to see next to the
+                # requirement; the official Kompendium carries it in the heading, not the title.
+                anforderung_text = control.get("titel", "N/A")
+                if control.get("level"):
+                    anforderung_text = f"{anforderung_text} ({control['level']})"
+
                 anforderungen_list.append({
                     "nummer": control_id,
-                    "anforderung": control.get("title", "N/A"),
+                    "anforderung": anforderung_text,
                     "bewertung": final_bewertung_status,
                     "dokuAntragsteller": customer_explanation,
                     "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },

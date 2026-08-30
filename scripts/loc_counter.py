@@ -27,7 +27,7 @@ def analyze_loc():
 
     # This specific large JSON file is excluded from the count as requested.
     # We use endswith to make the script runnable from any subdirectory of the repo.
-    excluded_file_suffix = 'assets/json/BSI_GS_OSCAL_current_2023_benutzerdefinierte.json'
+    excluded_file_suffix = 'assets/json/bsi_kompendium_ed2023.json'
 
     loc_by_extension = defaultdict(int)
     total_loc = 0

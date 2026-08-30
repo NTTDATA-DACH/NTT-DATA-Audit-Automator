@@ -159,8 +159,10 @@ class Chapter3Runner:
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
         risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
         if entbehrlich_items:
-            for item in entbehrlich_items: # Enrich with control level
-                item['level'] = self.control_catalog.get_control_level(item.get('id'))
+            for item in entbehrlich_items: # Enrich with the BSI level (B/S/H)
+                # Requirements from the institution's own Bausteine are not in the official
+                # Kompendium; the prompt has a dedicated rule for 'unbekannt'.
+                item['level'] = self.control_catalog.get_control_level(item.get('id')) or "unbekannt"
             
             question = questions_config["entbehrlich"]
             prompt = targeted_prompt_template.format(
@@ -176,8 +178,8 @@ class Chapter3Runner:
             answers[1] = True
 
         # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
-        level_1_ids = self.control_catalog.get_level_1_control_ids()
-        muss_anforderungen = [a for a in anforderungen if a.get("id") in level_1_ids]
+        muss_ids = set(self.control_catalog.get_muss_control_ids())
+        muss_anforderungen = [a for a in anforderungen if a.get("id") in muss_ids]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
                 question=questions_config["muss_anforderungen"],
