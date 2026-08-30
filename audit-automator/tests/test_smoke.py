@@ -52,10 +52,17 @@ def test_findings_path_constant_is_consistent():
 
 
 def test_models_are_current_generation():
-    """MAX-5: defaults must not regress to the outdated Gemini 2.5 series."""
+    """MAX-5: defaults must stay on current, generally available models.
+
+    Preview models are excluded deliberately: they get shut down without much notice
+    (gemini-3.1-flash-lite-preview and gemini-3-pro-preview both did), which would
+    break an audit run mid-flight.
+    """
     from src.constants import GROUND_TRUTH_MODEL, CHUNK_PROCESSING_MODEL
-    assert "gemini-2.5" not in GROUND_TRUTH_MODEL
-    assert "gemini-2.5" not in CHUNK_PROCESSING_MODEL
+    for model in (GROUND_TRUTH_MODEL, CHUNK_PROCESSING_MODEL):
+        assert "gemini-2.5" not in model
+        assert "gemini-2.0" not in model
+        assert not model.endswith("-preview")
 
 
 def test_block_grouper_does_not_call_sys_exit():

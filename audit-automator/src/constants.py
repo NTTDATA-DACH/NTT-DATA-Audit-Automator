@@ -4,11 +4,15 @@ This ensures consistency across all stages and reduces magic strings.
 """
 import os
 
-# Model IDs are config-driven (env override) with current-generation defaults.
-# On Vertex AI (project gpp-agentic-3, 2026-06) gemini-3.1-flash-lite is GA, but the
-# 3.1 pro tier is only available as a "-preview" model; there is no stable gemini-3.1-pro.
-CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", "gemini-3.1-flash-lite")
-GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro-preview")
+# Model IDs are config-driven (env override) with current-generation defaults (2026-08):
+# gemini-3.7-flash is the GA workhorse, gemini-3.1-pro the GA flagship on Vertex AI.
+# Both env vars are the rollback lever if a model is unavailable in a given project.
+CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", "gemini-3.7-flash")
+GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro")
+
+# Reasoning depth per call (Gemini 3.x): minimal | low | medium | high. The pro tier has
+# no "minimal" level, so AiClient clamps it to "low" for those models.
+THINKING_LEVEL = os.getenv("THINKING_LEVEL", "minimal")
 
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation

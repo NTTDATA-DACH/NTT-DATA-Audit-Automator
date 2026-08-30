@@ -46,3 +46,43 @@ def test_extract_json_raises_on_bad_finish_reason():
 def test_extract_json_raises_on_malformed_json():
     with pytest.raises(ValueError, match="Failed to parse"):
         AiClient._extract_json(_fake_response(text='{"a": 1,'))  # truncated/invalid
+
+
+# --- Generation config -------------------------------------------------------------
+# _build_generation_config needs only self.system_message, so an uninitialised instance
+# exercises it without a Vertex client, credentials or prompt assets.
+
+SCHEMA = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object"}
+
+
+def _client():
+    client = AiClient.__new__(AiClient)
+    client.system_message = "Du bist ein BSI-Auditor."
+    return client
+
+
+def test_generation_config_uses_temperature_one():
+    """Gemini 3.x expects temperature 1; lower values degrade reasoning quality."""
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
+    assert config.temperature == 1
+
+
+def test_generation_config_strips_meta_schema_key():
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
+    sent_schema = config.response_json_schema or config.response_schema
+    assert "$schema" not in sent_schema
+    # The caller's schema must not be mutated.
+    assert "$schema" in SCHEMA
+
+
+def test_generation_config_sets_thinking_level():
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.7-flash")
+    assert config.thinking_config.thinking_level.value == "MINIMAL"
+
+
+def test_pro_models_clamp_minimal_thinking_to_low():
+    """The pro tier has no 'minimal' level, so it must be raised to 'low'."""
+    config = _client()._build_generation_config(SCHEMA, "gemini-3.1-pro")
+    assert config.thinking_config.thinking_level.value == "LOW"
+    assert AiClient._resolve_thinking_level("gemini-3.7-flash") == "minimal"
+    assert AiClient._resolve_thinking_level("gemini-3.1-pro") == "low"
