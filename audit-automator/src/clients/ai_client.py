@@ -11,7 +11,13 @@ from google.genai import errors as genai_errors
 from jsonschema import validate, ValidationError
 
 from src.config import AppConfig
-from src.constants import GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH, THINKING_LEVEL
+from src.constants import (
+    CHECKER_MODEL,
+    ENABLE_MAKER_CHECKER,
+    GROUND_TRUTH_MODEL,
+    PROMPT_CONFIG_PATH,
+    THINKING_LEVEL,
+)
 
 MAX_RETRIES = 5
 
@@ -44,8 +50,23 @@ class AiClient:
 
         self.semaphore = asyncio.Semaphore(config.max_concurrent_ai_requests)
 
+        # Maker/checker: the checker prompt is generic, so one template serves every task.
+        self.checker_prompt_template = prompt_config.get("checker", {}).get("prompt", "")
+        self.checker_enabled = ENABLE_MAKER_CHECKER and bool(self.checker_prompt_template)
+        if ENABLE_MAKER_CHECKER and not self.checker_prompt_template:
+            logging.error(
+                "ENABLE_MAKER_CHECKER is set but prompt_config.json has no 'checker.prompt'. "
+                "Running single-pass — answers are NOT being verified."
+            )
+        # Protocol of every checker verdict; the controller persists it per stage.
+        self.checker_log: List[Dict[str, Any]] = []
+
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' (Vertex AI location '{vertex_location}').")
         logging.info(f"System Message Context includes today's date: {current_date}")
+        logging.info(
+            f"Maker/checker is {'enabled' if self.checker_enabled else 'disabled'}"
+            + (f" (checker model '{CHECKER_MODEL}')." if self.checker_enabled else ".")
+        )
 
     @staticmethod
     def _resolve_thinking_level(model: str) -> str:
@@ -208,6 +229,137 @@ class AiClient:
                 await asyncio.sleep(wait_time)
 
         raise RuntimeError("AI generation failed unexpectedly after exhausting all retries.")
+
+    @staticmethod
+    def _build_checker_schema(json_schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Wraps a task schema into the checker's verdict schema.
+
+        The correction is nullable via `anyOf` rather than a nullable type, because that
+        is the form Vertex accepts for a composed sub-schema.
+        """
+        task_schema = json.loads(json.dumps(json_schema))
+        task_schema.pop("$schema", None)
+        return {
+            "type": "object",
+            "properties": {
+                "freigabe": {
+                    "type": "boolean",
+                    "description": "true, wenn die Antwort fachlich korrekt und belegt ist.",
+                },
+                "probleme": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Konkrete Maengel der Antwort; leer, wenn freigegeben.",
+                },
+                "korrigierte_antwort": {
+                    "anyOf": [task_schema, {"type": "null"}],
+                    "description": (
+                        "Bei freigabe=false die vollstaendig korrigierte Antwort im Schema "
+                        "der Aufgabe, sonst null."
+                    ),
+                },
+            },
+            "required": ["freigabe", "probleme"],
+        }
+
+    def _record_checker_verdict(
+        self, request_context_log: str, freigabe: Optional[bool], probleme: List[str], correction_taken: bool
+    ) -> None:
+        """Appends one checker verdict to the in-memory protocol."""
+        self.checker_log.append({
+            "task": request_context_log,
+            "checker_model": CHECKER_MODEL,
+            "freigabe": freigabe,
+            "probleme": probleme,
+            "korrektur_uebernommen": correction_taken,
+        })
+
+    async def generate_checked_json_response(
+        self,
+        prompt: str,
+        json_schema: Dict[str, Any],
+        gcs_uris: List[str] = None,
+        request_context_log: str = "Generic AI Request",
+        model_override: Optional[str] = None,
+        max_retries: int = None
+    ) -> Dict[str, Any]:
+        """
+        Generates an answer and has a second, independent call verify it (maker/checker).
+
+        The checker sees the same source documents and the maker's answer, and returns a
+        verdict plus an optional correction. Only answers that end up in the report or
+        produce findings are worth this second pass; bulk extraction is not.
+
+        Fails open: if the checker call itself fails, the maker's answer is returned with
+        a warning. An unverified chapter is worse than an empty one only in theory — in
+        practice an empty chapter breaks the report assembly.
+        """
+        answer = await self.generate_json_response(
+            prompt, json_schema, gcs_uris, request_context_log, model_override, max_retries
+        )
+        if not self.checker_enabled:
+            return answer
+
+        checker_prompt = (
+            self.checker_prompt_template
+            # replace() not format(): both the task prompt and the answer contain JSON
+            # braces, which format() would try to interpret.
+            .replace("{original_prompt}", prompt)
+            .replace("{antwort_json}", json.dumps(answer, indent=2, ensure_ascii=False))
+        )
+
+        try:
+            verdict = await self.generate_json_response(
+                prompt=checker_prompt,
+                json_schema=self._build_checker_schema(json_schema),
+                gcs_uris=gcs_uris,
+                request_context_log=f"Checker[{request_context_log}]",
+                model_override=CHECKER_MODEL,
+                max_retries=2,
+            )
+        except Exception as e:  # noqa: BLE001 — fail open, but never silently
+            logging.warning(
+                f"[{request_context_log}] Checker call failed ({type(e).__name__}: {e}). "
+                "Keeping the unverified answer."
+            )
+            self._record_checker_verdict(
+                request_context_log, None, [f"Checker-Aufruf fehlgeschlagen: {e}"], False
+            )
+            return answer
+
+        problems = [str(p) for p in (verdict.get("probleme") or [])]
+        if verdict.get("freigabe"):
+            logging.info(f"[{request_context_log}] Checker approved the answer.")
+            self._record_checker_verdict(request_context_log, True, problems, False)
+            return answer
+
+        correction = verdict.get("korrigierte_antwort")
+        if not isinstance(correction, dict):
+            logging.warning(
+                f"[{request_context_log}] Checker rejected the answer but supplied no correction: "
+                f"{problems}. Keeping the original answer."
+            )
+            self._record_checker_verdict(request_context_log, False, problems, False)
+            return answer
+
+        try:
+            validate(instance=correction, schema=json_schema)
+        except ValidationError as e:
+            clean_msg = e.message.split('\n')[0]
+            logging.warning(
+                f"[{request_context_log}] Checker correction does not match the task schema "
+                f"({clean_msg}). Keeping the original answer."
+            )
+            self._record_checker_verdict(
+                request_context_log, False, problems + [f"Korrektur schema-invalide: {clean_msg}"], False
+            )
+            return answer
+
+        logging.warning(
+            f"[{request_context_log}] Checker corrected the answer: {problems}"
+        )
+        self._record_checker_verdict(request_context_log, False, problems, True)
+        return correction
 
     async def generate_validated_json_response(
         self,

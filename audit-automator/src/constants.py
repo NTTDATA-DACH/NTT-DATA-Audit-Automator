@@ -14,6 +14,13 @@ GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", "gemini-3.1-pro")
 # no "minimal" level, so AiClient clamps it to "low" for those models.
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "minimal")
 
+# Maker/checker (Vier-Augen-Prinzip): every answer that ends up in the report or produces
+# a finding is re-judged by a second, independent call against the same source documents.
+# Roughly doubles the calls on those stages — set to "false" to fall back to single-pass.
+ENABLE_MAKER_CHECKER = os.getenv("ENABLE_MAKER_CHECKER", "true").lower() in ("true", "1", "yes")
+# The checker deliberately runs on the stronger model, whatever the maker used.
+CHECKER_MODEL = os.getenv("CHECKER_MODEL", GROUND_TRUTH_MODEL)
+
 # Output organization structure:
 # output/results/         -> Final stage outputs ready for report generation
 # output/temp/           -> Temporary files (PDF chunks, intermediate processing)
@@ -54,6 +61,10 @@ DOC_AI_CHUNK_RESULTS_PREFIX = f"{DOC_AI_BASE}/chunk_results/"
 # RAG Client paths  
 RAG_BASE = f"{INTERMEDIARY_BASE}/rag"
 DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
+
+# Maker/checker protocol: one entry per checked AI answer, so the QS trail of the audit
+# shows what the second pass objected to and whether its correction was taken.
+CHECKER_LOG_PATH = f"{INTERMEDIARY_BASE}/checker_log.json"
 
 # =============================================================================
 # ASSET PATHS

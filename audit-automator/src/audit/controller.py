@@ -11,7 +11,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.document_ai_client import DocumentAiClient
 from src.clients.rag_client import RagClient
-from src.constants import STAGE_RESULTS_PATH, ALL_FINDINGS_PATH, EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
+from src.constants import STAGE_RESULTS_PATH, ALL_FINDINGS_PATH, EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, CHECKER_LOG_PATH
 from src.audit.stages.stage_previous_report_scan import PreviousReportScanner
 from src.audit.stages.stage_1_general import Chapter1Runner
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
@@ -176,6 +176,37 @@ class AuditController:
         )
         logging.info(f"Successfully saved {len(findings_with_ids)} findings with sequential IDs to {findings_path}")
 
+    def _save_checker_log(self, stage_name: str) -> None:
+        """Persists the maker/checker verdicts of this stage as the audit's QS trail.
+
+        Entries of the stage being (re-)run replace their predecessors, mirroring how
+        findings are handled, so a repeated run does not duplicate the protocol.
+        """
+        new_entries = [{"stage": stage_name, **entry} for entry in self.ai_client.checker_log]
+        self.ai_client.checker_log.clear()
+
+        existing = []
+        try:
+            if self.gcs_client.blob_exists(CHECKER_LOG_PATH):
+                existing = self.gcs_client.read_json(CHECKER_LOG_PATH)
+        except Exception as e:
+            logging.warning(f"Could not read existing checker log: {e}. Starting a new one.")
+
+        kept = [e for e in existing if e.get("stage") != stage_name]
+        combined = kept + new_entries
+        if not combined:
+            return
+
+        self.gcs_client.upload_from_string(
+            content=json.dumps(combined, indent=2, ensure_ascii=False),
+            destination_blob_name=CHECKER_LOG_PATH
+        )
+        corrections = sum(1 for e in new_entries if e.get("korrektur_uebernommen"))
+        logging.info(
+            f"Checker log for '{stage_name}': {len(new_entries)} verdict(s), "
+            f"{corrections} correction(s) applied. Saved to {CHECKER_LOG_PATH}"
+        )
+
     async def run_all_stages(self, force_overwrite: bool = False) -> None:
         """
         Runs all defined audit stages in a dependency-aware order. Each stage run
@@ -285,12 +316,14 @@ class AuditController:
             except Exception as e:
                 logging.error(f"Stage '{stage_name}' failed: {e}", exc_info=True)
                 self._save_all_findings() # Save findings state even on failure
+                self._save_checker_log(stage_name)
                 raise
 
         # 3. Process findings from the result (either newly generated or from the skipped file)
         self._extract_and_store_findings(stage_name, result_data)
 
-        # 4. Save the final, updated list of all findings
+        # 4. Save the final, updated list of all findings and the maker/checker trail
         self._save_all_findings()
-        
+        self._save_checker_log(stage_name)
+
         return result_data

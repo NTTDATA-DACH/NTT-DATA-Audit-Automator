@@ -51,6 +51,13 @@ export AUDIT_TYPE="2. Überwachungsaudit"
 export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
+# --- AI behaviour (all optional; the defaults in src/constants.py apply if unset) ---
+# export CHUNK_PROCESSING_MODEL="gemini-3.7-flash"
+# export GROUND_TRUTH_MODEL="gemini-3.1-pro"
+# export THINKING_LEVEL="minimal"          # minimal | low | medium | high
+# export CHECKER_MODEL="gemini-3.1-pro"    # second opinion in the maker/checker pass
+export ENABLE_MAKER_CHECKER="true"         # "false" halves the AI calls (no verification)
+
 # --- NEW: Helper function for correct execution ---
 # This alias ensures we always run the application as a module,
 # which correctly resolves the relative imports in src/main.py.

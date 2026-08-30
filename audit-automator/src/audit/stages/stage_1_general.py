@@ -45,7 +45,7 @@ class Chapter1Runner:
                 }
             }
             
-        return await self.ai_client.generate_json_response(
+        return await self.ai_client.generate_checked_json_response(
             prompt=prompt_template,
             json_schema=schema,
             gcs_uris=gcs_uris,

@@ -71,7 +71,7 @@ class GroundTruthMapper:
             # Extract Zielobjekte from Strukturanalyse (A.1)
             z_task_config = gt_config["extract_zielobjekte"]
             z_uris = self.rag_client.get_gcs_uris_for_categories(["Strukturanalyse"])
-            zielobjekte_result = await self.ai_client.generate_json_response(
+            zielobjekte_result = await self.ai_client.generate_checked_json_response(
                 prompt=z_task_config["prompt"], 
                 json_schema=self._load_asset_json(z_task_config["schema_path"]), 
                 gcs_uris=z_uris, 
@@ -82,7 +82,7 @@ class GroundTruthMapper:
             # Extract Mappings from Modellierung (A.3)
             m_task_config = gt_config["extract_baustein_mappings"]
             m_uris = self.rag_client.get_gcs_uris_for_categories(["Modellierung"])
-            mappings_result = await self.ai_client.generate_json_response(
+            mappings_result = await self.ai_client.generate_checked_json_response(
                 prompt=m_task_config["prompt"], 
                 json_schema=self._load_asset_json(m_task_config["schema_path"]), 
                 gcs_uris=m_uris, 
