@@ -91,6 +91,12 @@ async def _run() -> int:
     failures = 0
     for label, model_id in models:
         print(f"\n--- {label} = {model_id} (calling Vertex AI, hits the network) ---")
+        # Report what is actually sent: this script is the gate for the model refresh
+        # (current model IDs, temperature 1, thinking level, JSON-Schema field).
+        effective = client._build_generation_config(schema, model_id)
+        schema_field = "response_json_schema" if effective.response_json_schema else "response_schema"
+        thinking = effective.thinking_config.thinking_level if effective.thinking_config else None
+        print(f"    config: temperature={effective.temperature}, thinking_level={thinking}, schema via {schema_field}")
         try:
             result = await client.generate_validated_json_response(
                 prompt=prompt,

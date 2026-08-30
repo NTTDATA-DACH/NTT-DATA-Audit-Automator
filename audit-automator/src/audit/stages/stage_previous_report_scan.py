@@ -44,7 +44,7 @@ class PreviousReportScanner:
             prompt = task_config["prompt"]
             schema = self._load_asset_json(task_config["schema_path"])
             
-            response = await self.ai_client.generate_json_response(
+            response = await self.ai_client.generate_checked_json_response(
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=[gcs_uri],

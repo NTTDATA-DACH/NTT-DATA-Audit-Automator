@@ -159,15 +159,17 @@ class Chapter3Runner:
         entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
         risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
         if entbehrlich_items:
-            for item in entbehrlich_items: # Enrich with control level
-                item['level'] = self.control_catalog.get_control_level(item.get('id'))
+            for item in entbehrlich_items: # Enrich with the BSI level (B/S/H)
+                # Requirements from the institution's own Bausteine are not in the official
+                # Kompendium; the prompt has a dedicated rule for 'unbekannt'.
+                item['level'] = self.control_catalog.get_control_level(item.get('id')) or "unbekannt"
             
             question = questions_config["entbehrlich"]
             prompt = targeted_prompt_template.format(
                 question=question,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
-            res = await self.ai_client.generate_json_response(
+            res = await self.ai_client.generate_checked_json_response(
                 prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
             )
@@ -176,14 +178,14 @@ class Chapter3Runner:
             answers[1] = True
 
         # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
-        level_1_ids = self.control_catalog.get_level_1_control_ids()
-        muss_anforderungen = [a for a in anforderungen if a.get("id") in level_1_ids]
+        muss_ids = set(self.control_catalog.get_muss_control_ids())
+        muss_anforderungen = [a for a in anforderungen if a.get("id") in muss_ids]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
                 question=questions_config["muss_anforderungen"],
                 json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
+            res = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
             self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
         else:
             answers[2] = True
@@ -196,7 +198,7 @@ class Chapter3Runner:
                 question=questions_config["nicht_umgesetzt"],
                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_json_response(
+            res = await self.ai_client.generate_checked_json_response(
                 prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
             )
@@ -286,7 +288,7 @@ class Chapter3Runner:
         if not uris and task.get("source_categories") is not None:
              return {key: {"error": f"No source documents for categories: {task.get('source_categories')}"}}
         try:
-            data = await self.ai_client.generate_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
+            data = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
             if key == "aktualitaetDerReferenzdokumente":
                 coverage_finding = self._check_document_coverage()
                 if coverage_finding['category'] != 'OK': data['finding'] = coverage_finding
@@ -300,7 +302,7 @@ class Chapter3Runner:
         key = task["key"]
         prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
         try:
-            return {key: await self.ai_client.generate_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
+            return {key: await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
         except Exception as e:
             return {key: {"error": str(e)}}
 

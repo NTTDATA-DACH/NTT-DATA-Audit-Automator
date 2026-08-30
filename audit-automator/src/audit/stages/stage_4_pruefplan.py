@@ -108,7 +108,7 @@ class Chapter4Runner:
             gcs_uris = self.rag_client.get_gcs_uris_for_categories(source_categories)
         
         try:
-            generated_data = await self.ai_client.generate_json_response(
+            generated_data = await self.ai_client.generate_checked_json_response(
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=gcs_uris,
