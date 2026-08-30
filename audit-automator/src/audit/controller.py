@@ -89,9 +89,16 @@ class AuditController:
     @staticmethod
     def _process_new_finding(finding: Dict[str, Any], stage_name: str) -> Dict[str, Any]:
         """Converts a newly generated finding; the ID is assigned when it is persisted."""
-        logging.info(f"Collected new finding from {stage_name}: {finding.get('category')}")
+        category = finding.get("category")
+        if category not in ("AG", "AS", "E"):
+            # The ID is built from the category, so a missing one would produce
+            # 'None-1' in the report. Fall back to the conservative category the
+            # stages already use for degraded AI answers.
+            logging.warning(f"Finding from {stage_name} has an unusable category {category!r}; recording it as 'AG'.")
+            category = "AG"
+        logging.info(f"Collected new finding from {stage_name}: {category}")
         return {
-            "category": finding.get("category"),
+            "category": category,
             "description": finding.get("description"),
             "source_chapter": stage_name.replace('Chapter-', '')
         }
@@ -118,7 +125,7 @@ class AuditController:
         
         return found
 
-    def _extract_and_store_findings(self, stage_name: str, result_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _collect_stage_findings(self, stage_name: str, result_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Parses stage results and returns all structured `finding` objects found in them.
 
@@ -333,7 +340,7 @@ class AuditController:
                 raise
 
         # 2. Collect findings from the result (either newly generated or from the skipped file)
-        stage_findings = self._extract_and_store_findings(stage_name, result_data)
+        stage_findings = self._collect_stage_findings(stage_name, result_data)
 
         # 3. Merge them into the central findings list and persist the maker/checker trail
         await self._persist_stage_state(stage_name, stage_findings)

@@ -209,6 +209,18 @@ def test_a_skipped_stage_keeps_its_persisted_verdicts():
     assert [e["task"] for e in log] == ["Chapter-1: task"], "the no-op re-run stripped the QS trail"
 
 
+def test_a_finding_without_a_usable_category_does_not_produce_a_none_id():
+    gcs = _FakeGcsClient()
+    controller = _controller(gcs)
+    _install_stage(controller, "Chapter-1", {"finding": {"description": "Kategorie fehlt"}})
+
+    asyncio.run(controller.run_single_stage("Chapter-1", force_overwrite=True))
+
+    stored = _stored_findings(gcs)
+    assert stored[0]["id"] == "AG-1"
+    assert stored[0]["category"] == "AG"
+
+
 def test_a_failing_stage_reraises_its_own_error_even_if_saving_fails():
     class _BrokenGcs(_FakeGcsClient):
         def upload_from_string(self, content, destination_blob_name):
