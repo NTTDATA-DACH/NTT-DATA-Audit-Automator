@@ -12,6 +12,10 @@ __pycache__/
 .venv
 venv/
 
+# Build-time download cache for the official BSI XML. The catalog derived from it is
+# committed under assets/; the 3 MB source XML has no business in the runtime image.
+.cache/
+
 # Environment variables - should be passed at runtime, not baked into the image
 .env
 
