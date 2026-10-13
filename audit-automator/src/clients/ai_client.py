@@ -6,6 +6,7 @@ here, so a rule for "all AI calls" holds by construction instead of by disciplin
 call site.
 """
 import asyncio
+import contextvars
 import datetime
 import hashlib
 import json
@@ -18,8 +19,9 @@ import httpx
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
-from jsonschema import validate, ValidationError
+from jsonschema import validate, SchemaError, ValidationError
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.spreadsheet import SHEET_SUFFIXES, render_sheet_text
@@ -87,6 +89,13 @@ def _describe(exc: BaseException) -> str:
         return "JSON parsing error"
     return f"{type(exc).__name__}: {text}"
 
+# The audit stage whose work the current coroutine belongs to. Stages run concurrently
+# and share one AiClient, so the owner of a checker verdict must be recorded when the
+# verdict is appended — not when a stage happens to persist the log. asyncio copies the
+# context into every task it creates, so a value set in run_single_stage reaches all
+# AI calls that stage spawns, and only those.
+current_stage: contextvars.ContextVar[str] = contextvars.ContextVar("current_stage", default="unknown")
+
 
 class AiClient:
     """A client for all Vertex AI model interactions, using the google-genai SDK."""
@@ -96,8 +105,7 @@ class AiClient:
         # Only the batch tier needs GCS (Vertex batch jobs read and write JSONL there).
         self.gcs_client = gcs_client
 
-        with open(PROMPT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-            prompt_config = json.load(f)
+        prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
 
         base_system_message = prompt_config.get("system_message", "")
         if not base_system_message:
@@ -109,9 +117,10 @@ class AiClient:
         self.base_system_message = base_system_message
         self.system_message = f"{base_system_message}\n\nImportant: Today's date is {current_date}."
 
-        # Vertex AI location. "global" is intentional here for broad Gemini model
-        # availability; config.region still drives other GCP resources (GCS, Document AI).
-        # Context caching and batch jobs for base Gemini models support the global endpoint too.
+        # Vertex AI location. "global" is intentional for broad Gemini model availability;
+        # context caching and batch jobs for base Gemini models support the global endpoint too.
+        # No other client takes a region either: GCS is addressed by bucket name and
+        # Document AI derives its location from the processor name.
         vertex_location = "global"
         self.client = genai.Client(
             vertexai=True,
@@ -244,19 +253,46 @@ class AiClient:
 
     @staticmethod
     def _extract_json(response: Any) -> Dict[str, Any]:
-        """Validate the response shape and parse its text payload as JSON."""
+        """Validate the response shape and parse its text payload as JSON.
+
+        Raises ValueError (which the retry loop catches) for every unusable response.
+        MAX_TOKENS counts as unusable: a truncated answer that still happens to parse
+        would flow into the report as if it were complete.
+        """
         if not response.candidates:
             raise ValueError("The model response contained no candidates.")
 
-        finish_reason = response.candidates[0].finish_reason.name
-        if finish_reason not in ["STOP", "MAX_TOKENS"]:
+        finish_reason = getattr(response.candidates[0].finish_reason, "name", None)
+        if finish_reason != "STOP":
             raise ValueError(f"Model finished with non-OK reason: '{finish_reason}'")
+
+        # With thinking enabled a candidate can carry no text part at all; json.loads(None)
+        # would raise TypeError, which the retry loop does not catch.
+        if response.text is None:
+            raise ValueError("The model response contained no text part.")
 
         try:
             return json.loads(response.text)
         except json.JSONDecodeError as e:
             # Clean JSON error without the full traceback
             raise ValueError(f"Failed to parse model response as JSON: {str(e).split(':')[0]}")
+
+    @staticmethod
+    def _validate_against_schema(payload: Any, json_schema: Dict[str, Any], request_context_log: str) -> None:
+        """Validates a model reply against the schema that was sent with the request.
+
+        Raises ValueError on a mismatch so the caller's retry loop treats it like any
+        other bad response. A broken schema asset is a code bug, not a model failure,
+        so it is logged as critical and also raised rather than silently skipped.
+        """
+        try:
+            validate(instance=payload, schema=json_schema)
+        except ValidationError as e:
+            location = " -> ".join(str(p) for p in e.absolute_path) or "<root>"
+            raise ValueError(f"Response does not match the requested schema at '{location}': {e.message}")
+        except SchemaError as e:
+            logging.critical(f"[{request_context_log}] The requested JSON schema is itself invalid: {e.message}")
+            raise ValueError(f"Invalid JSON schema supplied: {e.message}") from e
 
     # ------------------------------------------------------------------ token accounting
     def _record_usage(self, label: str, model: str, usage: Any, tier: str = "standard") -> None:
@@ -402,6 +438,11 @@ class AiClient:
         optionally providing GCS files as context. Implements an async retry loop
         with exponential backoff and connection limiting.
 
+        The reply is validated against the schema that was sent, and a mismatch is
+        retried like any other failure. Constrained decoding makes that rare, but
+        "rare" is not "never" — and an unvalidated reply reaches the report, where a
+        missing key becomes a silently wrong audit statement.
+
         Args:
             prompt: The text prompt for the model.
             json_schema: The JSON schema to enforce on the model's output.
@@ -412,7 +453,7 @@ class AiClient:
             thinking_level: Optional thinking level for this call (defaults to THINKING_LEVEL).
 
         Returns:
-            The parsed JSON response from the model.
+            The parsed, schema-valid JSON response from the model.
         """
         retries = max_retries if max_retries is not None else MAX_RETRIES
 
@@ -441,6 +482,7 @@ class AiClient:
 
                 self._record_usage(request_context_log, model_to_use, getattr(response, "usage_metadata", None))
                 response_json = self._extract_json(response)
+                self._validate_against_schema(response_json, json_schema, request_context_log)
                 logging.info(f"[{request_context_log}] Successfully generated and parsed JSON response on attempt {attempt + 1}.")
                 return response_json
 
@@ -460,8 +502,10 @@ class AiClient:
                     continue
 
                 # Unparseable output (ValueError) and transient API failures share the budget;
-                # permanent API errors raise at once.
-                retryable = isinstance(e, ValueError) or _is_transient(e)
+                # permanent API errors raise at once. TypeError/AttributeError are belt-and-braces
+                # for an unexpected response shape: without them a malformed reply would bypass
+                # the retries entirely.
+                retryable = isinstance(e, (ValueError, TypeError, AttributeError)) or _is_transient(e)
                 if not retryable or last_attempt:
                     logging.error(
                         f"[{request_context_log}] AI generation failed on attempt {attempt + 1}/{retries}: {_describe(e)}",
@@ -511,8 +555,13 @@ class AiClient:
     def _record_checker_verdict(
         self, request_context_log: str, freigabe: Optional[bool], probleme: List[str], correction_taken: bool
     ) -> None:
-        """Appends one checker verdict to the in-memory protocol."""
+        """Appends one checker verdict to the in-memory protocol.
+
+        The owning stage is stamped here, not when the log is persisted: stages run
+        concurrently, so by persist time the list holds other stages' verdicts too.
+        """
         self.checker_log.append({
+            "stage": current_stage.get(),
             "task": request_context_log,
             "checker_model": CHECKER_MODEL,
             "freigabe": freigabe,
@@ -607,33 +656,6 @@ class AiClient:
         self._record_checker_verdict(request_context_log, False, problems, True)
         return correction
 
-    async def generate_validated_json_response(
-        self,
-        prompt: str,
-        json_schema: Dict[str, Any],
-        gcs_uris: List[str] = None,
-        request_context_log: str = "Generic AI Request",
-        model_override: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Generates and validates a JSON response from the AI model.
-
-        Raises:
-            ValidationError: If the response doesn't match the provided schema
-
-        Returns:
-            The validated JSON response from the model
-        """
-        try:
-            result = await self.generate_json_response(prompt, json_schema, gcs_uris, request_context_log, model_override)
-            validate(instance=result, schema=json_schema)
-            return result
-        except ValidationError as e:
-            # Clean validation error message
-            clean_msg = e.message.split('\n')[0] if '\n' in e.message else e.message
-            logging.error(f"[{request_context_log}] Schema validation failed: {clean_msg}")
-            raise ValidationError(f"Response validation failed: {clean_msg}")
-
     # ------------------------------------------------------------------ batch tier
     def _batch_job_key(self, model: str, json_schema: Dict[str, Any], thinking_level: Optional[str], items: Dict[str, str]) -> str:
         """Stable job id over everything that shapes the output, so a rerun finds its folder.
@@ -718,8 +740,9 @@ class AiClient:
                     errors[key] = "no candidates"
                 continue
             candidate = candidates[0]
+            # Same rule as _extract_json: MAX_TOKENS is a truncated answer, not a usable one.
             finish_reason = candidate.get("finishReason") or candidate.get("finish_reason") or "STOP"
-            if finish_reason not in ("STOP", "MAX_TOKENS"):
+            if finish_reason != "STOP":
                 for key in keys:
                     errors[key] = f"finish reason {finish_reason}"
                 continue
@@ -747,13 +770,16 @@ class AiClient:
         out_prefix: str,
         prompt_to_keys: Dict[str, List[str]],
         model: str,
+        json_schema: Dict[str, Any],
         request_context_log: str,
         known: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Dict[str, Any]]:
         """Collect results under the job's output prefix (any job, any run) not yet in `known`.
 
         Only new results are returned and only their lines are counted as usage, so a second
-        read after the job does not double-count what the resume read already found.
+        read after the job does not double-count what the resume read already found. Every
+        result is validated against the schema like a standard reply; a mismatch leaves the
+        item open for the standard path instead of reaching the report.
         """
         new: Dict[str, Dict[str, Any]] = {}
         errors: Dict[str, str] = {}
@@ -765,6 +791,11 @@ class AiClient:
             ok, errs, usage_by_key = self._parse_batch_output_lines(text.splitlines(), prompt_to_keys)
             for key, value in ok.items():
                 if key in known or key in new:
+                    continue
+                try:
+                    self._validate_against_schema(value, json_schema, request_context_log)
+                except ValueError as e:
+                    errs[key] = str(e)
                     continue
                 new[key] = value
                 usage = usage_by_key.get(key)
@@ -848,7 +879,7 @@ class AiClient:
         results: Dict[str, Dict[str, Any]] = {}
         # Resume: results of an earlier (interrupted) job under the same prefix cost nothing.
         try:
-            results.update(await self._read_batch_results(out_prefix, prompt_to_keys, model, request_context_log, known={}))
+            results.update(await self._read_batch_results(out_prefix, prompt_to_keys, model, json_schema, request_context_log, known={}))
         except Exception as e:  # noqa: BLE001 — a failed resume read only costs the reuse
             logging.warning(f"[{request_context_log}] could not read earlier batch output under {out_prefix} ({_describe(e)}).")
         missing_prompts = [prompt for prompt, keys in prompt_to_keys.items() if any(key not in results for key in keys)]
@@ -881,7 +912,7 @@ class AiClient:
         logging.info(f"[{request_context_log}] batch job {job.name} submitted: {len(missing_prompts)} request(s) on '{model}', deadline {BATCH_DEADLINE_S}s.")
         try:
             state, deadline_hit = await self._wait_for_batch(job.name, request_context_log)
-            delivered = await self._read_batch_results(out_prefix, prompt_to_keys, model, request_context_log, known=results)
+            delivered = await self._read_batch_results(out_prefix, prompt_to_keys, model, json_schema, request_context_log, known=results)
         except Exception as e:  # noqa: BLE001 — the job's fate is unknown: stop it, go standard
             logging.warning(
                 f"[{request_context_log}] batch job {job.name} could not be awaited or read ({_describe(e)}); "

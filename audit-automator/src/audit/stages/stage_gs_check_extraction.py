@@ -87,7 +87,14 @@ class GrundschutzCheckExtractionRunner:
         )
 
     async def run(self, force_overwrite: bool = False) -> Dict[str, Any]:
-        """Main execution method for the full extraction and refinement pipeline."""
+        """
+        Main execution method for the full extraction and refinement pipeline.
+
+        Raises:
+            Exception: any failure is propagated. Every later stage reads this stage's
+            intermediate files, so a swallowed error here would let the pipeline burn
+            AI spend on empty input and report success for an audit that never ran.
+        """
         logging.info(f"Executing stage: {self.STAGE_NAME}")
 
         try:
@@ -113,4 +120,4 @@ class GrundschutzCheckExtractionRunner:
 
         except Exception as e:
             logging.error(f"Stage {self.STAGE_NAME} failed: {e}", exc_info=True)
-            return {"status": "error", "message": f"Stage {self.STAGE_NAME} failed: {str(e)}"}
+            raise

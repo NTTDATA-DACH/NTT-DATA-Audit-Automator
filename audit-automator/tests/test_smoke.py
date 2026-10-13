@@ -13,7 +13,7 @@ import pytest
 
 REQUIRED_ENV = [
     "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX",
-    "AUDIT_TYPE", "REGION", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME",
+    "AUDIT_TYPE", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME",
 ]
 
 
@@ -43,6 +43,17 @@ def test_load_config_succeeds_with_full_env(monkeypatch):
     cfg = load_config_from_env()
     assert cfg.output_prefix == "x"
     assert cfg.max_concurrent_ai_requests == 3
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "", "abc", "2.5"])
+def test_invalid_concurrency_limit_falls_back_to_five(monkeypatch, value):
+    """asyncio.Semaphore(0) admits nobody: the first AI call would wait forever with
+    no log line and no timeout, so anything below 1 must fall back."""
+    from src.config import load_config_from_env
+    for var in REQUIRED_ENV:
+        monkeypatch.setenv(var, "x")
+    monkeypatch.setenv("MAX_CONCURRENT_AI_REQUESTS", value)
+    assert load_config_from_env().max_concurrent_ai_requests == 5
 
 
 def test_findings_path_constant_is_consistent():

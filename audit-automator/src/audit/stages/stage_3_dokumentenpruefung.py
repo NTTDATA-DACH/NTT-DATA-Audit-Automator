@@ -1,16 +1,25 @@
 # file: src/audit/stages/stage_3_dokumentenpruefung.py
 import logging
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from google.cloud.exceptions import NotFound
-from collections import defaultdict
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.stages.control_catalog import ControlCatalog
+from src.audit.stages.gs_extraction.anforderung_fields import (
+    STATUS_ENTBEHRLICH,
+    STATUS_JA,
+    STATUS_NEIN,
+    STATUS_TEILWEISE,
+    VALID_STATUS,
+    normalize_anforderungen,
+    parse_pruefdatum,
+)
 from src.audit.async_utils import gather_resilient
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
@@ -23,36 +32,19 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
-    SUMMARY_DEPENDENCIES = {
-        "ergebnisDerStrukturanalyse": [
-            "definitionDesInformationsverbundes", "bereinigterNetzplan", "listeDerGeschaeftsprozesse",
-            "listeDerAnwendungen", "listeDerItSysteme", "listeDerRaeumeGebaeudeStandorte",
-            "listeDerKommunikationsverbindungen", "stichprobenDokuStrukturanalyse", "listeDerDienstleister"
-        ],
-        "ergebnisDerSchutzbedarfsfeststellung": [
-            "definitionDerSchutzbedarfskategorien", "schutzbedarfGeschaeftsprozesse", "schutzbedarfAnwendungen",
-            "schutzbedarfItSysteme", "schutzbedarfRaeume", "schutzbedarfKommunikationsverbindungen",
-            "stichprobenDokuSchutzbedarf"
-        ],
-        "ergebnisDerModellierung": ["modellierungsdetails"],
-        "ergebnisItGrundschutzCheck": ["detailsZumItGrundschutzCheck", "benutzerdefinierteBausteine"],
-        # 'ergebnisDerDokumentenpruefung' is the final summary and will use all findings by default.
-    }
-    
+
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
         self.gcs_client = gcs_client
         self.ai_client = ai_client
         self.rag_client = rag_client
         self.control_catalog = ControlCatalog()
-        self.prompt_config = self._load_asset_json(PROMPT_CONFIG_PATH)
+        self.prompt_config = load_asset_json(PROMPT_CONFIG_PATH)
         self.execution_plan = self._build_execution_plan_from_template()
         self._doc_map = self.rag_client._document_category_map
         self._ground_truth_map = None # Lazy loaded
         logging.info(f"Initialized runner for stage: {self.STAGE_NAME} with dynamic execution plan.")
 
-    def _load_asset_json(self, path: str) -> dict:
-        with open(path, 'r', encoding='utf-8') as f: return json.load(f)
 
     async def _get_ground_truth_map(self) -> Dict[str, Any]:
         """Lazy loads the ground truth map and caches it."""
@@ -70,10 +62,10 @@ class Chapter3Runner:
     ) -> None:
         """Safely apply a single-question AI response to `answers`/`findings`.
 
-        MAX-15b: the targeted Q-handlers use `generate_json_response` (schema is
-        requested but NOT validated), so a degraded or token-truncated reply can
-        be missing `answers`/`finding`. Guard the nested access here instead of
-        letting an IndexError/KeyError abort the whole stage. A malformed reply is
+        The AI client now validates every reply against the schema it sent, so a
+        response missing `answers`/`finding` is retried there first. This stays as the
+        last line of defence — it also fixes the policy for a laxer schema: rather
+        than letting an IndexError/KeyError abort the whole stage, a malformed reply is
         scored conservatively (answer = False) and flagged as an 'AG' finding so it
         surfaces for human review rather than silently passing.
         """
@@ -106,6 +98,10 @@ class Chapter3Runner:
             logging.error(f"FATAL: The required intermediate file '{EXTRACTED_CHECK_DATA_PATH}' was not found. Please run the 'Grundschutz-Check-Extraction' stage first.")
             raise
 
+        # Statuses come from customer PDFs; normalise once so every check below can
+        # compare on the canonical spelling instead of matching raw casing.
+        anforderungen = normalize_anforderungen(anforderungen)
+
         answers = [None] * 5
         findings = []
         ground_truth_map = await self._get_ground_truth_map()
@@ -120,78 +116,100 @@ class Chapter3Runner:
             logging.warning(f"Coverage Check (Task E) failed: {desc}")
 
         # Q1: Status erhoben? (Deterministic)
-        answers[0] = all(a.get("umsetzungsstatus") for a in anforderungen)
-        if not answers[0]:
-            findings.append({"category": "AG", "description": "Nicht für alle Anforderungen wurde ein Umsetzungsstatus erhoben."})
+        unknown_status = [a for a in anforderungen if a.get("umsetzungsstatus") not in VALID_STATUS]
+        answers[0] = not unknown_status
+        if unknown_status:
+            findings.append({"category": "AG", "description": f"Für {len(unknown_status)} Anforderungen wurde kein auswertbarer Umsetzungsstatus erhoben."})
 
         # Q5: Prüfung < 12 Monate? (Deterministic)
         one_year_ago = datetime.now() - timedelta(days=365)
-        
+
         outdated = []
+        undatable = []
         for a in anforderungen:
-            date_str = a.get("datumLetztePruefung", "1970-01-01")
-            try:
-                # Try ISO format first
-                check_date = datetime.strptime(date_str, "%Y-%m-%d")
-            except ValueError:
-                try:
-                    # Try German format DD.MM.YYYY
-                    check_date = datetime.strptime(date_str, "%d.%m.%Y")
-                except ValueError:
-                    # If both fail, use default old date
-                    check_date = datetime.strptime("1970-01-01", "%Y-%m-%d")
-                    logging.warning(f"Could not parse date '{date_str}', using default 1970-01-01")
-            
-            if check_date < one_year_ago:
+            check_date = parse_pruefdatum(a.get("datumLetztePruefung"))
+            if check_date is None:
+                # Unknown is NOT old: substituting an old date here would report a
+                # deviation the document never showed. It is a data-quality issue.
+                undatable.append(a)
+            elif check_date < one_year_ago:
                 outdated.append(a)
 
-
-        answers[4] = not bool(outdated)
+        answers[4] = not outdated and not undatable
         if outdated:
             findings.append({"category": "AG", "description": f"Die Prüfung von {len(outdated)} Anforderungen liegt mehr als 12 Monate zurück."})
-            
+        if undatable:
+            logging.warning(f"{len(undatable)} requirements carry no assessable Prüfdatum.")
+            findings.append({"category": "AG", "description": f"Für {len(undatable)} Anforderungen ist das Datum der letzten Prüfung nicht auswertbar; die Aktualität konnte nicht bestätigt werden."})
+
+
         # Correctly load the configuration for targeted questions
         ch3_config = self.prompt_config["stages"]["Chapter-3"]
         targeted_prompt_template = ch3_config["targeted_question"]["prompt"]
         questions_config = ch3_config["questions"]
 
         # Q2: "entbehrlich" plausibel? (Targeted AI - Task D)
-        entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == "entbehrlich"]
+        entbehrlich_items = [a for a in anforderungen if a.get("umsetzungsstatus") == STATUS_ENTBEHRLICH]
         risikoanalyse_uris = self.rag_client.get_gcs_uris_for_categories(["Risikoanalyse"])
-        if entbehrlich_items:
+        if entbehrlich_items and risikoanalyse_uris:
             for item in entbehrlich_items: # Enrich with the BSI level (B/S/H)
                 # Requirements from the institution's own Bausteine are not in the official
                 # Kompendium; the prompt has a dedicated rule for 'unbekannt'.
                 item['level'] = self.control_catalog.get_control_level(item.get('id')) or "unbekannt"
-            
+
             question = questions_config["entbehrlich"]
             prompt = targeted_prompt_template.format(
                 question=question,
                 json_data=json.dumps(entbehrlich_items, indent=2, ensure_ascii=False),
             )
             res = await self.ai_client.generate_checked_json_response(
-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"),
                 gcs_uris=risikoanalyse_uris, request_context_log="3.6.1-Q2"
             )
             self._record_targeted_answer(res, answers, 1, findings, "3.6.1-Q2 (entbehrlich)")
         else:
-            answers[1] = True
+            # Without the Risikoanalyse there is no evidence to judge plausibility against;
+            # asking the model anyway would produce an unsourced verdict.
+            answers[1] = not entbehrlich_items
+            if entbehrlich_items and not risikoanalyse_uris:
+                findings.append({"category": "AG", "description": "Es gibt als 'entbehrlich' deklarierte Anforderungen, aber die Risikoanalyse wurde nicht gefunden, um die Begründungen zu überprüfen."})
 
         # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
         muss_ids = set(self.control_catalog.get_muss_control_ids())
-        muss_anforderungen = [a for a in anforderungen if a.get("id") in muss_ids]
+        # Only the requirements that are actually in question need to be transmitted;
+        # a status of 'Ja' cannot violate a MUSS obligation.
+        muss_anforderungen = [
+            a for a in anforderungen
+            if a.get("id") in muss_ids and a.get("umsetzungsstatus") != STATUS_JA
+        ]
         if muss_anforderungen:
             prompt = targeted_prompt_template.format(
                 question=questions_config["muss_anforderungen"],
-                json_data=json.dumps(muss_anforderungen, indent=2, ensure_ascii=False)
+                json_data=json.dumps(muss_anforderungen, ensure_ascii=False)
             )
-            res = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
+            res = await self.ai_client.generate_checked_json_response(prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
             self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
         else:
             answers[2] = True
 
+        # Requirements of the institution's own Bausteine are not in the official
+        # Kompendium, so no MUSS check above can cover them. Losing them silently would
+        # shrink the audited scope without anybody noticing; name them in the report.
+        custom_anforderungen = [a for a in anforderungen if not self.control_catalog.is_known_control(a.get("id", ""))]
+        if custom_anforderungen:
+            custom_ids = sorted({a.get("id") for a in custom_anforderungen if a.get("id")})
+            logging.warning(f"{len(custom_ids)} requirements are not part of the official Kompendium: {custom_ids}")
+            findings.append({
+                "category": "AS",
+                "description": (
+                    f"{len(custom_ids)} Anforderungen stammen aus benutzerdefinierten Bausteinen und sind nicht "
+                    f"im amtlichen IT-Grundschutz-Kompendium enthalten. Sie werden von der automatisierten "
+                    f"MUSS-Prüfung nicht erfasst und sind manuell zu prüfen: {', '.join(custom_ids)}."
+                )
+            })
+
         # Q4: Nicht/teilweise umgesetzte in A.6? (Targeted AI)
-        unmet_items = [a for a in anforderungen if a.get("umsetzungsstatus") in ["Nein", "teilweise"]]
+        unmet_items = [a for a in anforderungen if a.get("umsetzungsstatus") in (STATUS_NEIN, STATUS_TEILWEISE)]
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"])
         if unmet_items and realisierungsplan_uris:
             prompt = targeted_prompt_template.format(
@@ -199,7 +217,7 @@ class Chapter3Runner:
                 json_data=json.dumps(unmet_items, indent=2, ensure_ascii=False)
             )
             res = await self.ai_client.generate_checked_json_response(
-                prompt, self._load_asset_json("assets/schemas/generic_1_question_schema.json"), 
+                prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"), 
                 gcs_uris=realisierungsplan_uris, request_context_log="3.6.1-Q4"
             )
             self._record_targeted_answer(res, answers, 3, findings, "3.6.1-Q4 (nicht umgesetzt)")
@@ -235,7 +253,7 @@ class Chapter3Runner:
     def _build_execution_plan_from_template(self) -> List[Dict[str, Any]]:
         """Parses master_report_template.json to build a dynamic list of tasks."""
         plan = []
-        template = self._load_asset_json(self.TEMPLATE_PATH)
+        template = load_asset_json(self.TEMPLATE_PATH)
         ch3_template = template.get("bsiAuditReport", {}).get("dokumentenpruefung", {})
         
         for subchapter_name, subchapter_data in ch3_template.items():
@@ -261,10 +279,19 @@ class Chapter3Runner:
 
         if task["type"] == "ai_driven" or key == 'modellierungsdetails':
             generic_prompt = self.prompt_config["stages"]["Chapter-3"]["generic_question"]["prompt"]
-            # For modellierungsdetails, the prompt is custom in the config
-            task['prompt'] = task_config.get('prompt', generic_prompt)
             questions = [item["questionText"] for item in data.get("content", []) if item.get("type") == "question"]
             task["questions_formatted"] = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
+
+            # A custom prompt EXTENDS the generic one; it must never replace it, or the
+            # model would answer questions it was never shown (the schema still demands
+            # one answer per question, so it would guess).
+            custom_prompt = task_config.get('prompt')
+            if not custom_prompt:
+                task['prompt'] = generic_prompt
+            elif "{questions}" in custom_prompt or not questions:
+                task['prompt'] = custom_prompt
+            else:
+                task['prompt'] = f"{custom_prompt}\n\n{generic_prompt}"
         elif task["type"] == "summary":
             task["prompt"] = self.prompt_config["stages"]["Chapter-3"]["generic_summary"]["prompt"]
             task["summary_topic"] = data.get("title", key)
@@ -288,7 +315,7 @@ class Chapter3Runner:
         if not uris and task.get("source_categories") is not None:
              return {key: {"error": f"No source documents for categories: {task.get('source_categories')}"}}
         try:
-            data = await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(schema_path), uris, f"Chapter-3: {key}")
+            data = await self.ai_client.generate_checked_json_response(prompt, load_asset_json(schema_path), uris, f"Chapter-3: {key}")
             if key == "aktualitaetDerReferenzdokumente":
                 coverage_finding = self._check_document_coverage()
                 if coverage_finding['category'] != 'OK': data['finding'] = coverage_finding
@@ -302,7 +329,7 @@ class Chapter3Runner:
         key = task["key"]
         prompt = task["prompt"].format(summary_topic=task["summary_topic"], previous_findings=previous_findings)
         try:
-            return {key: await self.ai_client.generate_checked_json_response(prompt, self._load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
+            return {key: await self.ai_client.generate_checked_json_response(prompt, load_asset_json(task["schema_path"]), request_context_log=f"Chapter-3 Summary: {key}")}
         except Exception as e:
             return {key: {"error": str(e)}}
 
@@ -327,19 +354,20 @@ class Chapter3Runner:
         ai_tasks = [t for t in self.execution_plan if t and (t.get("type") == "ai_driven" or t.get("key") == "modellierungsdetails")]
         summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
 
+        # The 3.6.1 block and the ~22 AI subchapters are independent, so they run in the
+        # same gather instead of the 3.6.1 block gating the rest of the stage.
+        coroutines = []
         for task in custom_tasks:
-            key = task['key']
-            logging.info(f"--- Processing custom logic task: {key} ---")
-            if key == 'detailsZumItGrundschutzCheck':
-                result = await self._process_details_zum_it_grundschutz_check()
-                processed_results.append(result)
-                aggregated_results.update(result)
-        
-        if ai_tasks:
-            ai_coroutines = [self._process_ai_subchapter(task) for task in ai_tasks]
-            ai_results = await gather_resilient(*ai_coroutines, context="Chapter-3: AI subchapters")
-            processed_results.extend(ai_results)
-            for res in ai_results: aggregated_results.update(res)
+            if task['key'] == 'detailsZumItGrundschutzCheck':
+                logging.info(f"--- Queuing custom logic task: {task['key']} ---")
+                coroutines.append(self._process_details_zum_it_grundschutz_check())
+        coroutines.extend(self._process_ai_subchapter(task) for task in ai_tasks)
+
+        if coroutines:
+            results = await gather_resilient(*coroutines, context="Chapter-3: subchapters")
+            processed_results.extend(results)
+            for res in results:
+                aggregated_results.update(res)
 
         if summary_tasks:
             findings_text = self._get_findings_from_results(processed_results)

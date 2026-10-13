@@ -7,9 +7,10 @@ from jsonschema import validate, ValidationError, SchemaError
 from typing import Dict, Any, List
 from datetime import datetime
 
+from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
-from src.constants import ALL_FINDINGS_PATH, STAGE_RESULTS_PATH, REPORT_SCHEMA_PATH
+from src.constants import ALL_FINDINGS_PATH, RESULTS_BASE, STAGE_RESULTS_PATH, REPORT_SCHEMA_PATH
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
@@ -76,9 +77,8 @@ class ReportGenerator:
         """
         logging.info(f"Loading pristine report template from local asset: {self.LOCAL_MASTER_TEMPLATE_PATH}")
         try:
-            with open(self.LOCAL_MASTER_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
-                report = json.load(f)
-            
+            report = load_asset_json(self.LOCAL_MASTER_TEMPLATE_PATH)
+
             # Inject dynamic configuration into the fresh template
             self._set_value_by_path(report, 'bsiAuditReport.allgemeines.audittyp.content', self.config.audit_type)
             
@@ -147,11 +147,10 @@ class ReportGenerator:
 
         today = datetime.now()
         date_str = today.strftime("%y%m%d")
-        final_report_path = f"{self.config.output_prefix}results/report_{date_str}.json"
-        await self.gcs_client.upload_from_string_async(
-            content=json.dumps(report, indent=2, ensure_ascii=False),
-            destination_blob_name=final_report_path
-        )
+        # Written next to the stage results it was assembled from, using the same
+        # constant those are read with (config.output_prefix would split the tree).
+        final_report_path = f"{RESULTS_BASE}/report_{date_str}.json"
+        await self.gcs_client.write_json_async(report, final_report_path)
         logging.info(f"Saving final report to {final_report_path}")
 
     @staticmethod
@@ -180,8 +179,7 @@ class ReportGenerator:
           bug, so log it loudly and reject rather than saving an unvalidated report.
         """
         try:
-            with open(REPORT_SCHEMA_PATH, 'r', encoding='utf-8') as f:
-                schema = json.load(f)
+            schema = load_asset_json(REPORT_SCHEMA_PATH)
         except (OSError, json.JSONDecodeError) as e:
             logging.error(f"Could not load report schema '{REPORT_SCHEMA_PATH}': {e}")
             return False

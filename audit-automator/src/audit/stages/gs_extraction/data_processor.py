@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 from datetime import datetime
 
+from .anforderung_fields import normalize_status, parse_pruefdatum
+
 
 class DataProcessor:
     """Handles data processing operations including deduplication and quality scoring."""
@@ -66,42 +68,34 @@ class DataProcessor:
             Quality score (0.0 to 1.0)
         """
         score = 0.0
-        
-        # Check for presence and quality of key fields
-        umsetzungserlaeuterung = requirement.get('umsetzungserlaeuterung', '').strip()
-        if umsetzungserlaeuterung and len(umsetzungserlaeuterung) > 10:
+
+        # Every field may be absent or explicitly null in a degraded AI response, so
+        # each access is coerced to a string before it is inspected.
+        umsetzungserlaeuterung = (requirement.get('umsetzungserlaeuterung') or "").strip()
+        if len(umsetzungserlaeuterung) > 10:
             if 'keine spezifische angabe' not in umsetzungserlaeuterung.lower():
                 score += 0.4  # Good explanation content
             else:
                 score += 0.1  # Generic/fallback explanation
-        
+
         # Valid status increases score
-        status = requirement.get('umsetzungsstatus', '').strip().lower()
-        if status in ['ja', 'nein', 'teilweise', 'entbehrlich']:
+        if normalize_status(requirement.get('umsetzungsstatus')):
             score += 0.3
-        
+
         # Recent check date increases score
-        date_str = requirement.get('datumLetztePruefung', '1970-01-01')
-        if date_str != '1970-01-01':
-            try:
-                if '.' in date_str:
-                    check_date = datetime.strptime(date_str, "%d.%m.%Y")
-                else:
-                    check_date = datetime.strptime(date_str, "%Y-%m-%d")
-                
-                # More recent dates get higher scores (within last 2 years = full points)
-                days_old = (datetime.now() - check_date).days
-                if days_old <= 730:  # 2 years
-                    score += 0.2
-                elif days_old <= 1460:  # 4 years
-                    score += 0.1
-            except ValueError:
-                pass  # Invalid date format
-        
+        check_date = parse_pruefdatum(requirement.get('datumLetztePruefung'))
+        if check_date:
+            # More recent dates get higher scores (within last 2 years = full points)
+            days_old = (datetime.now() - check_date).days
+            if days_old <= 730:  # 2 years
+                score += 0.2
+            elif days_old <= 1460:  # 4 years
+                score += 0.1
+
         # Title presence
-        if requirement.get('titel', '').strip():
+        if (requirement.get('titel') or "").strip():
             score += 0.1
-        
+
         return min(score, 1.0)  # Cap at 1.0
 
     @staticmethod

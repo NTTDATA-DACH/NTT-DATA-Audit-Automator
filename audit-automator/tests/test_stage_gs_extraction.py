@@ -107,7 +107,8 @@ def test_without_a_spreadsheet_the_pdf_path_runs():
 def test_unparseable_spreadsheet_fails_the_stage_instead_of_passing_empty_data():
     gcs = FakeGcs({"source_documents/A.4.xlsx": _xlsx_bytes([["Nur Text"], ["ohne", "Anforderungen"]])})
     runner, calls = _runner(gcs, FakeRag(["source_documents/A.4.xlsx"]))
-    result = asyncio.run(runner.run(force_overwrite=True))
-    assert result["status"] == "error"
-    assert "yielded no requirements" in result["message"]
+    # The stage raises (exit 1) instead of returning a status dict: a swallowed error here
+    # would let every later stage audit empty data and report success.
+    with pytest.raises(ValueError, match="yielded no requirements"):
+        asyncio.run(runner.run(force_overwrite=True))
     assert EXTRACTED_CHECK_DATA_PATH not in gcs.uploads

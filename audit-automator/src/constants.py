@@ -70,7 +70,6 @@ ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
 # =============================================================================
 TEMP_BASE = "output/temp"
 TEMP_PDF_CHUNKS_PREFIX = f"{TEMP_BASE}/pdf_chunks/"
-DOC_AI_BATCH_RESULTS_PREFIX = f"{TEMP_BASE}/doc_ai_results/"
 # Vertex batch jobs: one folder per job key holding the request JSONL and the output files.
 # A rerun reads the output folder first, so an interrupted job's results are not paid twice.
 BATCH_PREFIX = f"{TEMP_BASE}/batch/"

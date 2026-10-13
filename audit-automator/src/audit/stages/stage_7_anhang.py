@@ -1,6 +1,5 @@
 # src/audit/stages/stage_7_anhang.py
 import logging
-import json
 from typing import Dict, Any
 
 from src.config import AppConfig

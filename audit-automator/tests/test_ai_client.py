@@ -36,10 +36,11 @@ def test_extract_json_parses_valid_stop_response():
     assert result == {"a": 1, "b": [2, 3]}
 
 
-def test_extract_json_allows_max_tokens_finish_reason():
-    # MAX_TOKENS is treated as acceptable (truncation still parsed if valid JSON).
-    result = AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
-    assert result == {"a": 1}
+def test_extract_json_rejects_max_tokens_even_when_the_text_parses():
+    """A truncated answer that happens to be valid JSON is still incomplete; it must
+    be retried, not accepted into the report as a full answer."""
+    with pytest.raises(ValueError, match="MAX_TOKENS"):
+        AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
 
 
 def test_extract_json_raises_when_no_candidates():
@@ -52,9 +53,55 @@ def test_extract_json_raises_on_bad_finish_reason():
         AiClient._extract_json(_fake_response(finish_reason="SAFETY"))
 
 
+def test_extract_json_raises_valueerror_when_the_response_has_no_text():
+    """An all-thinking candidate has text=None. json.loads(None) would raise
+    TypeError, which used to escape the retry loop and kill the stage."""
+    with pytest.raises(ValueError, match="no text part"):
+        AiClient._extract_json(_fake_response(text=None))
+
+
+def test_extract_json_survives_a_missing_finish_reason():
+    response = types.SimpleNamespace(candidates=[types.SimpleNamespace(finish_reason=None)], text='{"a": 1}')
+    with pytest.raises(ValueError, match="non-OK reason"):
+        AiClient._extract_json(response)
+
+
 def test_extract_json_raises_on_malformed_json():
     with pytest.raises(ValueError, match="Failed to parse"):
         AiClient._extract_json(_fake_response(text='{"a": 1,'))  # truncated/invalid
+
+
+# --- Schema validation of replies ---------------------------------------------------
+# Constrained decoding makes a mismatch rare, but an unvalidated reply reaches the
+# report, where a missing key becomes a silently wrong audit statement.
+
+QUESTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answers": {"type": "array", "items": {"type": "boolean"}, "minItems": 1},
+        "finding": {"type": "object"},
+    },
+    "required": ["answers", "finding"],
+}
+
+
+def test_valid_payload_passes_validation():
+    AiClient._validate_against_schema({"answers": [True], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_missing_required_key_raises_valueerror_so_the_retry_loop_catches_it():
+    with pytest.raises(ValueError, match="does not match the requested schema"):
+        AiClient._validate_against_schema({"answers": [True]}, QUESTION_SCHEMA, "test")
+
+
+def test_wrong_type_reports_the_offending_path():
+    with pytest.raises(ValueError, match="answers"):
+        AiClient._validate_against_schema({"answers": ["ja"], "finding": {}}, QUESTION_SCHEMA, "test")
+
+
+def test_a_broken_schema_asset_raises_rather_than_passing_silently():
+    with pytest.raises(ValueError, match="Invalid JSON schema"):
+        AiClient._validate_against_schema({}, {"type": "not-a-real-type"}, "test")
 
 
 # --- Generation config -------------------------------------------------------------
@@ -422,6 +469,30 @@ def test_batch_skips_small_jobs_and_disabled_tier(monkeypatch):
     client.batch_enabled = False
     assert asyncio.run(client.generate_json_batch({f"k{i}": f"p{i}" for i in range(9)}, SCHEMA, "gemini-3.8-flash")) == {}
     assert created == []
+
+
+def test_parse_batch_output_rejects_truncated_answers():
+    """MAX_TOKENS is a truncated answer: the standard path rejects it, the batch path must too."""
+    ok, errors, _ = AiClient._parse_batch_output_lines(
+        [_output_line("P1", text='{"anforderungen": []}', finish="MAX_TOKENS")], {"P1": ["A#0"]}
+    )
+    assert ok == {}
+    assert errors["A#0"] == "finish reason MAX_TOKENS"
+
+
+def test_resumed_batch_result_that_fails_the_schema_stays_open(monkeypatch):
+    """A delivered answer is validated like a standard reply; a mismatch is left to the standard path."""
+    strict = {"type": "object", "properties": {"anforderungen": {"type": "array"}},
+              "required": ["anforderungen"], "additionalProperties": False}
+    blobs = {"output/temp/batch/x/out/old/predictions.jsonl": "\n".join([
+        _output_line("P0", text='{"anforderungen": [0]}'),
+        _output_line("P1", text='{"wrong": "shape"}'),
+    ])}
+    client = _batch_client(monkeypatch, blobs)
+    client.client = types.SimpleNamespace(aio=types.SimpleNamespace(batches=types.SimpleNamespace()))
+    results = asyncio.run(client.generate_json_batch({"K0": "P0", "K1": "P1"}, strict, "gemini-3.8-flash"))
+    assert results == {"K0": {"anforderungen": [0]}}  # K1 is open: 1 < BATCH_MIN_ITEMS, no job created
+    assert client.usage_totals["batch_calls"] == 1  # only the usable line is counted
 
 
 def test_small_remainder_still_reuses_resumed_results(monkeypatch):

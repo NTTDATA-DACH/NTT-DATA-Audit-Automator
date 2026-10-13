@@ -155,9 +155,10 @@ rm -f "${RESP}"
 say "Generating and uploading mock source documents…"
 python "${SCRIPT_DIR}/make_mock_docs.py" --bucket "${BUCKET_NAME}"
 
-# --- 5. Export env vars (the 7 the app requires + tuning) ---
+# --- 5. Export env vars (the ones the app requires + tuning) ---
+# REGION is used above for bucket creation only; the app itself never reads it.
 say "Exporting environment variables…"
-export GCP_PROJECT_ID REGION BUCKET_NAME AUDIT_TYPE DOC_AI_PROCESSOR_NAME
+export GCP_PROJECT_ID BUCKET_NAME AUDIT_TYPE DOC_AI_PROCESSOR_NAME
 export SOURCE_PREFIX="source_documents/"
 export OUTPUT_PREFIX="output/"
 export TEST="true"

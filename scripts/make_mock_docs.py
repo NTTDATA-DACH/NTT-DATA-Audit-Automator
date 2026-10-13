@@ -44,9 +44,20 @@ CATEGORIES = [
     "Vorheriger-Auditbericht",  # only needed for --scan-previous-report
 ]
 
-# A few fake Zielobjekt markers so the Grundschutz-Check extraction has structure
-# to group on (a blank page yields the no-marker path: logged + skipped).
-ZIELOBJEKTE = ["SVR-01", "APP-02", "NET-03"]
+# A few fake Zielobjekte so the Grundschutz-Check extraction has structure to group
+# on (a blank page yields the no-marker path: logged + skipped). Kürzel and name are
+# deliberately DIFFERENT: the Strukturanalyse lists both, the Grundschutz-Check is
+# headed by the Kürzel alone (the normal export shape). A grouper that matched on
+# names again would find zero markers here and the e2e run would surface it.
+ZIELOBJEKTE = [
+    ("SVR-01", "Zentraler Web-Server"),
+    ("APP-02", "CRM-Anwendung"),
+    ("NET-03", "Backbone-Netz"),
+]
+
+# Bausteine each Zielobjekt is checked against — A.4 exports repeat a Zielobjekt
+# heading once per Baustein, which the grouper must keep apart.
+BAUSTEINE = ["ORP.1", "SYS.1.1"]
 
 
 def _make_pdf(path: pathlib.Path, category: str) -> None:
@@ -56,11 +67,19 @@ def _make_pdf(path: pathlib.Path, category: str) -> None:
         f"MOCK DOCUMENT — {category}",
         "BSI IT-Grundschutz audit test fixture (content is not meaningful).",
     ]
-    if category == "Grundschutz-Check":
-        # Give the marker-based grouper something to find: each Zielobjekt kuerzel
-        # on its own line, followed by a fake requirement row.
-        for z in ZIELOBJEKTE:
-            lines += ["", z, f"Anforderung {z}.A1  Umsetzungsstatus: Ja  Datum: 2026-01-15"]
+    if category == "Strukturanalyse":
+        lines += ["", "Liste der Zielobjekte:"]
+        lines += [f"{kuerzel}  {name}" for kuerzel, name in ZIELOBJEKTE]
+    elif category == "Grundschutz-Check":
+        # Each Zielobjekt heads one section per Baustein, kuerzel on its own line,
+        # followed by a fake requirement row.
+        for baustein in BAUSTEINE:
+            for kuerzel, _name in ZIELOBJEKTE:
+                lines += [
+                    "",
+                    kuerzel,
+                    f"Anforderung {baustein}.A1  Umsetzungsstatus: Ja  Datum: 2026-01-15",
+                ]
     page.insert_text((72, 72), "\n".join(lines), fontsize=11)
     doc.save(str(path))
     doc.close()
@@ -82,8 +101,9 @@ def _make_a4_sheet(path: pathlib.Path) -> None:
     sheet.append(["Version:", "1.0"])
     sheet.append([])
     sheet.append(["Informationsverbund"])
-    for z in ZIELOBJEKTE:
-        sheet.append([None, f"{z} Mock-Zielobjekt {z}"])
+    for kuerzel, name in ZIELOBJEKTE:
+        # Grey header row of the export: "<Kürzel> <Name>" in one cell.
+        sheet.append([None, f"{kuerzel} {name}"])
         sheet.append([None, "SYS.1.1", "Allgemeiner Server"])
         sheet.append([None, "Beschreibung:", "Mock-Baustein."])
         for number, status in ((1, "Ja"), (2, "teilweise"), (3, "Nein")):
@@ -91,7 +111,7 @@ def _make_a4_sheet(path: pathlib.Path) -> None:
             sheet.append([None, "Beschreibung:", "Mock-Beschreibung."])
             sheet.append([None, "Umsetzung durch", "Umsetzung bis 7.7.2026"])
             sheet.append([None, "Umsetzungsstatus:", status])
-            sheet.append([None, "Umsetzungserläuterung:", f"Mock-Erläuterung für {z}, Anforderung A{number}.\nZweite Zeile."])
+            sheet.append([None, "Umsetzungserläuterung:", f"Mock-Erläuterung für {kuerzel}, Anforderung A{number}.\nZweite Zeile."])
     workbook.save(str(path))
 
 

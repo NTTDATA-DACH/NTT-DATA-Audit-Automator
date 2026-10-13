@@ -58,9 +58,9 @@ and calls Vertex AI + Document AI, so you need credentials and a bucket.
     gcloud auth application-default login                # ADC for GCS/DocAI/Vertex
     ```
 2.  **Set environment variables.** If you have Terraform state, `source audit-automator/envs.sh`
-    pulls project/bucket/region/DocAI from it, sets `TEST=true`, and defines an `auditor`
-    helper. Otherwise export the seven required vars manually (`GCP_PROJECT_ID`, `BUCKET_NAME`,
-    `REGION`, `DOC_AI_PROCESSOR_NAME`, `SOURCE_PREFIX=source_documents/`, `OUTPUT_PREFIX=output/`,
+    pulls project/bucket/DocAI from it, sets `TEST=true`, and defines an `auditor`
+    helper. Otherwise export the six required vars manually (`GCP_PROJECT_ID`, `BUCKET_NAME`,
+    `DOC_AI_PROCESSOR_NAME`, `SOURCE_PREFIX=source_documents/`, `OUTPUT_PREFIX=output/`,
     `AUDIT_TYPE`).
 3.  **Generate mock source documents** (no real customer data needed). Classification is
     **filename-based**, so the generator names each PDF after the BSI category it represents and
@@ -150,6 +150,10 @@ happened, and every call logs its input, cached, thinking and output tokens.
 cancelled (not abandoned), the results it delivered are kept, and the remaining chunks run as
 standard calls. A rerun reads the job folder first, so an interrupted job's results are never
 paid twice. Per-Zielobjekt results are still cached under `output/intermediate/gs_extraction/individual_results/`.
+
+**Answer validation.** Every reply, from the standard path or the batch tier, is validated
+against the JSON schema sent with the request; a mismatch or a truncated answer (`MAX_TOKENS`)
+is retried like any other failure instead of reaching the report.
 
 With the maker/checker enabled, every answer that reaches the report or produces a finding is
 re-judged by a second, independent call against the same source documents: it checks evidence,

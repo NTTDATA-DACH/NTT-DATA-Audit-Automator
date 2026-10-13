@@ -1,4 +1,5 @@
 # src/config.py
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -18,7 +19,6 @@ class AppConfig:
     source_prefix: str
     output_prefix: str
     audit_type: str
-    region: str
     doc_ai_processor_name: str
     max_concurrent_ai_requests: int
     is_test_mode: bool
@@ -39,8 +39,12 @@ def load_config_from_env() -> AppConfig:
     # will be set directly.
     load_dotenv()
 
+    # REGION is deliberately absent: nothing in the application reads it. Vertex AI is
+    # pinned to the "global" endpoint, GCS takes no region, and Document AI derives its
+    # location from the processor name. The deploy scripts still use their own REGION
+    # for `gcloud run jobs --region`.
     required_vars = [
-        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "REGION", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME"
+        "GCP_PROJECT_ID", "SOURCE_PREFIX", "OUTPUT_PREFIX", "AUDIT_TYPE", "DOC_AI_PROCESSOR_NAME", "BUCKET_NAME"
     ]
     
     config_values = {}
@@ -54,9 +58,17 @@ def load_config_from_env() -> AppConfig:
     # Handle special case and boolean variables
     config_values["is_test_mode"] = os.getenv("TEST", "false").lower() == "true"
     
-    # Load the new concurrency limit, defaulting to 5 if not set or invalid
+    # Load the concurrency limit, defaulting to 5 if not set or invalid. It must be at
+    # least 1: asyncio.Semaphore(0) never admits anyone, so the first AI call would
+    # wait forever with no log line and no timeout.
     max_reqs_str = os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")
-    config_values["max_concurrent_ai_requests"] = int(max_reqs_str) if max_reqs_str.isdigit() else 5
+    if max_reqs_str.isdigit() and int(max_reqs_str) >= 1:
+        config_values["max_concurrent_ai_requests"] = int(max_reqs_str)
+    else:
+        logging.warning(
+            f"MAX_CONCURRENT_AI_REQUESTS={max_reqs_str!r} is not a positive integer. Falling back to 5."
+        )
+        config_values["max_concurrent_ai_requests"] = 5
 
     return AppConfig(**config_values)
 

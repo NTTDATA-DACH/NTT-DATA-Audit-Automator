@@ -53,6 +53,9 @@ class FakeGcs:
     async def upload_from_string_async(self, content, destination_blob_name, content_type="application/json"):
         self.blobs[destination_blob_name] = content
 
+    async def write_json_async(self, data, destination_blob_name):
+        self.blobs[destination_blob_name] = json.dumps(data, ensure_ascii=False)
+
 
 def _refiner(ai, gcs):
     refiner = AiRefiner.__new__(AiRefiner)

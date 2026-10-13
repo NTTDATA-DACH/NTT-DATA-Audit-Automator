@@ -2,7 +2,7 @@
 import logging
 import asyncio
 import json
-from typing import Dict, Any, Optional
+from typing import Any
 from google.cloud import documentai_v1 as documentai
 from google.cloud.documentai_v1.types import (
     BatchDocumentsInputConfig,
@@ -63,25 +63,32 @@ class DocumentAiClient:
             for item in data:
                 self._adjust_text_anchors_recursive(item, offset)
 
-    async def process_document_chunk_async(self, gcs_input_uri: str, gcs_output_prefix: str) -> Optional[str]:
+    async def process_document_chunk_async(self, gcs_input_uri: str, gcs_output_prefix: str, force_overwrite: bool = False) -> str:
         """
         Processes a single document chunk from GCS using batch processing and saves the result.
-        This method is now idempotent on a per-chunk basis and uses a semaphore to limit concurrency.
+        This method is idempotent on a per-chunk basis and uses a semaphore to limit concurrency.
 
         Args:
             gcs_input_uri: The 'gs://' path to the input PDF document chunk.
             gcs_output_prefix: The GCS prefix where the output JSON should be stored.
+            force_overwrite: Reprocess even if a result for this chunk already exists.
+                             Required when the source PDF was replaced — otherwise OCR
+                             results of two document versions would be merged.
 
         Returns:
-            The GCS path to the generated JSON result file, or None on failure.
+            The GCS path to the generated JSON result file.
+
+        Raises:
+            RuntimeError: if the chunk could not be processed. Callers gather these
+            fail-fast; a None return would have let a partial document pass as complete.
         """
         input_filename = gcs_input_uri.split('/')[-1]  # e.g., 'chunk_0.pdf'
         chunk_basename = input_filename.replace('.pdf', '')  # e.g., 'chunk_0'
         output_json_filename = f"{chunk_basename}.json"  # e.g., 'chunk_0.json'
         gcs_output_json_path = f"{gcs_output_prefix}{output_json_filename}"
-        
+
         # IDEMPOTENCY: Check if the result for this specific chunk already exists.
-        if self.gcs_client.blob_exists(gcs_output_json_path):
+        if not force_overwrite and self.gcs_client.blob_exists(gcs_output_json_path):
             logging.info(f"Result for chunk '{gcs_input_uri}' already exists. Skipping processing.")
             return gcs_output_json_path
 
@@ -113,8 +120,7 @@ class DocumentAiClient:
                 from google.cloud.documentai_v1 import BatchProcessMetadata
                 metadata = BatchProcessMetadata(operation.metadata)
                 if not metadata.individual_process_statuses:
-                    logging.error(f"No process statuses found for operation {operation.name}")
-                    return None
+                    raise RuntimeError(f"No process statuses found for operation {operation.name}")
                 # Since one input document, take the first status
                 output_gcs_destination = metadata.individual_process_statuses[0].output_gcs_destination
                 output_folder = output_gcs_destination.replace(f"gs://{self.config.bucket_name}/", "")
@@ -124,8 +130,7 @@ class DocumentAiClient:
                 shard_blobs = [b for b in output_blobs if b.name.endswith('.json') and chunk_basename in b.name.split('/')[-1]]
                 
                 if not shard_blobs:
-                    logging.error(f"No result JSONs found in output path: {output_folder}")
-                    return None
+                    raise RuntimeError(f"No result JSONs found in output path: {output_folder}")
                 
                 # Merge shards if multiple (sort by name for page order)
                 merged_data = {"text": "", "documentLayout": {"blocks": []}}
@@ -145,12 +150,10 @@ class DocumentAiClient:
                     text_offset += len(shard_text)
                 
                 if not merged_data["documentLayout"]["blocks"]:
-                    logging.error(f"No valid blocks found after merging shards for '{input_filename}'")
-                    return None
+                    raise RuntimeError(f"No valid blocks found after merging shards for '{input_filename}'")
                 
                 # Upload merged result to clean path
-                merged_json_str = json.dumps(merged_data, ensure_ascii=False)
-                await self.gcs_client.upload_from_string_async(merged_json_str, gcs_output_json_path)
+                await self.gcs_client.write_json_async(merged_data, gcs_output_json_path)
                 logging.info(f"Saved merged result for chunk to: {gcs_output_json_path}")
                 
                 # Clean up: Delete the raw shard files and any other blobs in the output folder
@@ -163,7 +166,4 @@ class DocumentAiClient:
 
             except GoogleAPICallError as e:
                 logging.error(f"Document AI processing for chunk '{gcs_input_uri}' failed with API error: {e}", exc_info=True)
-                return None
-            except Exception as e:
-                logging.error(f"An unexpected error occurred during Document AI processing for chunk '{gcs_input_uri}': {e}", exc_info=True)
-                return None
+                raise RuntimeError(f"Document AI processing failed for chunk '{gcs_input_uri}': {e}") from e

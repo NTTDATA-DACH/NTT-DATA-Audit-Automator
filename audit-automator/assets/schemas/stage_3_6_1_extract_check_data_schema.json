@@ -20,7 +20,8 @@
           },
           "umsetzungsstatus": {
             "type": "string",
-            "description": "The implementation status, normalized (e.g., 'Ja', 'Nein', 'teilweise', 'entbehrlich')."
+            "description": "The implementation status. Map the document's wording onto exactly one of these four values, including the given capitalisation.",
+            "enum": ["Ja", "Nein", "teilweise", "entbehrlich"]
           },
           "umsetzungserlaeuterung": {
             "type": "string",
