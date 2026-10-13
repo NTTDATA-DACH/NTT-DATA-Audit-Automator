@@ -28,7 +28,7 @@ Confirm with `y` (or pass `-y`), then proceed to the Standard Workflow below. Th
     *   DOCX and other office formats are not readable by the model and are skipped; the inventory in `output/intermediate/rag/document_inventory.json` (also logged per category at start-up) shows every file, its format and whether it reached the model.
 3.  **Deploy the Job Container:** Build and deploy the application container to Cloud Run Jobs.
     ```bash
-    # Run from the project root
+    # Works from any directory; the scripts locate the repo root themselves
     bash ./scripts/deploy-audit-job.sh
     ```
 4.  **Execute Audit Tasks:** Run the desired audit task using the interactive execution script. The first time a task is run, the system will **automatically classify all source documents** if a classification map doesn't already exist.
