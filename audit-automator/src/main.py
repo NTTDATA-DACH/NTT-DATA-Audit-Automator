@@ -58,7 +58,7 @@ async def main_async():
     args = parser.parse_args()
 
     gcs_client = GcsClient(config)
-    ai_client = AiClient(config)
+    ai_client = AiClient(config, gcs_client=gcs_client)
 
     if args.generate_report:
         logging.info("Starting final report assembly...")

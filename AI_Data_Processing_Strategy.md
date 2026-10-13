@@ -90,10 +90,11 @@ The goal is to convert the semi-structured `Grundschutz-Check` PDF into structur
 **Smart Chunking:**
 - **Adaptive Sizing:** Auto-splits large groups (>200 blocks) with 10% overlap
 - **Context Continuity:** Overlap prevents requirement fragmentation at boundaries
-- **Model Fallback:** Flash-lite → Ground Truth model on JSON parsing failures
+- **Batch First:** All open chunks go out as one Vertex AI batch job (half price, 300 s deadline); chunks it does not deliver run as standard calls
+- **Thinking Fallback:** Standard calls try the chunk thinking level twice, then the full thinking level on the ground-truth model twice
 
 **Robust Processing:**
-- **Per-Zielobjekt Caching:** Individual results cached for efficient reruns
+- **Per-Zielobjekt Caching:** Individual results cached for efficient reruns; an interrupted batch job's output is reused from its GCS folder
 - **Content Preprocessing:** Cleans problematic characters, truncates oversized blocks  
 - **Deduplication:** Quality-based selection when overlapping chunks create duplicates
 - **Parallel Processing:** Multiple Zielobjekte processed concurrently

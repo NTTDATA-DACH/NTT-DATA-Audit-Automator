@@ -112,16 +112,38 @@ regenerated JSON. `tests/test_catalog_invariants.py` re-checks the committed fil
 Requirements from Bausteine the institution defined itself are not part of the official
 Kompendium; they resolve to level `unbekannt` and are handled by a dedicated prompt rule.
 
-### AI configuration and the maker/checker pass
-Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`):
+### AI configuration: model, thinking levels, context cache, batch tier
+Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`). One model
+serves every task — `gemini-3.8-flash`, GA on the Vertex AI global endpoint with batch and
+context caching (verified against the Vertex model pages on 2026-10-13) — and quality is dialled
+via the thinking level. The only pro model on Vertex is `gemini-3.1-pro-preview`, a preview that
+can be withdrawn without notice, so it is not a default; set `GROUND_TRUTH_MODEL` to use it for a run.
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `GROUND_TRUTH_MODEL` | `gemini-3.1-pro` | Default model for document reasoning |
-| `CHUNK_PROCESSING_MODEL` | `gemini-3.7-flash` | High-volume path in the AI refiner |
-| `THINKING_LEVEL` | `minimal` | `minimal`/`low`/`medium`/`high`; clamped to `low` on pro models |
+| `GROUND_TRUTH_MODEL` | `gemini-3.8-flash` | Model for every call that reasons over customer documents |
+| `CHUNK_PROCESSING_MODEL` | `gemini-3.8-flash` | Model for the bulk extraction in the AI refiner |
+| `THINKING_LEVEL` | `medium` | `low`/`medium`/`high` for document reasoning. `minimal` exists only on 3.5/3.6 Flash and Flash-Lite and is clamped to `low` elsewhere (3.7+/3.8 Flash and the pro tier reject it) |
+| `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner |
 | `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
 | `CHECKER_MODEL` | = `GROUND_TRUTH_MODEL` | Model used for that second opinion |
+| `ENABLE_CONTEXT_CACHE` | `true` | Cache each (model, document set) once on Vertex AI and reuse it across calls |
+| `CONTEXT_CACHE_TTL_S` | `3600` | Lifetime of such a cache in seconds |
+| `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one Vertex AI batch job |
+| `BATCH_DEADLINE_S` | `300` | Seconds a batch job may take before it is cancelled and the rest runs as standard calls |
+| `BATCH_MIN_ITEMS` | `5` | Below this many open chunks the refiner skips the batch tier |
+
+**Context caching.** Every call that attaches source PDFs goes through a Vertex AI context cache
+keyed by model, persona and document set. The maker and its checker, and the Chapter-3 subchapters
+that read the same documents, pay for those tokens once and read them at a tenth of the price
+afterwards. A set below the 4,096-token minimum is attached inline instead; the log says which
+happened, and every call logs its input, cached, thinking and output tokens.
+
+**Batch tier.** The Grundschutz-Check refiner sends all open chunks as one batch job under
+`output/temp/batch/<job-key>/` at half the standard price. After `BATCH_DEADLINE_S` the job is
+cancelled (not abandoned), the results it delivered are kept, and the remaining chunks run as
+standard calls. A rerun reads the job folder first, so an interrupted job's results are never
+paid twice. Per-Zielobjekt results are still cached under `output/intermediate/gs_extraction/individual_results/`.
 
 With the maker/checker enabled, every answer that reaches the report or produces a finding is
 re-judged by a second, independent call against the same source documents: it checks evidence,
