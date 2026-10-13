@@ -54,10 +54,16 @@ export TEST="true"
 export MAX_CONCURRENT_AI_REQUESTS=5 # New: Tunable concurrency limit
 
 # --- AI behaviour (all optional; the defaults in src/constants.py apply if unset) ---
-# export CHUNK_PROCESSING_MODEL="gemini-3.7-flash"
-# export GROUND_TRUTH_MODEL="gemini-3.1-pro"
-# export THINKING_LEVEL="minimal"          # minimal | low | medium | high
-# export CHECKER_MODEL="gemini-3.1-pro"    # second opinion in the maker/checker pass
+# export CHUNK_PROCESSING_MODEL="gemini-3.8-flash"
+# export GROUND_TRUTH_MODEL="gemini-3.8-flash"
+# export THINKING_LEVEL="medium"           # low | medium | high (document reasoning)
+# export CHUNK_THINKING_LEVEL="low"        # bulk extraction in the AI refiner
+# export CHECKER_MODEL="gemini-3.8-flash"  # second opinion in the maker/checker pass
+# export ENABLE_CONTEXT_CACHE="true"       # cache each document set once on Vertex AI
+# export CONTEXT_CACHE_TTL_S=3600
+# export ENABLE_BATCH="true"               # refiner chunks as one Vertex batch job
+# export BATCH_DEADLINE_S=300              # then cancel and finish with standard calls
+# export BATCH_MIN_ITEMS=5
 export ENABLE_MAKER_CHECKER="true"         # "false" halves the AI calls (no verification)
 
 # --- NEW: Helper function for correct execution ---

@@ -49,16 +49,23 @@ class _FakeGcsClient:
         await self.upload_from_string_async(json.dumps(data, indent=2, ensure_ascii=False), destination_blob_name)
 
 
+class _NoBatchAiClient:
+    """The batch tier delivers nothing, so every chunk takes the standard path under test."""
+
+    async def generate_json_batch(self, items, json_schema, model, thinking_level=None, request_context_log=""):
+        return {}
+
+
 def _refiner(gcs, per_kuerzel_results):
     """A refiner whose per-chunk AI call replays `per_kuerzel_results` by Kürzel.
 
     A value that is an Exception is raised on every attempt for that Zielobjekt.
     """
     refiner = AiRefiner.__new__(AiRefiner)
-    AiRefiner.__init__(refiner, ai_client=None, gcs_client=gcs)
+    AiRefiner.__init__(refiner, ai_client=_NoBatchAiClient(), gcs_client=gcs)
     refiner.ai_calls = []
 
-    async def fake_call(model_name, prompt, schema, chunk_info):
+    async def fake_call(model_name, prompt, schema, chunk_info, thinking_level=None):
         kuerzel = chunk_info.split("'")[1]
         refiner.ai_calls.append(kuerzel)
         outcome = per_kuerzel_results[kuerzel]

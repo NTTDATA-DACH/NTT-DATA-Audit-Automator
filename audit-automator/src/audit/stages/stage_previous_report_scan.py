@@ -1,7 +1,6 @@
 # src/audit/stages/stage_previous_report_scan.py
 import asyncio
 import logging
-import json
 from typing import Dict, Any
 
 from src.assets_loader import load_asset_json

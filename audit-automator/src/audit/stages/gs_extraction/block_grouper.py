@@ -1,6 +1,5 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/block_grouper.py
 import logging
-import json
 from typing import Dict, Any, List
 from collections import defaultdict
 

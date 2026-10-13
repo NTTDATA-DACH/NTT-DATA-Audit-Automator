@@ -31,7 +31,6 @@ def test_rejects_non_dict_inputs():
 # --- Full JSON Schema validation (the real check that replaced the MAX-1 no-op) ---
 # These rely on the schema + template assets, so run from the audit-automator/ dir.
 import json
-import copy
 
 schema_validate = ReportGenerator._validate_report_against_schema
 

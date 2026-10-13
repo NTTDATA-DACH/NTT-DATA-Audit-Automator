@@ -8,7 +8,8 @@ bsi-audit-automator/
 ├── src/
 │   ├── clients/
 │   │   ├── gcs_client.py       # Handles all Google Cloud Storage interactions.
-│   │   ├── rag_client.py       # Manages the document category map (Document Finder).
+│   │   ├── rag_client.py       # Manages the document category map (Document Finder) and the per-category format inventory.
+│   │   ├── spreadsheet.py      # Reads XLSX/XLSM/CSV into rows; renders a sheet as row text for the model.
 │   │   └── ai_client.py        # Handles all Vertex AI Gemini API interactions.
 │   │
 │   ├── audit/
@@ -17,7 +18,9 @@ bsi-audit-automator/
 │   │   └── stages/             # Contains the specific business logic for each audit stage/chapter.
 │   │       ├── control_catalog.py # Query layer over the official BSI Kompendium catalog.
 │   │       ├── stage_gs_check_extraction.py # Dedicated stage for Grundschutz-Check processing.
-│   │       ├── gs_extraction/  # Sub-pipeline of that stage (ground truth, Document AI, grouping, refiner).
+│   │       ├── gs_extraction/  # Sub-pipeline of that stage (ground truth, Document AI, grouping, refiner,
+│   │       │                   # sheet_parser.py: the deterministic path for an A.4 delivered as spreadsheet,
+│   │       │                   # anforderung_fields.py: normalised Umsetzungsstatus and Prüfdatum for stages 3 and 5).
 │   │       ├── stage_previous_report_scan.py
 │   │       ├── stage_1_general.py
 │   │       ├── stage_3_dokumentenpruefung.py
@@ -31,6 +34,7 @@ bsi-audit-automator/
 │   │   ├── sentence_split.py   # German sentence splitter used by that parser.
 │   │   └── build_bsi_catalog.py # Converts the XML into the committed catalog JSON.
 │   │
+│   ├── assets_loader.py        # Cached reader for the JSON assets (prompts, schemas, template).
 │   ├── config.py               # Loads, validates, and provides application configuration from env variables.
 │   ├── constants.py            # Model IDs, AI switches and every GCS/asset path.
 │   ├── logging_setup.py        # Configures application-wide logging.
@@ -47,8 +51,9 @@ bsi-audit-automator/
 *   **`src/main.py`**: The application's entry point. It parses command-line arguments (`--run-gs-check-extraction`, `--run-all-stages`, etc.) to determine which part of the pipeline to execute.
 *   **`src/clients/`**: This directory contains thin clients responsible for communicating with external GCP services, encapsulating all API-specific logic.
     *   **`gcs_client.py`**: Handles all Google Cloud Storage I/O.
-    *   **`ai_client.py`**: A robust wrapper for the Gemini API. It handles model configuration (model ID, temperature, thinking level), asynchronous parallel requests, retries, and schema-enforced JSON generation. `generate_checked_json_response` adds the **maker/checker** pass: a second, independent call re-judges the answer against the same source documents and may replace it with a corrected one; every verdict is recorded for the controller to persist.
-    *   **`rag_client.py`**: The "Document Finder". It manages a map of document filenames to BSI categories, creating this map on-demand if it doesn't exist, and providing GCS URIs of relevant documents for analysis tasks.
+    *   **`ai_client.py`**: The single entry point for every Gemini call on Vertex AI. It handles model configuration (model ID, temperature, thinking level), asynchronous parallel requests, the transient-only retry policy, schema-enforced JSON generation and token accounting. Every reply — standard or batch — is validated against the schema that was sent and a truncated answer (`MAX_TOKENS`) is retried, never passed on; checker verdicts carry the stage that produced them (a contextvar set by the controller), so the QS trail stays correct under parallel stages. Source PDFs go through a **context cache** per (model, persona, document set), created once and reused by every call with the same set. `generate_json_batch` is the **batch tier**: it writes the requests as JSONL to GCS, runs one Vertex batch job with a 300 s deadline, cancels on the deadline and returns what was delivered, keyed by content so a rerun reuses it. `generate_checked_json_response` adds the **maker/checker** pass: a second, independent call re-judges the answer against the same source documents and may replace it with a corrected one; every verdict is recorded for the controller to persist.
+    *   **`rag_client.py`**: The "Document Finder". It manages a map of document filenames to BSI categories, creating this map on-demand if it doesn't exist, reconciling a cached map with the bucket on every start (vanished files are dropped, new uploads classified), and providing GCS URIs of relevant documents for analysis tasks. A category without documents yields no URIs — never the whole corpus — so the "document missing" guards of the stages hold. It decides per file what the model gets (`select_model_documents`: spreadsheets as row text, a spreadsheet replacing a PDF of the same name, unreadable formats skipped) and writes that decision per category to `document_inventory.json`.
+    *   **`spreadsheet.py`**: Row reader for XLSX/XLSM/CSV (German Excel CSV defaults included) and the `render_sheet_text` used by `ai_client.py` to attach a spreadsheet as a text part.
 *   **`src/audit/controller.py`**: The main orchestrator of the audit. It defines the sequence of stages to run (starting with the extraction stage), manages resumability, and acts as the **central collector for all audit findings**.
 *   **`src/audit/stages/`**: Each module in this directory contains the business logic for a specific part of the audit.
     *   `stage_gs_check_extraction.py`: A dedicated pre-processing stage. It implements the "Ground-Truth-Driven Semantic Chunking" strategy to create authoritative intermediate files (`system_structure_map.json` and `extracted_grundschutz_check_merged.json`) that are consumed by other stages.

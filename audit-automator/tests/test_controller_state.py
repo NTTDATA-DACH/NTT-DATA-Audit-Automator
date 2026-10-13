@@ -51,6 +51,9 @@ class _FakeAiClient:
     def __init__(self):
         self.checker_log = []
 
+    def usage_summary(self):
+        return "AI usage so far: 0 standard + 0 batch calls."
+
     def record(self, task):
         """Append a verdict the way _record_checker_verdict does, stage stamp included."""
         self.checker_log.append({

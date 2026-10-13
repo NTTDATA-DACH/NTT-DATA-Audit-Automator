@@ -114,6 +114,9 @@ async def _run() -> int:
             print(f"FAILED  ({model_id}) — {type(e).__name__}: {e}")
 
     print(f"\n{len(models) - failures}/{len(models)} model(s) OK.")
+    # With TEST_PDF_GCS_URI set, the call above went through the context-cache path (or fell
+    # back to inline below the 4,096-token minimum); the totals show which.
+    print(client.usage_summary())
     return 1 if failures else 0
 
 

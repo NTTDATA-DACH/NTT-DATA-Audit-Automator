@@ -1,6 +1,5 @@
 # src/audit/controller.py
 import logging
-import json
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
@@ -344,5 +343,6 @@ class AuditController:
 
         # 3. Merge them into the central findings list and persist the maker/checker trail
         await self._persist_stage_state(stage_name, stage_findings)
+        logging.info(self.ai_client.usage_summary())
 
         return result_data

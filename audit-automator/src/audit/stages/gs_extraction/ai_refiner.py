@@ -1,4 +1,5 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/ai_refiner.py
+import asyncio
 import logging
 import json
 import os
@@ -8,7 +9,15 @@ from src.assets_loader import load_asset_json
 from src.clients.ai_client import AiClient
 from src.clients.gcs_client import GcsClient
 from src.audit.async_utils import gather_resilient
-from src.constants import GROUPED_BLOCKS_PATH, EXTRACTED_CHECK_DATA_PATH, CHUNK_PROCESSING_MODEL, GROUND_TRUTH_MODEL, PROMPT_CONFIG_PATH
+from src.constants import (
+    GROUPED_BLOCKS_PATH,
+    EXTRACTED_CHECK_DATA_PATH,
+    CHUNK_PROCESSING_MODEL,
+    CHUNK_THINKING_LEVEL,
+    GROUND_TRUTH_MODEL,
+    THINKING_LEVEL,
+    PROMPT_CONFIG_PATH,
+)
 
 from .cache_manager import CacheManager
 from .chunk_processor import ChunkProcessor
@@ -19,6 +28,11 @@ class AiRefiner:
     """
     Orchestrates the AI refinement process for grouped blocks to extract structured security requirements.
     Delegates specific responsibilities to specialized components.
+
+    Order of work per run: Zielobjekte with a cached result are skipped, every open chunk is
+    sent through the Vertex batch tier in one job, and whatever the batch did not deliver in
+    time runs through standard calls (2 attempts at the chunk thinking level, then 2 at the
+    ground-truth level).
     """
 
     def __init__(self, ai_client: AiClient, gcs_client: GcsClient):
@@ -33,7 +47,7 @@ class AiRefiner:
     async def refine_grouped_blocks_with_ai(self, system_map: Dict[str, Any], force_overwrite: bool):
         """
         Process grouped blocks with AI to extract structured requirements.
-        
+
         Args:
             system_map: Ground truth map containing zielobjekte information
             force_overwrite: If True, reprocess even if output exists
@@ -43,20 +57,20 @@ class AiRefiner:
             return
 
         logging.info("Refining grouped blocks with AI to extract structured requirements...")
-        
+
         # Load grouped blocks and configuration
         grouped_blocks_data = await self.gcs_client.read_json_async(GROUPED_BLOCKS_PATH)
         groups = grouped_blocks_data.get("zielobjekt_grouped_blocks", {})
-        
+
         refine_config = self.prompt_config["stages"]["Chapter-3"]["refine_layout_parser_group"]
         prompt_template = refine_config["prompt"]
         schema = load_asset_json(refine_config["schema_path"])
-        
+
         zielobjekt_map = {z['kuerzel']: z['name'] for z in system_map.get("zielobjekte", [])}
 
         # Filter valid groups and apply test mode limiting
         valid_groups = {k: v for k, v in groups.items() if k != "_UNGROUPED_" and v}
-        
+
         if not valid_groups:
             logging.warning("No valid Zielobjekt groups found for processing")
             final_output = {"anforderungen": []}
@@ -66,7 +80,7 @@ class AiRefiner:
                 limited_groups = dict(list(valid_groups.items())[:3])
                 logging.info(f"Test mode: Processing only {len(limited_groups)} of {len(valid_groups)} groups")
                 valid_groups = limited_groups
-            
+
             logging.info(f"Processing {len(valid_groups)} Zielobjekt groups...")
 
             # Process all groups
@@ -90,44 +104,93 @@ class AiRefiner:
         await self.gcs_client.write_json_async(final_output, EXTRACTED_CHECK_DATA_PATH)
         logging.info(f"Saved final refined check data with {len(final_output['anforderungen'])} requirements")
 
+    @staticmethod
+    def _chunk_key(kuerzel: str, chunk_idx: int) -> str:
+        return f"{kuerzel}#{chunk_idx}"
+
     async def _process_all_groups(self, valid_groups: Dict[str, List[Dict]], zielobjekt_map: Dict[str, str],
                                  prompt_template: str, schema: Dict[str, Any],
                                  force_overwrite: bool = False) -> List[Tuple[str, str, Optional[Dict[str, Any]]]]:
-        """Process all valid groups concurrently."""
-        tasks = [
-            self._process_group_with_caching(kuerzel, blocks, zielobjekt_map, prompt_template, schema, force_overwrite)
-            for kuerzel, blocks in valid_groups.items()
-        ]
-        # Resilient: a single failed Zielobjekt group must not discard the rest. The
-        # caller checks the returned groups against valid_groups and fails the stage.
-        return await gather_resilient(*tasks, context="ai_refiner: process_all_groups")
+        """Resume from the per-Zielobjekt cache, batch the open chunks, finish the rest with standard calls.
 
-    async def _process_group_with_caching(self, kuerzel: str, blocks: List[Dict], zielobjekt_map: Dict[str, str],
-                                         prompt_template: str, schema: Dict[str, Any],
-                                         force_overwrite: bool = False) -> Tuple[str, str, Optional[Dict[str, Any]]]:
-        """Process a single group, reusing the per-Zielobjekt cache unless forced."""
-        name = zielobjekt_map.get(kuerzel, "Unbekannt")
+        --force must reach this layer too: the cache is keyed by Kürzel alone, so without it a
+        replaced source document would be answered from the previous document's extraction
+        forever. The caller checks the returned groups against valid_groups and fails the stage
+        on any missing one.
+        """
+        async def lookup(kuerzel: str) -> Tuple[str, Optional[Dict[str, Any]]]:
+            if force_overwrite:
+                return kuerzel, None
+            try:
+                return kuerzel, await self.cache_manager.get_cached_result(kuerzel)
+            except Exception as e:  # noqa: BLE001 — a failed lookup means "not cached", never a lost run
+                logging.warning(f"Cache lookup for Zielobjekt '{kuerzel}' failed ({e}); processing it afresh.")
+                return kuerzel, None
 
-        # Check for cached result first. --force must reach this layer too: the cache is
-        # keyed by Kürzel alone, so without it a replaced source document would be
-        # answered from the previous document's extraction forever.
-        if not force_overwrite:
-            cached_result = await self.cache_manager.get_cached_result(kuerzel)
+        done: List[Tuple[str, str, Optional[Dict[str, Any]]]] = []
+        pending: Dict[str, List[List[Dict]]] = {}
+        for kuerzel, cached_result in await asyncio.gather(*(lookup(k) for k in valid_groups)):
             if cached_result is not None:
-                return kuerzel, name, cached_result
+                done.append((kuerzel, zielobjekt_map.get(kuerzel, "Unbekannt"), cached_result))
+            else:
+                pending[kuerzel] = self.chunk_processor.chunk_blocks(valid_groups[kuerzel])
+        logging.info(f"Resume: {len(done)} Zielobjekt(e) from cache, {len(pending)} pending.")
+        if not pending:
+            return done
 
+        batch_results = await self._run_batch(pending, prompt_template, schema)
+
+        tasks = [
+            self._process_group(kuerzel, chunks, zielobjekt_map, prompt_template, schema, batch_results)
+            for kuerzel, chunks in pending.items()
+        ]
+        # Resilient: a single failed Zielobjekt group must not discard the rest.
+        done.extend(await gather_resilient(*tasks, context="ai_refiner: process_all_groups"))
+        return done
+
+    async def _run_batch(self, pending: Dict[str, List[List[Dict]]], prompt_template: str,
+                         schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Send every open chunk through the batch tier; returns chunk key -> valid result."""
+        items: Dict[str, str] = {}
+        for kuerzel, chunks in pending.items():
+            for idx, chunk in enumerate(chunks):
+                clean_chunk = self.chunk_processor.preprocess_blocks_for_ai(chunk)
+                items[self._chunk_key(kuerzel, idx)] = self._build_chunk_prompt(clean_chunk, idx, len(chunks), prompt_template)
+
+        results = await self.ai_client.generate_json_batch(
+            items=items,
+            json_schema=schema,
+            model=CHUNK_PROCESSING_MODEL,
+            thinking_level=CHUNK_THINKING_LEVEL,
+            request_context_log="RefineGroup batch",
+        )
+        valid = {key: result for key, result in results.items() if self._is_valid_result(result)}
+        logging.info(
+            f"Batch tier: {len(valid)} of {len(items)} chunk(s) delivered a valid result; "
+            f"{len(items) - len(valid)} run as standard calls."
+        )
+        return valid
+
+    async def _process_group(self, kuerzel: str, chunks: List[List[Dict]], zielobjekt_map: Dict[str, str],
+                             prompt_template: str, schema: Dict[str, Any],
+                             batch_results: Dict[str, Dict[str, Any]]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        """Process one Zielobjekt from its chunks and cache the merged result."""
+        name = zielobjekt_map.get(kuerzel, "Unbekannt")
         try:
-            # Process with chunking if needed
-            chunks = self.chunk_processor.chunk_blocks(blocks)
-
             if len(chunks) == 1:
                 # Single chunk - process normally
-                result = await self._process_single_chunk(kuerzel, chunks[0], 0, 1, prompt_template, schema)
+                result = await self._process_single_chunk(
+                    kuerzel, chunks[0], 0, 1, prompt_template, schema,
+                    precomputed=batch_results.get(self._chunk_key(kuerzel, 0)),
+                )
             else:
                 # Multiple chunks - process each and merge results
                 logging.info(f"Processing {len(chunks)} chunks for Zielobjekt '{kuerzel}'")
                 chunk_tasks = [
-                    self._process_single_chunk(kuerzel, chunk, idx, len(chunks), prompt_template, schema)
+                    self._process_single_chunk(
+                        kuerzel, chunk, idx, len(chunks), prompt_template, schema,
+                        precomputed=batch_results.get(self._chunk_key(kuerzel, idx)),
+                    )
                     for idx, chunk in enumerate(chunks)
                 ]
                 # Resilient so completed chunks are logged, but a shortfall still fails
@@ -158,54 +221,61 @@ class AiRefiner:
             return kuerzel, name, None
 
     async def _process_single_chunk(self, kuerzel: str, chunk: List[Dict], chunk_idx: int, total_chunks: int,
-                                   prompt_template: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+                                   prompt_template: str, schema: Dict[str, Any],
+                                   precomputed: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Process a single chunk with the 2+2 attempt pattern.
+        Process a single chunk: a batch result if there is one, else the 2+2 attempt pattern.
 
         Raises:
             RuntimeError: if all four attempts fail. An empty result would be
             indistinguishable from a chunk that genuinely holds no requirements and
             would be cached as the final answer for this Zielobjekt.
         """
+        if precomputed is not None:
+            logging.info(f"Using batch result for chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}' ({len(chunk)} blocks)")
+            return precomputed
+
         # Preprocess blocks
         clean_chunk = self.chunk_processor.preprocess_blocks_for_ai(chunk)
-        
+
         # Build prompt
         prompt = self._build_chunk_prompt(clean_chunk, chunk_idx, total_chunks, prompt_template)
-        
+
         # Log chunk info
         total_chars = sum(len(str(block)) for block in clean_chunk)
         chunk_info = f"chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}' ({len(clean_chunk)} blocks, ~{total_chars:,} chars)"
         logging.info(f"Processing {chunk_info}")
-        
-        # Try with flash model (2 attempts)
+
+        # Try with the chunk model at the bulk thinking level (2 attempts)
         flash_result = await self._try_model_with_retries(
             model_name=CHUNK_PROCESSING_MODEL,
-            model_display_name="flash-lite",
+            model_display_name="flash",
             prompt=prompt,
             schema=schema,
             chunk_info=chunk_info,
-            attempts=2
+            attempts=2,
+            thinking_level=CHUNK_THINKING_LEVEL,
         )
-        
+
         if flash_result:
             return flash_result
-        
-        # Flash failed, try with ground truth model (2 attempts)
+
+        # Flash failed, try with ground truth model at the full thinking level (2 attempts)
         logging.info(f"⚡ Flash model exhausted for {chunk_info}. Switching to 🎯 ground truth model...")
-        
+
         gt_result = await self._try_model_with_retries(
             model_name=GROUND_TRUTH_MODEL,
             model_display_name="ground-truth",
             prompt=prompt,
             schema=schema,
             chunk_info=chunk_info,
-            attempts=2
+            attempts=2,
+            thinking_level=THINKING_LEVEL,
         )
-        
+
         if gt_result:
             return gt_result
-        
+
         # All attempts failed
         logging.error(f"❌ All 4 attempts failed for {chunk_info}.")
         raise RuntimeError(f"All 4 extraction attempts failed for {chunk_info}")
@@ -219,14 +289,15 @@ class AiRefiner:
                 f"Chunks have 10% overlap to maintain context continuity. Focus on extracting requirements "
                 f"from these specific blocks, avoiding duplication of requirements found in overlapping sections."
             )
-        
+
         return prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
 
-    async def _try_model_with_retries(self, model_name: str, model_display_name: str, prompt: str, 
-                                     schema: Dict[str, Any], chunk_info: str, attempts: int) -> Optional[Dict[str, Any]]:
+    async def _try_model_with_retries(self, model_name: str, model_display_name: str, prompt: str,
+                                     schema: Dict[str, Any], chunk_info: str, attempts: int,
+                                     thinking_level: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Try a specific model with the given number of attempts.
-        
+
         Returns:
             The result dict if successful, None if all attempts failed.
         """
@@ -234,35 +305,36 @@ class AiRefiner:
             try:
                 model_icon = "⚡" if "flash" in model_display_name else "🎯"
                 logging.info(f"{model_icon} Attempt {attempt + 1}/{attempts} with {model_display_name} for {chunk_info}")
-                
+
                 # Call AI without internal retries - we handle retries here
                 result = await self._call_ai_model(
                     model_name=model_name,
                     prompt=prompt,
                     schema=schema,
-                    chunk_info=chunk_info
+                    chunk_info=chunk_info,
+                    thinking_level=thinking_level,
                 )
-                
+
                 # Validate result
                 if result and self._is_valid_result(result):
                     logging.info(f"✅ Success with {model_display_name} on attempt {attempt + 1}")
                     return result
                 else:
                     logging.warning(f"⚠️  {model_display_name} returned invalid/empty result on attempt {attempt + 1}")
-                    
+
             except Exception as e:
                 error_type = self._classify_error(e)
                 if attempt < attempts - 1:  # Not the last attempt
                     logging.warning(f"⚠️  {model_display_name} attempt {attempt + 1}/{attempts} failed: {error_type}")
                 else:  # Last attempt
                     logging.error(f"❌ {model_display_name} final attempt {attempt + 1}/{attempts} failed: {error_type}")
-        
+
         return None
 
     def _classify_error(self, error: Exception) -> str:
         """Classify the error into a concise, readable format."""
         error_str = str(error)
-        
+
         if "Unterminated string" in error_str or "JSONDecodeError" in error_str:
             return "JSON parsing error"
         elif "token" in error_str.lower() or "context length" in error_str.lower():
@@ -276,25 +348,20 @@ class AiRefiner:
         else:
             return f"Unexpected error: {error_str[:100]}..."
 
-    async def _call_ai_model(self, model_name: str, prompt: str, schema: Dict[str, Any], 
-                           chunk_info: str) -> Optional[Dict[str, Any]]:
+    async def _call_ai_model(self, model_name: str, prompt: str, schema: Dict[str, Any],
+                           chunk_info: str, thinking_level: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Make a single AI call without retries.
         """
-        try:
-            # We'll use the standard generate_json_response but with max_retries=1
-            # This gives us one clean attempt without the internal retry logic
-            result = await self.ai_client.generate_json_response(
-                prompt=prompt,
-                json_schema=schema,
-                request_context_log=f"RefineGroup: {chunk_info}",
-                model_override=model_name,
-                max_retries=1  # Disable internal retries
-            )
-            return result
-        except Exception as e:
-            # Re-raise to be handled by the retry logic
-            raise
+        # max_retries=1 gives one clean attempt; the 2+2 pattern above owns the retries.
+        return await self.ai_client.generate_json_response(
+            prompt=prompt,
+            json_schema=schema,
+            request_context_log=f"RefineGroup: {chunk_info}",
+            model_override=model_name,
+            max_retries=1,
+            thinking_level=thinking_level,
+        )
 
     def _is_valid_result(self, result: Dict[str, Any]) -> bool:
         """Check if the AI result is valid."""

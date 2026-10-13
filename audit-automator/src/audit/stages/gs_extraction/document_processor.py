@@ -1,6 +1,5 @@
 # bsi-audit-automator/src/audit/stages/gs_extraction/document_processor.py
 import logging
-import json
 import asyncio
 import fitz  # PyMuPDF
 from typing import Dict, Any, List
