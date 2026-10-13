@@ -22,7 +22,10 @@ Confirm with `y` (or pass `-y`), then proceed to the Standard Workflow below. Th
 ### Standard Workflow
 
 1.  **Infrastructure Deployment:** If this is the very first run, use Terraform in the `terraform/` directory to create the GCS Bucket, VPC Network, and all necessary Vertex AI and IAM resources.
-2.  **Upload Customer Documents:** Upload the customer's documentation (PDFs), including any previous audit reports, to the `source_documents/` path in the GCS bucket.
+2.  **Upload Customer Documents:** Upload the customer's documentation, including any previous audit reports, to the `source_documents/` path in the GCS bucket. PDF and spreadsheet exports (XLSX, XLSM, CSV) are both fine; name the files after what they are, since classification goes by filename. Formats matter:
+    *   A **Grundschutz-Check (A.4) as spreadsheet** is parsed deterministically — no Document AI, no AI calls for the extraction. As PDF it goes through Document AI and the AI refiner.
+    *   Every other spreadsheet reaches the model as its row text (exact cell values, row numbers to cite, far fewer tokens than a page scan). A spreadsheet **replaces a PDF of the same name**; PDFs without a sheet twin are sent as they are.
+    *   DOCX and other office formats are not readable by the model and are skipped; the inventory in `output/intermediate/rag/document_inventory.json` (also logged per category at start-up) shows every file, its format and whether it reached the model.
 3.  **Deploy the Job Container:** Build and deploy the application container to Cloud Run Jobs.
     ```bash
     # Run from the project root
@@ -67,10 +70,13 @@ and calls Vertex AI + Document AI, so you need credentials and a bucket.
     python scripts/make_mock_docs.py --bucket <BUCKET_NAME>
     # or generate locally only:
     python scripts/make_mock_docs.py
+    # Grundschutz-Check as XLSX instead of PDF (exercises the spreadsheet path, no Document AI):
+    python scripts/make_mock_docs.py --a4-sheet
     ```
     The Grundschutz-Check mock carries fake Zielobjekt markers so the extraction stage has
     structure to group on. Content is intentionally minimal — this exercises plumbing
-    (SDK calls, batching, report assembly/validation), **not** output quality.
+    (SDK calls, batching, report assembly/validation), **not** output quality. Real customer
+    files used to develop parsers stay out of git: office files and PDFs are ignored wholesale.
 4.  **Run tasks locally** (dependency order; `--force` on the first run rebuilds the
     filename→category map):
     ```bash
@@ -170,9 +176,9 @@ python -m pytest
 
 The audit pipeline runs in a strict, dependency-aware order.
 
-*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/intermediate/rag/document_category_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages.
+*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/intermediate/rag/document_category_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages. On every start the finder also logs and saves a **format inventory** per category (`document_inventory.json`): which files exist, which format they have, and which of them the model gets (spreadsheets as row text, PDFs as file parts, a spreadsheet replacing a PDF of the same name, unreadable formats skipped).
 
-*   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis.
+*   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis. If the Grundschutz-Check is delivered as a **spreadsheet** (XLSX/XLSM/CSV export of the GRC tool, vertical key/value layout), the stage parses it deterministically instead — same output file, no Document AI, no AI calls — and matches the sheet's Zielobjekte to the ground-truth map by name. A sheet whose layout the parser does not recognise fails the stage with a clear message rather than passing empty data; the PDF path (Document AI + batch-tier refiner) remains the fallback when no sheet is present.
     * It is important to check the results of this stage, as they lay theground truth for all the following ones! Check /output/intermediate/gs_extraction/system_structure_map.json for the correct name of the "Informationsverbund" and at least do a qs of extracted_grundschutz_check_merged.json as well.
 
 

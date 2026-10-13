@@ -22,6 +22,7 @@ from jsonschema import validate, ValidationError
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
+from src.clients.spreadsheet import SHEET_SUFFIXES, render_sheet_text
 from src.constants import (
     BATCH_DEADLINE_S,
     BATCH_MIN_ITEMS,
@@ -144,6 +145,9 @@ class AiClient:
         # Token accounting across the process, so the cache and batch savings show in the log.
         self.usage_totals: Dict[str, int] = defaultdict(int)
 
+        # Spreadsheets reach the model as row text; each file is downloaded and rendered once.
+        self._rendered_docs: Dict[str, str] = {}
+
         logging.info(f"Vertex AI Client instantiated for project '{config.gcp_project_id}' (Vertex AI location '{vertex_location}').")
         logging.info(f"System Message Context includes today's date: {current_date}")
         logging.info(
@@ -208,13 +212,34 @@ class AiClient:
 
         return types.GenerateContentConfig(**kwargs)
 
-    @staticmethod
-    def _build_contents(prompt: str, gcs_uris: List[str] = None) -> List[Any]:
-        """Assemble the request contents from the prompt and any GCS PDF URIs."""
+    async def _rendered_sheet(self, uri: str) -> str:
+        """Row text of a spreadsheet in GCS, rendered once per process."""
+        if uri not in self._rendered_docs:
+            if self.gcs_client is None:
+                raise RuntimeError(f"Spreadsheet context needs a GCS client (AiClient was built without one): {uri}")
+            blob_name = uri.replace(f"gs://{self.gcs_client.bucket.name}/", "", 1)
+            data = await asyncio.to_thread(self.gcs_client.download_blob_as_bytes, self.gcs_client.bucket.blob(blob_name))
+            text = render_sheet_text(data, blob_name)
+            logging.info(f"Rendered spreadsheet '{blob_name}' as text: {len(text):,} characters (~{len(text) // 4:,} tokens).")
+            self._rendered_docs[uri] = text
+        return self._rendered_docs[uri]
+
+    async def _document_part(self, uri: str) -> types.Part:
+        """A PDF goes as a file part, a spreadsheet as its row text; anything else is refused."""
+        lower = uri.lower()
+        if lower.endswith(".pdf"):
+            return types.Part.from_uri(file_uri=uri, mime_type="application/pdf")
+        if lower.endswith(SHEET_SUFFIXES):
+            return types.Part.from_text(text=await self._rendered_sheet(uri))
+        raise ValueError(f"Unsupported document format for the model: {uri}")
+
+    async def _document_parts(self, gcs_uris: List[str]) -> List[types.Part]:
+        return [await self._document_part(uri) for uri in gcs_uris]
+
+    async def _build_contents(self, prompt: str, gcs_uris: List[str] = None) -> List[Any]:
+        """Assemble the request contents from the prompt and any GCS document URIs."""
         contents: List[Any] = [prompt]
-        if gcs_uris:
-            for uri in gcs_uris:
-                contents.append(types.Part.from_uri(file_uri=uri, mime_type="application/pdf"))
+        contents.extend(await self._document_parts(gcs_uris or []))
         return contents
 
     @staticmethod
@@ -343,10 +368,7 @@ class AiClient:
     async def _create_cache(self, model: str, gcs_uris: List[str], display_name: str) -> str:
         """Cache the persona and the document set once; raises when Vertex refuses."""
         uris = sorted(set(gcs_uris))
-        contents = [types.Content(
-            role="user",
-            parts=[types.Part.from_uri(file_uri=uri, mime_type="application/pdf") for uri in uris],
-        )]
+        contents = [types.Content(role="user", parts=await self._document_parts(uris))]
         cache_config = types.CreateCachedContentConfig(
             contents=contents,
             system_instruction=self.system_message,
@@ -401,7 +423,7 @@ class AiClient:
         # system message then lives in the cache and the request carries the prompt only.
         cached_content = await self._get_cached_content(model_to_use, uris)
         gen_config = self._build_generation_config(json_schema, model_to_use, thinking_level, cached_content)
-        contents = self._build_contents(prompt, [] if cached_content else uris)
+        contents = await self._build_contents(prompt, [] if cached_content else uris)
         if uris and self.config.is_test_mode:
             logging.info(f"Attaching {len(uris)} GCS files to the prompt{' via context cache' if cached_content else ''}.")
 
@@ -434,7 +456,7 @@ class AiClient:
                     self._reject_cache(model_to_use, uris)
                     cached_content = None
                     gen_config = self._build_generation_config(json_schema, model_to_use, thinking_level, None)
-                    contents = self._build_contents(prompt, uris)
+                    contents = await self._build_contents(prompt, uris)
                     continue
 
                 # Unparseable output (ValueError) and transient API failures share the budget;

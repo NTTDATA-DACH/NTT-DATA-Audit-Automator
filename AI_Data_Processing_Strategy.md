@@ -48,10 +48,13 @@ Together, these files allow the audit process to be modified and extended by sim
     *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to the configured model (`GROUND_TRUTH_MODEL`) with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
     *   **Robust Fallback:** This step is designed for resilience. If the AI call fails for any reason (e.g., API error, invalid response), the application does not halt. Instead, the `RagClient` logs a critical warning and generates a **fallback map**, classifying every document as "Sonstiges" (Miscellaneous). This ensures the pipeline can always proceed, with the known consequence of reduced precision in document selection.
 3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous lookup of document URIs for all subsequent audit tasks.
+4.  **Format Inventory and Selection:** Customers deliver a mix of PDFs and spreadsheet exports, and the model reads PDFs (as file parts) and plain text, not office formats. Per category the finder therefore decides deterministically what the model gets: a spreadsheet is rendered as row text (`Zeile N: Zelle | Zelle`, exact values, citable row numbers, a fraction of the tokens of a page scan) and replaces a PDF of the same name; PDFs without a sheet twin are sent as they are; DOCX and the like are skipped. The decision per file is logged at start-up and persisted as `document_inventory.json`, so the audit trail shows which format fed the model.
 
 ## **Phase 2: Ground-Truth-Driven Semantic Chunking (Document AI + Gemini)**
 
 The goal is to convert the semi-structured `Grundschutz-Check` PDF into structured JSON requirements grouped by Zielobjekte, using a four-phase pipeline that combines deterministic logic with AI-powered semantic analysis.
+
+**Spreadsheet short-cut:** when the Grundschutz-Check arrives as an XLSX/XLSM/CSV export of the GRC tool, phases 2.2 to 2.4 are replaced by the deterministic `sheet_parser` (vertical key/value layout: Zielobjekt header row, Baustein row, requirement row, then `Umsetzungsstatus:` / `Umsetzungserläuterung:` rows). It writes the same `extracted_grundschutz_check_merged.json`, reconciles the sheet's Zielobjekte with the ground-truth map by name, and uses the document date as check date when the export carries none. Computed, not generated: zero Document AI pages, zero AI calls.
 
 **Architecture:** Modular pipeline with specialized processors:
 - **GroundTruthMapper**: Creates authoritative system structure from customer documents

@@ -95,6 +95,8 @@ DOC_AI_CHUNK_RESULTS_PREFIX = f"{DOC_AI_BASE}/chunk_results/"
 # RAG Client paths
 RAG_BASE = f"{INTERMEDIARY_BASE}/rag"
 DOCUMENT_CATEGORY_MAP_PATH = f"{RAG_BASE}/document_category_map.json"
+# Per category: every delivered file, its format, and whether/why it reaches the model.
+DOCUMENT_INVENTORY_PATH = f"{RAG_BASE}/document_inventory.json"
 
 # Maker/checker protocol: one entry per checked AI answer, so the QS trail of the audit
 # shows what the second pass objected to and whether its correction was taken.

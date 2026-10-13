@@ -2,17 +2,57 @@
 import logging
 import json
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
-from src.constants import DOCUMENT_CATEGORY_MAP_PATH, PROMPT_CONFIG_PATH
+from src.clients.spreadsheet import SHEET_SUFFIXES
+from src.constants import DOCUMENT_CATEGORY_MAP_PATH, DOCUMENT_INVENTORY_PATH, PROMPT_CONFIG_PATH
 
 DOC_MAP_PATH = DOCUMENT_CATEGORY_MAP_PATH
 MAX_FILES_TEST_MODE = 3
+PDF_SUFFIX = ".pdf"
+# What the model can read: PDFs as file parts, spreadsheets as rendered row text. Office
+# formats like DOCX are not readable and are reported in the inventory instead.
+MODEL_FORMATS = {PDF_SUFFIX: "pdf", **{s: "sheet" for s in SHEET_SUFFIXES}}
+
+
+def _format_of(filename: str) -> str:
+    lower = filename.lower()
+    for suffix, fmt in MODEL_FORMATS.items():
+        if lower.endswith(suffix):
+            return fmt
+    return "other"
+
+
+def _stem(filename: str) -> str:
+    base = filename.rsplit("/", 1)[-1]
+    return base.rsplit(".", 1)[0].lower() if "." in base else base.lower()
+
+
+def select_model_documents(names: List[str]) -> List[Tuple[str, bool, str]]:
+    """Decide per file whether it goes to the model: (name, selected, reason).
+
+    A spreadsheet replaces a PDF of the same name, because the PDF is usually a print of
+    that very sheet and the row text is the more exact, cheaper input. PDFs without a sheet
+    twin go as they are; anything else is not readable by the model.
+    """
+    sheet_stems = {_stem(n) for n in names if _format_of(n) == "sheet"}
+    decisions = []
+    for name in sorted(names):
+        fmt = _format_of(name)
+        if fmt == "sheet":
+            decisions.append((name, True, "spreadsheet, sent as row text"))
+        elif fmt == "pdf" and _stem(name) in sheet_stems:
+            decisions.append((name, False, "a spreadsheet with the same name is sent instead"))
+        elif fmt == "pdf":
+            decisions.append((name, True, "PDF, sent as file part"))
+        else:
+            decisions.append((name, False, "format not readable by the model (deliver as PDF or XLSX)"))
+    return decisions
 
 
 class RagClient:
@@ -136,23 +176,44 @@ class RagClient:
         
         self._document_category_map = category_map
         logging.info(f"Successfully built document category map with {len(category_map)} categories.")
+        self._report_document_inventory()
 
-    def get_gcs_uris_for_categories(self, source_categories: List[str] = None) -> List[str]:
-        """
-        Finds the GCS URIs for documents belonging to the specified categories.
+    def document_inventory(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Per category: every file, its format, and whether/why it reaches the model."""
+        inventory: Dict[str, List[Dict[str, Any]]] = {}
+        for category, names in sorted((self._document_category_map or {}).items()):
+            inventory[category] = [
+                {"datei": name, "format": _format_of(name), "an_modell": selected, "grund": reason}
+                for name, selected, reason in select_model_documents(names)
+            ]
+        return inventory
 
-        Args:
-            source_categories: A list of BSI categories (e.g., 'Strukturanalyse').
-                               If None, all source document URIs are returned.
+    def _report_document_inventory(self) -> None:
+        """Log one line per category and persist the inventory as part of the QS trail."""
+        inventory = self.document_inventory()
+        for category, entries in inventory.items():
+            formats = sorted({e["format"] for e in entries})
+            sent = [e["datei"].rsplit("/", 1)[-1] for e in entries if e["an_modell"]]
+            skipped = [e["datei"].rsplit("/", 1)[-1] for e in entries if not e["an_modell"]]
+            logging.info(
+                f"Documents '{category}': {len(entries)} file(s), formats {formats}; "
+                f"to the model: {sent or 'none'}" + (f"; not sent: {skipped}" if skipped else "")
+            )
+        unreadable = [e["datei"] for entries in inventory.values() for e in entries if e["format"] == "other"]
+        if unreadable:
+            logging.warning(f"{len(unreadable)} file(s) in a format the model cannot read; ask for PDF or XLSX: {unreadable}")
+        try:
+            self.gcs_client.upload_from_string(json.dumps(inventory, indent=2, ensure_ascii=False), DOCUMENT_INVENTORY_PATH)
+        except Exception as e:  # noqa: BLE001 — the inventory is a trail, not a dependency
+            logging.warning(f"Could not save the document inventory to {DOCUMENT_INVENTORY_PATH}: {e}")
 
-        Returns:
-            A list of 'gs://...' URIs for the model to use as context.
-        """
+    def _select_filenames(self, source_categories: List[str] = None) -> List[str]:
+        """Blob names of the documents in the given categories (all documents if None)."""
         if self._document_category_map is None:
             raise RuntimeError("Document map has not been initialized. Call `await RagClient.create()`.")
-            
+
         selected_filenames = set()
-        
+
         if source_categories:
             for category in source_categories:
                 filenames = self._document_category_map.get(category, [])
@@ -163,8 +224,43 @@ class RagClient:
         else:
             selected_filenames.update(self._all_source_files)
 
-        uris = [f"gs://{self.config.bucket_name}/{fname}" for fname in sorted(list(selected_filenames))]
-        
+        return sorted(selected_filenames)
+
+    def get_blob_names_for_categories(self, source_categories: List[str] = None, suffixes: tuple = None) -> List[str]:
+        """Blob names (not URIs) in the given categories, optionally limited to file suffixes.
+
+        This is the accessor for files the pipeline parses itself, e.g. a Grundschutz-Check
+        delivered as a spreadsheet; `get_gcs_uris_for_categories` serves the model and only
+        ever returns PDFs.
+        """
+        names = self._select_filenames(source_categories)
+        if suffixes:
+            lowered = tuple(s.lower() for s in suffixes)
+            names = [n for n in names if n.lower().endswith(lowered)]
+        return names
+
+    def get_gcs_uris_for_categories(self, source_categories: List[str] = None) -> List[str]:
+        """
+        Finds the GCS URIs for documents belonging to the specified categories.
+
+        Args:
+            source_categories: A list of BSI categories (e.g., 'Strukturanalyse').
+                               If None, all source document URIs are returned.
+
+        Returns:
+            A list of 'gs://...' URIs for the model to use as context: PDFs (attached as
+            file parts) and spreadsheets (rendered as row text by the AI client). A
+            spreadsheet replaces a PDF of the same name; other formats are skipped.
+        """
+        names = self._select_filenames(source_categories)
+        decisions = select_model_documents(names)
+        chosen = [name for name, selected, _ in decisions if selected]
+        for name, selected, reason in decisions:
+            if not selected:
+                logging.info(f"Not sent to the model for {source_categories or 'all categories'}: '{name}' ({reason}).")
+
+        uris = [f"gs://{self.config.bucket_name}/{fname}" for fname in chosen]
+
         if self.config.is_test_mode and len(uris) > MAX_FILES_TEST_MODE:
             logging.warning(f"TEST MODE: Limiting context files from {len(uris)} to {MAX_FILES_TEST_MODE}.")
             return uris[:MAX_FILES_TEST_MODE]
