@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Chapter 3.3.8 Stichprobendokumentation der Strukturanalyse",
+  "description": "The sample table of the Strukturanalyse (BSI Muster-Auditbericht V3.0, Tabelle 22: at least 3 Geschäftsprozesse, 3 Anwendungen, 3 IT-Systeme, 6 Räume/Gebäude/Standorte, 3 Kommunikationsverbindungen), the answer to the optional Netzplan question (Tabelle 23) and a single finding.",
+  "type": "object",
+  "properties": {
+    "table": {
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "description": "One row per sample, keyed exactly like the report table headers.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Nr.": { "type": "string", "description": "Running number, starting at 1." },
+              "Bezeichnung": { "type": "string", "description": "Kürzel and name of the Zielobjekt as listed in the Strukturanalyse." },
+              "Beschreibung": { "type": "string", "description": "The description given in the list." },
+              "Anzahl": { "type": "string", "description": "Number of components in the group; '1' if the entry is not a group." },
+              "Enthält alle Informationen": { "type": "string", "enum": ["Ja", "Nein"] },
+              "Enthält alle Zuordnungen": { "type": "string", "enum": ["Ja", "Nein"] }
+            },
+            "required": ["Nr.", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"]
+          }
+        }
+      },
+      "required": ["rows"]
+    },
+    "answers": {
+      "type": "array",
+      "description": "One answer: the optional question about the bereinigter Netzplan.",
+      "items": { "type": "boolean" },
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "finding": {
+      "type": "object",
+      "description": "A single, structured finding for this section.",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK'.",
+          "enum": ["AG", "AS", "E", "OK"]
+        },
+        "description": {
+          "type": "string",
+          "description": "A clear, concise description of the finding, including evidence and document reference."
+        }
+      },
+      "required": ["category", "description"]
+    }
+  },
+  "required": ["table", "answers", "finding"]
+}

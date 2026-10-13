@@ -9,19 +9,17 @@ set -euo pipefail
 # environment variables and arguments.
 #
 # PREREQUISITES:
-#   - You must have run 'terraform apply' in the ../terraform directory.
+#   - You must have run 'terraform apply' in the terraform/ directory of this repo.
 #   - You must have the 'gcloud' and 'terraform' CLIs installed and authenticated.
 #
-# USAGE:
-#   Run this from the project root directory ('bsi-audit-automator'):
-#      ./run_cloud_job.sh
+# USAGE (from any directory):
+#      bash scripts/execute-audit-job.sh
 # ===================================================================
 
 # --- Script Usage ---
 usage() {
   echo "Usage: $0"
   echo "Interactively selects and executes a BSI audit task as a Cloud Run job."
-  echo "Must be run from the project root ('bsi-audit-automator')."
   exit 1
 }
 
@@ -39,11 +37,13 @@ MAX_CONCURRENT_AI_REQUESTS=5
 ENABLE_MAKER_CHECKER="true"
 
 # --- Dynamic Values from Terraform ---
+# Locate the repo root from the script location, so this works from any directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TERRAFORM_DIR="${ROOT_DIR}/terraform"
 echo "🔹 Fetching infrastructure details from Terraform..."
-TERRAFORM_DIR="../terraform"
-if [ ! -d "$TERRAFORM_DIR" ]; then
-    echo "❌ Error: Terraform directory not found at '$TERRAFORM_DIR'."
-    echo "   Please run this script from the project root ('bsi-audit-automator')."
+if [ ! -f "${TERRAFORM_DIR}/terraform.tfstate" ]; then
+    echo "❌ Error: no Terraform state in '${TERRAFORM_DIR}'. Run 'terraform apply' there first."
     exit 1
 fi
 

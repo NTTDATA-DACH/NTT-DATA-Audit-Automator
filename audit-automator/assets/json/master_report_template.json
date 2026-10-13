@@ -247,7 +247,13 @@
         "stichprobenDokuStrukturanalyse": {
             "title": "Stichprobendokumentation der Strukturanalyse",
             "subchapterNumber": "3.3.8",
+            "description": "Aus der Strukturanalyse werden aus jeder Liste (Geschäftsprozesse, Anwendungen, IT-Systeme, Räume, Gebäude, Standorte und Kommunikationsverbindungen) mindestens die geforderten drei bzw. sechs Stichproben dokumentiert. Der Auditteamleiter darf die Stichprobendokumentation erweitern. Die Frage zum bereinigten Netzplan ist nur zu beantworten, wenn ein bereinigter Netzplan vorliegt.",
+            "table": {
+              "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Anzahl", "Enthält alle Informationen", "Enthält alle Zuordnungen"],
+              "rows": []
+            },
             "content": [
+              {"type": "question", "questionText": "Optional: Besteht eine Übereinstimmung zwischen den erfassten Zielobjekten der Strukturanalyse mit dem bereinigten Netzplan?", "answer": null},
               {"type": "finding", "label": "Feststellung:", "findingText": ""}
             ]
         },
@@ -321,15 +327,18 @@
             "content": [
                 {"type": "question", "questionText": "Ist der Schutzbedarf der Außenverbindungen und kritischen Kommunikationsverbindungen vollständig dokumentiert?", "answer": null},
                 {"type": "question", "questionText": "Ist der Schutzbedarf der Kommunikationsverbindungen nachvollziehbar begründet?", "answer": null},
+                {"type": "question", "questionText": "Optional: Sind im bereinigten Netzplan alle Außenverbindungen und kritische Kommunikationsverbindungen erfasst?", "answer": null},
                 {"type": "finding", "label": "Feststellung:", "findingText": ""}
             ]
         },
         "stichprobenDokuSchutzbedarf": {
             "title": "Stichprobendokumentation der Schutzbedarfsfeststellung",
             "subchapterNumber": "3.4.7",
-            "content": [
-              {"type": "finding", "label": "Feststellung:", "findingText": ""}
-            ]
+            "description": "Die unter Kapitel 3.3.8 ausgewählten Stichproben zur Strukturanalyse werden mit Bezeichnung und Beschreibung übernommen und hinsichtlich der Schutzbedarfe geprüft.",
+            "table": {
+              "headers": ["Nr.", "Bezeichnung", "Beschreibung", "Ableitung des Schutzbedarfs nachvollziehbar", "Verknüpfungen zu Zielobjekten nachvollziehbar"],
+              "rows": []
+            }
         },
         "ergebnisDerSchutzbedarfsfeststellung": {
             "title": "Ergebnis der Schutzbedarfsfeststellung",
@@ -342,6 +351,10 @@
       "modellierungDesInformationsverbundesA3": {
         "title": "Modellierung des Informationsverbundes A.3",
         "subchapterNumber": "3.5",
+        "content": [
+          {"type": "question", "questionText": "Wurden die Modellierungsvorschriften korrekt angewandt?", "answer": null},
+          {"type": "finding", "label": "Feststellung:", "findingText": ""}
+        ],
         "modellierungsdetails": {
           "title": "Modellierungsdetails",
           "subchapterNumber": "3.5.1",
@@ -396,29 +409,38 @@
       "risikoanalyseA5": {
           "title": "Risikoanalyse A.5",
           "subchapterNumber": "3.7",
+          "description": "Eine Risikoanalyse ist für alle Zielobjekte erforderlich, die einen hohen oder sehr hohen Schutzbedarf in mindestens einem der drei Grundwerte haben, mit den Bausteinen des IT-Grundschutz-Kompendiums nicht ausreichend modelliert werden können oder in Einsatzszenarien betrieben werden, die im Rahmen des IT-Grundschutzes nicht vorgesehen sind.",
+          "content": [
+            {"type": "question", "questionText": "Wurde für alle Zielobjekte, deren Schutzbedarf über „normal“ liegt, eine Risikoanalyse durchgeführt?", "answer": null},
+            {"type": "question", "questionText": "Optional: Wurden alle Zielobjekte in der Risikoanalyse berücksichtigt, die mit den benutzerdefinierten Bausteinen abgebildet (modelliert) wurden?", "answer": null},
+            {"type": "question", "questionText": "Optional: Wurden alle Zielobjekte in der Risikoanalyse berücksichtigt, die in Einsatzszenarien betrieben werden, die im Rahmen des IT-Grundschutzes nicht vorgesehen sind?", "answer": null},
+            {"type": "question", "questionText": "Ist die Risikoanalyse aussagekräftig und nachvollziehbar?", "answer": null},
+            {"type": "question", "questionText": "Ist das vom Management getragene Restrisiko für den Informationsverbund angemessen?", "answer": null},
+            {"type": "question", "questionText": "Wurde der Management-Report zur Risikoanalyse von der Institutionsleitung unterschrieben?", "answer": null},
+            {"type": "finding", "label": "Feststellung:", "findingText": ""}
+          ],
           "risikoanalyse": {
               "title": "Ergebnis Risikoanalyse",
               "subchapterNumber": "3.7.1",
               "content": [
-                  {"type": "question", "questionText": "Wurde für alle Zielobjekte, deren Schutzbedarf über „normal“ liegt, eine Risikoanalyse durchgeführt?", "answer": null},
-                  {"type": "question", "questionText": "Ist die Risikoanalyse aussagekräftig und nachvollziehbar?", "answer": null},
-                  {"type": "question", "questionText": "Ist das vom Management getragene Restrisiko für den Informationsverbund angemessen?", "answer": null},
-                  {"type": "question", "questionText": "Wurde der Management-Report zur Risikoanalyse von der Institutionsleitung unterschrieben?", "answer": null},
-                  {"type": "finding", "label": "Feststellung:", "findingText": ""}
+                {"type": "prose", "label": "Votum Risikoanalyse:", "text": ""}
               ]
           }
       },
       "realisierungsplanA6": {
           "title": "Realisierungsplan A.6",
           "subchapterNumber": "3.8",
+          "content": [
+            {"type": "question", "questionText": "Liegt ein Realisierungsplan A.6 vor?", "answer": null},
+            {"type": "question", "questionText": "Werden die bestehenden Risiken nachvollziehbar dokumentiert?", "answer": null},
+            {"type": "question", "questionText": "Besteht ein Umsetzungsplan für die Reduzierung des Restrisikos?", "answer": null},
+            {"type": "finding", "label": "Feststellung:", "findingText": ""}
+          ],
           "realisierungsplan": {
               "title": "Ergebnis Realisierungsplan",
               "subchapterNumber": "3.8.1",
               "content": [
-                  {"type": "question", "questionText": "Liegt ein Realisierungsplan A.6 vor?", "answer": null},
-                  {"type": "question", "questionText": "Werden die bestehenden Risiken nachvollziehbar dokumentiert?", "answer": null},
-                  {"type": "question", "questionText": "Besteht ein Umsetzungsplan für die Reduzierung des Restrisikos?", "answer": null},
-                  {"type": "finding", "label": "Feststellung:", "findingText": ""}
+                {"type": "prose", "label": "Votum Realisierungsplan:", "text": ""}
               ]
           }
       },
