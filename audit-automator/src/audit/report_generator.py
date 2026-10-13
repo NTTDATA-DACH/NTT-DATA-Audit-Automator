@@ -219,12 +219,15 @@ class ReportGenerator:
             "schutzbedarfKommunikationsverbindungen": f"{base_path}.schutzbedarfsfeststellungA2.schutzbedarfKommunikationsverbindungen",
             "stichprobenDokuSchutzbedarf": f"{base_path}.schutzbedarfsfeststellungA2.stichprobenDokuSchutzbedarf",
             "ergebnisDerSchutzbedarfsfeststellung": f"{base_path}.schutzbedarfsfeststellungA2.ergebnisDerSchutzbedarfsfeststellung",
+            "modellierungDesInformationsverbundesA3": f"{base_path}.modellierungDesInformationsverbundesA3",
             "modellierungsdetails": f"{base_path}.modellierungDesInformationsverbundesA3.modellierungsdetails",
             "ergebnisDerModellierung": f"{base_path}.modellierungDesInformationsverbundesA3.ergebnisDerModellierung",
             "detailsZumItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.detailsZumItGrundschutzCheck",
             "benutzerdefinierteBausteine": f"{base_path}.itGrundschutzCheckA4.benutzerdefinierteBausteine",
             "ergebnisItGrundschutzCheck": f"{base_path}.itGrundschutzCheckA4.ergebnisItGrundschutzCheck",
+            "risikoanalyseA5": f"{base_path}.risikoanalyseA5",
             "risikoanalyse": f"{base_path}.risikoanalyseA5.risikoanalyse",
+            "realisierungsplanA6": f"{base_path}.realisierungsplanA6",
             "realisierungsplan": f"{base_path}.realisierungsplanA6.realisierungsplan",
             "ergebnisDerDokumentenpruefung": f"{base_path}.ergebnisDerDokumentenpruefung",
         }
@@ -238,7 +241,9 @@ class ReportGenerator:
             if 'finding' in result and isinstance(result.get('finding'), dict):
                 finding = result['finding']
                 finding_text = f"[{finding.get('category')}] {finding.get('description')}"
-                finding_list = self._ensure_list_path_exists(report, f"{target_path}.content")
+                # No padding: a section without a Feststellung slot (3.4.7 in the Muster) must not
+                # grow an empty prose item; its finding still reaches chapter 7.2.
+                finding_list = self._ensure_list_path_exists(report, f"{target_path}.content", min_length=0)
                 if finding_list:
                     for item in finding_list:
                         if item.get("type") == "finding":

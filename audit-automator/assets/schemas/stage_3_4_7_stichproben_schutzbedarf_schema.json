@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for Chapter 3.4.7 Stichprobendokumentation der Schutzbedarfsfeststellung",
+  "description": "The sample table of the Schutzbedarfsfeststellung (BSI Muster-Auditbericht V3.0, Tabelle 32). The samples are those of chapter 3.3.8; the section has no Feststellung of its own, the finding only feeds chapter 7.2.",
+  "type": "object",
+  "properties": {
+    "table": {
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "description": "One row per sample, keyed exactly like the report table headers.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Nr.": { "type": "string", "description": "Running number as in chapter 3.3.8." },
+              "Bezeichnung": { "type": "string", "description": "Copied unchanged from chapter 3.3.8." },
+              "Beschreibung": { "type": "string", "description": "Copied unchanged from chapter 3.3.8." },
+              "Ableitung des Schutzbedarfs nachvollziehbar": { "type": "string", "enum": ["Ja", "Nein"] },
+              "Verknüpfungen zu Zielobjekten nachvollziehbar": { "type": "string", "enum": ["Ja", "Nein"] }
+            },
+            "required": ["Nr.", "Bezeichnung", "Beschreibung", "Ableitung des Schutzbedarfs nachvollziehbar", "Verknüpfungen zu Zielobjekten nachvollziehbar"]
+          }
+        }
+      },
+      "required": ["rows"]
+    },
+    "finding": {
+      "type": "object",
+      "description": "A single, structured finding for this section.",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Category of the finding: 'AG' (Minor Deviation), 'AS' (Major Deviation), 'E' (Recommendation), or 'OK'.",
+          "enum": ["AG", "AS", "E", "OK"]
+        },
+        "description": {
+          "type": "string",
+          "description": "A clear, concise description of the finding, including evidence and document reference."
+        }
+      },
+      "required": ["category", "description"]
+    }
+  },
+  "required": ["table", "finding"]
+}

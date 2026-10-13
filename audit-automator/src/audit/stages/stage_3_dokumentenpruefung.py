@@ -32,6 +32,16 @@ class Chapter3Runner:
     """
     STAGE_NAME = "Chapter-3"
     TEMPLATE_PATH = "assets/json/master_report_template.json"
+    # Sections whose prompt needs another section's result run after the first pass:
+    # 3.4.7 must reuse the samples 3.3.8 selected (Ausfüllhilfe of the Muster-Auditbericht).
+    DEPENDENT_SECTIONS = {"stichprobenDokuSchutzbedarf": "stichprobenDokuStrukturanalyse"}
+    # (answer index, document category): an optional question about a document that was
+    # not delivered is recorded as null ("N/A"), like the unticked box in the Muster, never
+    # as a Ja/Nein the model had no basis for.
+    OPTIONAL_ANSWERS = {
+        "stichprobenDokuStrukturanalyse": ((0, "Netzplan"),),
+        "schutzbedarfKommunikationsverbindungen": ((2, "Netzplan"),),
+    }
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
@@ -297,8 +307,11 @@ class Chapter3Runner:
             task["summary_topic"] = data.get("title", key)
         return task
 
-    async def _process_ai_subchapter(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Generates content for a single AI-driven subchapter."""
+    async def _process_ai_subchapter(self, task: Dict[str, Any], prior_results: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Generates content for a single AI-driven subchapter.
+
+        `prior_results` holds the first pass's results for the sections in DEPENDENT_SECTIONS.
+        """
         key, schema_path = task["key"], task["schema_path"]
         
         prompt_format_args = {"questions": task.get("questions_formatted", "")}
@@ -309,6 +322,14 @@ class Chapter3Runner:
             zielobjekte_list = ground_truth_map.get('zielobjekte', [])
             prompt_format_args['zielobjekte_json'] = json.dumps(zielobjekte_list, indent=2, ensure_ascii=False)
         
+        dependency = self.DEPENDENT_SECTIONS.get(key)
+        if dependency:
+            dependency_result = (prior_results or {}).get(dependency) or {}
+            rows = (dependency_result.get("table") or {}).get("rows") or []
+            if not rows:
+                logging.warning(f"Chapter-3 '{key}': no sample rows from '{dependency}' to reuse; the model selects its own samples.")
+            prompt_format_args["stichproben_json"] = json.dumps(rows, indent=2, ensure_ascii=False)
+
         prompt = task["prompt"].format(**prompt_format_args)
         uris = self.rag_client.get_gcs_uris_for_categories(task.get("source_categories"))
         
@@ -316,6 +337,11 @@ class Chapter3Runner:
              return {key: {"error": f"No source documents for categories: {task.get('source_categories')}"}}
         try:
             data = await self.ai_client.generate_checked_json_response(prompt, load_asset_json(schema_path), uris, f"Chapter-3: {key}")
+            for index, category in self.OPTIONAL_ANSWERS.get(key, ()):
+                answers = data.get("answers")
+                if not self._doc_map.get(category) and isinstance(answers, list) and index < len(answers):
+                    answers[index] = None
+                    logging.info(f"Chapter-3 '{key}': question {index + 1} is optional and no '{category}' document was delivered; recorded as N/A.")
             if key == "aktualitaetDerReferenzdokumente":
                 coverage_finding = self._check_document_coverage()
                 if coverage_finding['category'] != 'OK': data['finding'] = coverage_finding
@@ -352,6 +378,8 @@ class Chapter3Runner:
         aggregated_results, processed_results = {}, []
         custom_tasks = [t for t in self.execution_plan if t and t.get("type") == "custom_logic"]
         ai_tasks = [t for t in self.execution_plan if t and (t.get("type") == "ai_driven" or t.get("key") == "modellierungsdetails")]
+        dependent_tasks = [t for t in ai_tasks if t["key"] in self.DEPENDENT_SECTIONS]
+        ai_tasks = [t for t in ai_tasks if t["key"] not in self.DEPENDENT_SECTIONS]
         summary_tasks = [t for t in self.execution_plan if t and t.get("type") == "summary"]
 
         # The 3.6.1 block and the ~22 AI subchapters are independent, so they run in the
@@ -365,6 +393,13 @@ class Chapter3Runner:
 
         if coroutines:
             results = await gather_resilient(*coroutines, context="Chapter-3: subchapters")
+            processed_results.extend(results)
+            for res in results:
+                aggregated_results.update(res)
+
+        if dependent_tasks:
+            dependent_coroutines = [self._process_ai_subchapter(task, aggregated_results) for task in dependent_tasks]
+            results = await gather_resilient(*dependent_coroutines, context="Chapter-3: dependent subchapters")
             processed_results.extend(results)
             for res in results:
                 aggregated_results.update(res)
