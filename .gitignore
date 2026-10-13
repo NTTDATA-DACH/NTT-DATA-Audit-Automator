@@ -254,3 +254,12 @@ __marimo__/
 
 # Generated test fixtures (scripts/make_mock_docs.py)
 mock_documents/
+
+# Customer sample documents dropped into the repo for parser work (e.g. Mappe1.xlsx).
+# Never commit customer data: office files and PDFs are ignored wholesale; test fixtures
+# are generated in memory or under mock_documents/.
+*.xlsx
+*.xlsm
+*.xls
+*.docx
+*.pdf

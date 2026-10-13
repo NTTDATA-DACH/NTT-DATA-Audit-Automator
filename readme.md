@@ -22,7 +22,10 @@ Confirm with `y` (or pass `-y`), then proceed to the Standard Workflow below. Th
 ### Standard Workflow
 
 1.  **Infrastructure Deployment:** If this is the very first run, use Terraform in the `terraform/` directory to create the GCS Bucket, VPC Network, and all necessary Vertex AI and IAM resources.
-2.  **Upload Customer Documents:** Upload the customer's documentation (PDFs), including any previous audit reports, to the `source_documents/` path in the GCS bucket.
+2.  **Upload Customer Documents:** Upload the customer's documentation, including any previous audit reports, to the `source_documents/` path in the GCS bucket. PDF and spreadsheet exports (XLSX, XLSM, CSV) are both fine; name the files after what they are, since classification goes by filename. Formats matter:
+    *   A **Grundschutz-Check (A.4) as spreadsheet** is parsed deterministically — no Document AI, no AI calls for the extraction. As PDF it goes through Document AI and the AI refiner.
+    *   Every other spreadsheet reaches the model as its row text (exact cell values, row numbers to cite, far fewer tokens than a page scan). A spreadsheet **replaces a PDF of the same name**; PDFs without a sheet twin are sent as they are.
+    *   DOCX and other office formats are not readable by the model and are skipped; the inventory in `output/intermediate/rag/document_inventory.json` (also logged per category at start-up) shows every file, its format and whether it reached the model.
 3.  **Deploy the Job Container:** Build and deploy the application container to Cloud Run Jobs.
     ```bash
     # Run from the project root
@@ -67,10 +70,13 @@ and calls Vertex AI + Document AI, so you need credentials and a bucket.
     python scripts/make_mock_docs.py --bucket <BUCKET_NAME>
     # or generate locally only:
     python scripts/make_mock_docs.py
+    # Grundschutz-Check as XLSX instead of PDF (exercises the spreadsheet path, no Document AI):
+    python scripts/make_mock_docs.py --a4-sheet
     ```
     The Grundschutz-Check mock carries fake Zielobjekt markers so the extraction stage has
     structure to group on. Content is intentionally minimal — this exercises plumbing
-    (SDK calls, batching, report assembly/validation), **not** output quality.
+    (SDK calls, batching, report assembly/validation), **not** output quality. Real customer
+    files used to develop parsers stay out of git: office files and PDFs are ignored wholesale.
 4.  **Run tasks locally** (dependency order; `--force` on the first run rebuilds the
     filename→category map):
     ```bash
@@ -112,16 +118,38 @@ regenerated JSON. `tests/test_catalog_invariants.py` re-checks the committed fil
 Requirements from Bausteine the institution defined itself are not part of the official
 Kompendium; they resolve to level `unbekannt` and are handled by a dedicated prompt rule.
 
-### AI configuration and the maker/checker pass
-Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`):
+### AI configuration: model, thinking levels, context cache, batch tier
+Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`). One model
+serves every task — `gemini-3.8-flash`, GA on the Vertex AI global endpoint with batch and
+context caching (verified against the Vertex model pages on 2026-10-13) — and quality is dialled
+via the thinking level. The only pro model on Vertex is `gemini-3.1-pro-preview`, a preview that
+can be withdrawn without notice, so it is not a default; set `GROUND_TRUTH_MODEL` to use it for a run.
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `GROUND_TRUTH_MODEL` | `gemini-3.1-pro` | Default model for document reasoning |
-| `CHUNK_PROCESSING_MODEL` | `gemini-3.7-flash` | High-volume path in the AI refiner |
-| `THINKING_LEVEL` | `minimal` | `minimal`/`low`/`medium`/`high`; clamped to `low` on pro models |
+| `GROUND_TRUTH_MODEL` | `gemini-3.8-flash` | Model for every call that reasons over customer documents |
+| `CHUNK_PROCESSING_MODEL` | `gemini-3.8-flash` | Model for the bulk extraction in the AI refiner |
+| `THINKING_LEVEL` | `medium` | `low`/`medium`/`high` for document reasoning. `minimal` exists only on 3.5/3.6 Flash and Flash-Lite and is clamped to `low` elsewhere (3.7+/3.8 Flash and the pro tier reject it) |
+| `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner |
 | `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
 | `CHECKER_MODEL` | = `GROUND_TRUTH_MODEL` | Model used for that second opinion |
+| `ENABLE_CONTEXT_CACHE` | `true` | Cache each (model, document set) once on Vertex AI and reuse it across calls |
+| `CONTEXT_CACHE_TTL_S` | `3600` | Lifetime of such a cache in seconds |
+| `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one Vertex AI batch job |
+| `BATCH_DEADLINE_S` | `300` | Seconds a batch job may take before it is cancelled and the rest runs as standard calls |
+| `BATCH_MIN_ITEMS` | `5` | Below this many open chunks the refiner skips the batch tier |
+
+**Context caching.** Every call that attaches source PDFs goes through a Vertex AI context cache
+keyed by model, persona and document set. The maker and its checker, and the Chapter-3 subchapters
+that read the same documents, pay for those tokens once and read them at a tenth of the price
+afterwards. A set below the 4,096-token minimum is attached inline instead; the log says which
+happened, and every call logs its input, cached, thinking and output tokens.
+
+**Batch tier.** The Grundschutz-Check refiner sends all open chunks as one batch job under
+`output/temp/batch/<job-key>/` at half the standard price. After `BATCH_DEADLINE_S` the job is
+cancelled (not abandoned), the results it delivered are kept, and the remaining chunks run as
+standard calls. A rerun reads the job folder first, so an interrupted job's results are never
+paid twice. Per-Zielobjekt results are still cached under `output/intermediate/gs_extraction/individual_results/`.
 
 With the maker/checker enabled, every answer that reaches the report or produces a finding is
 re-judged by a second, independent call against the same source documents: it checks evidence,
@@ -148,9 +176,9 @@ python -m pytest
 
 The audit pipeline runs in a strict, dependency-aware order.
 
-*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/intermediate/rag/document_category_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages.
+*   **Phase 0: Document Classification (On-Demand)** (`src/clients/rag_client.py`): This is an automated, on-demand first step that is triggered by other stages. If the `output/intermediate/rag/document_category_map.json` file does not exist, the `RagClient` (acting as a "Document Finder") will use an AI call to classify all source document *filenames* into BSI-specific categories (e.g., "Strukturanalyse", "Vorheriger-Auditbericht"). This map is then saved and used by all subsequent stages. On every start the finder also logs and saves a **format inventory** per category (`document_inventory.json`): which files exist, which format they have, and which of them the model gets (spreadsheets as row text, PDFs as file parts, a spreadsheet replacing a PDF of the same name, unreadable formats skipped).
 
-*   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis.
+*   **Stage: Grundschutz-Check Extraction (Prerequisite)** (`audit/stages/stage_gs_check_extraction.py`): This is the first operational stage in a full run. It performs the "Ground-Truth-Driven Semantic Chunking" strategy. It builds an authoritative map of the customer's system from documents like `Strukturanalyse` and `Modellierung`, then uses this map to perform a context-aware extraction and refinement of all requirements from the `Grundschutz-Check` document. The output is a clean, structured JSON file (`extracted_grundschutz_check_merged.json`) that serves as the foundation for later analysis. If the Grundschutz-Check is delivered as a **spreadsheet** (XLSX/XLSM/CSV export of the GRC tool, vertical key/value layout), the stage parses it deterministically instead — same output file, no Document AI, no AI calls — and matches the sheet's Zielobjekte to the ground-truth map by name. A sheet whose layout the parser does not recognise fails the stage with a clear message rather than passing empty data; the PDF path (Document AI + batch-tier refiner) remains the fallback when no sheet is present.
     * It is important to check the results of this stage, as they lay theground truth for all the following ones! Check /output/intermediate/gs_extraction/system_structure_map.json for the correct name of the "Informationsverbund" and at least do a qs of extracted_grundschutz_check_merged.json as well.
 
 

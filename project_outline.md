@@ -26,16 +26,19 @@ The audit process and resulting report must be based on two key documents:
 
 **3. Gemini Model and API Interaction**
 
-*   **Model Configuration:** all model IDs live in `src/constants.py` and are overridable per environment; there is no hardcoded model anywhere else.
-    *   **Ground truth / default model:** `gemini-3.1-pro` (env `GROUND_TRUTH_MODEL`) — the flagship, used for every stage that reasons over customer documents.
-    *   **Chunk processing model:** `gemini-3.7-flash` (env `CHUNK_PROCESSING_MODEL`) — the high-volume path in the AI refiner, which falls back to the ground-truth model after two failed attempts.
+*   **Model Configuration:** all model IDs live in `src/constants.py` and are overridable per environment; there is no hardcoded model anywhere else. One model serves every task and quality is dialled via the thinking level.
+    *   **Ground truth / default model:** `gemini-3.8-flash` (env `GROUND_TRUTH_MODEL`) — GA on the Vertex AI global endpoint, used for every stage that reasons over customer documents. The only pro model on Vertex is `gemini-3.1-pro-preview`, a preview, so it is not a default.
+    *   **Chunk processing model:** `gemini-3.8-flash` (env `CHUNK_PROCESSING_MODEL`) — the bulk path in the AI refiner, run at `CHUNK_THINKING_LEVEL` (default `low`); a failed chunk is retried at the full `THINKING_LEVEL` on the ground-truth model.
     *   **Checker model:** `CHECKER_MODEL`, defaults to the ground-truth model — the second opinion in the maker/checker pass.
 *   **Generation config** (one place: `AiClient._build_generation_config`):
     *   **Temperature:** `1`. Gemini 3.x is tuned for it; lowering it degrades reasoning quality.
-    *   **Thinking level:** `THINKING_LEVEL`, default `minimal`. The pro tier has no `minimal` level, so it is clamped to `low`.
+    *   **Thinking level:** `THINKING_LEVEL`, default `medium`. `minimal` exists only on 3.5/3.6 Flash and Flash-Lite; everywhere else it is clamped to `low`.
     *   **Max Output Tokens:** 65535.
     *   **Structured output:** the task's JSON Schema goes to `response_json_schema` (`response_schema` is the fallback on older SDKs).
-*   **Robustness:** all API calls go through an asynchronous, semaphore-limited wrapper with an exponential-backoff retry loop. The semaphore guards the in-flight call only, not the backoff sleep.
+*   **Robustness:** all API calls go through an asynchronous, semaphore-limited wrapper with an exponential-backoff retry loop (5 attempts, transient errors and unparseable output only; 400/401/403/404 raise at once). The semaphore guards the in-flight call only, not the backoff sleep.
+*   **Document formats:** the model gets PDFs as file parts and spreadsheets as rendered row text; a spreadsheet replaces a PDF of the same name, other office formats are skipped, and the per-category decision is logged and saved as `document_inventory.json`. A Grundschutz-Check delivered as spreadsheet bypasses Document AI and the refiner entirely (`sheet_parser.py`).
+*   **Context caching:** the source documents of a call are cached once per (model, persona, document set) on Vertex AI and reused by every later call with the same set — maker and checker, the Chapter-3 subchapters. Below the 4,096-token minimum the documents are attached inline. Every call logs its input/cached/thinking/output tokens.
+*   **Batch tier:** the AI refiner sends all open chunks as one Vertex batch job (half price). After `BATCH_DEADLINE_S` (300 s) the job is cancelled, delivered results are kept, and the rest runs as standard calls. A rerun reads the job folder under `output/temp/batch/` first.
 *   **Maker/checker:** every answer that reaches the report or produces a finding is re-judged by a second call against the same source documents (`ENABLE_MAKER_CHECKER`, default on). Verdicts land in `output/intermediate/checker_log.json`.
 *   **Requirement catalog:** the BSI Kompendium (Edition 2023) is generated from the sha256-pinned official BSI XML at build time (`python -m src.tools.build_bsi_catalog`) and committed as `assets/json/bsi_kompendium_ed2023.json`. The runtime reads only that JSON — no network, no XML parser in the image.
 
@@ -118,8 +121,14 @@ This is a critical architectural pattern for ensuring reliability.
 | `OUTPUT_PREFIX` | Yes | Script | GCS prefix for generated files (e.g., `output/`). |
 | `TEST` | No | User Input | `"true"` enables test mode (caps context files per call). Defaults to `false`. |
 | `MAX_CONCURRENT_AI_REQUESTS` | No | Script | Concurrent Vertex AI calls. Defaults to 5. |
-| `GROUND_TRUTH_MODEL` | No | Env | Default/flagship model. Defaults to `gemini-3.1-pro`. |
-| `CHUNK_PROCESSING_MODEL` | No | Env | High-volume model in the AI refiner. Defaults to `gemini-3.7-flash`. |
-| `THINKING_LEVEL` | No | Env | `minimal`/`low`/`medium`/`high`. Defaults to `minimal` (clamped to `low` on pro models). |
+| `GROUND_TRUTH_MODEL` | No | Env | Model for document reasoning. Defaults to `gemini-3.8-flash`. |
+| `CHUNK_PROCESSING_MODEL` | No | Env | Model for the bulk extraction in the AI refiner. Defaults to `gemini-3.8-flash`. |
+| `THINKING_LEVEL` | No | Env | `low`/`medium`/`high`. Defaults to `medium` (`minimal` is clamped to `low` on models that reject it). |
+| `CHUNK_THINKING_LEVEL` | No | Env | Thinking level of the bulk extraction. Defaults to `low`. |
 | `ENABLE_MAKER_CHECKER` | No | Env | Second-opinion pass over report-relevant answers. Defaults to `true`. |
 | `CHECKER_MODEL` | No | Env | Model for that second opinion. Defaults to `GROUND_TRUTH_MODEL`. |
+| `ENABLE_CONTEXT_CACHE` | No | Env | Vertex AI context cache per (model, document set). Defaults to `true`. |
+| `CONTEXT_CACHE_TTL_S` | No | Env | Lifetime of such a cache in seconds. Defaults to `3600`. |
+| `ENABLE_BATCH` | No | Env | Refiner chunks as one Vertex AI batch job. Defaults to `true`. |
+| `BATCH_DEADLINE_S` | No | Env | Seconds before a batch job is cancelled and the rest runs as standard calls. Defaults to `300`. |
+| `BATCH_MIN_ITEMS` | No | Env | Minimum open chunks for the batch tier. Defaults to `5`. |

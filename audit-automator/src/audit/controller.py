@@ -325,5 +325,6 @@ class AuditController:
         # 4. Save the final, updated list of all findings and the maker/checker trail
         self._save_all_findings()
         self._save_checker_log(stage_name)
+        logging.info(self.ai_client.usage_summary())
 
         return result_data

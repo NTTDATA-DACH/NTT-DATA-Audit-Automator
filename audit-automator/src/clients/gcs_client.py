@@ -105,6 +105,18 @@ class GcsClient:
         blob = self.bucket.blob(blob_name)
         return blob.download_as_text()
 
+    async def read_text_file_async(self, blob_name: str) -> str:
+        """Asynchronously downloads a text-based file from GCS."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.read_text_file, blob_name)
+
+    async def list_blob_names_async(self, prefix: str) -> list[str]:
+        """Asynchronously lists the names of all blobs under a prefix (no type filter)."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: [blob.name for blob in self.storage_client.list_blobs(self.bucket.name, prefix=prefix)]
+        )
+
     def blob_exists(self, blob_name: str) -> bool:
         """Checks if a blob exists in the GCS bucket."""
         logging.debug(f"Checking for existence of blob: gs://{self.bucket.name}/{blob_name}")
