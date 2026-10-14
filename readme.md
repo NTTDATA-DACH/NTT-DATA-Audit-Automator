@@ -118,32 +118,31 @@ regenerated JSON. `tests/test_catalog_invariants.py` re-checks the committed fil
 Requirements from Bausteine the institution defined itself are not part of the official
 Kompendium; they resolve to level `unbekannt` and are handled by a dedicated prompt rule.
 
-### AI configuration: model, thinking levels, context cache, batch tier
-Model IDs and AI behaviour are environment-driven (defaults in `src/constants.py`). One model
-serves every task — `gemini-3.8-flash`, GA on the Vertex AI global endpoint with batch and
-context caching (verified against the Vertex model pages on 2026-10-13) — and quality is dialled
-via the thinking level. The only pro model on Vertex is `gemini-3.1-pro-preview`, a preview that
-can be withdrawn without notice, so it is not a default; set `GROUND_TRUTH_MODEL` to use it for a run.
+### AI configuration: model, thinking levels, output budget, batch tier
+AI behaviour is environment-driven (defaults in `src/constants.py`). One model serves every
+task: `gemini-4-argon` on the Gemini Enterprise Agent Platform (formerly Vertex AI), GA on the
+global endpoint since 2026-10-13, SDK `google-genai>=2.30.1,<3`. Cost and quality are set per
+call by the **thinking level** (`low`/`medium`/`high`) and the **output budget**, never by a
+second model: the bulk extraction runs the same model at `low`, the checker at `high`.
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `GROUND_TRUTH_MODEL` | `gemini-3.8-flash` | Model for every call that reasons over customer documents |
-| `CHUNK_PROCESSING_MODEL` | `gemini-3.8-flash` | Model for the bulk extraction in the AI refiner |
-| `THINKING_LEVEL` | `medium` | `low`/`medium`/`high` for document reasoning. `minimal` exists only on 3.5/3.6 Flash and Flash-Lite and is clamped to `low` elsewhere (3.7+/3.8 Flash and the pro tier reject it) |
-| `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner |
+| `GEMINI_MODEL` | `gemini-4-argon` | The one model for every call; a rollback lever, not a model menu |
+| `THINKING_LEVEL` | `medium` | Thinking level for every call that reasons over customer documents (the maker). Legacy values `minimal`/`off` are mapped to `low`, `max` to `high`; Argon returns 400 for them |
+| `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner; a failed chunk is retried at `THINKING_LEVEL` |
+| `CHECKER_THINKING_LEVEL` | `high` | Thinking level of the second opinion in the maker/checker pass |
+| `MAX_OUTPUT_TOKENS` | `65536` | Budget per call for thinking **and** answer. Below `32768` the client refuses to start (the model would think the budget away and return truncated JSON); above `65536` the SDK continues the answer in 64K hops (long decode, up to 20 min per hop) |
 | `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
-| `CHECKER_MODEL` | = `GROUND_TRUTH_MODEL` | Model used for that second opinion |
-| `ENABLE_CONTEXT_CACHE` | `true` | Cache each (model, document set) once on Vertex AI and reuse it across calls |
-| `CONTEXT_CACHE_TTL_S` | `3600` | Lifetime of such a cache in seconds |
-| `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one Vertex AI batch job |
+| `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one batch job |
 | `BATCH_DEADLINE_S` | `300` | Seconds a batch job may take before it is cancelled and the rest runs as standard calls |
 | `BATCH_MIN_ITEMS` | `5` | Below this many open chunks the refiner skips the batch tier |
 
-**Context caching.** Every call that attaches source PDFs goes through a Vertex AI context cache
-keyed by model, persona and document set. The maker and its checker, and the Chapter-3 subchapters
-that read the same documents, pay for those tokens once and read them at a tenth of the price
-afterwards. A set below the 4,096-token minimum is attached inline instead; the log says which
-happened, and every call logs its input, cached, thinking and output tokens.
+**Caching is implicit.** `gemini-4-argon` has no explicit context cache; instead a request whose
+prefix repeats a recent request's prefix of at least 6,144 tokens is billed at about 5 % for that
+part, for 15–20 minutes, with no API call. The client therefore sends the persona and the source
+documents first and the varying prompt last, so the maker and its checker, and the Chapter-3
+subchapters that read the same documents, share the discount. Every call logs its input, cached,
+thinking and output tokens and its finish reason.
 
 **Batch tier.** The Grundschutz-Check refiner sends all open chunks as one batch job under
 `output/temp/batch/<job-key>/` at half the standard price. After `BATCH_DEADLINE_S` the job is
@@ -152,8 +151,10 @@ standard calls. A rerun reads the job folder first, so an interrupted job's resu
 paid twice. Per-Zielobjekt results are still cached under `output/intermediate/gs_extraction/individual_results/`.
 
 **Answer validation.** Every reply, from the standard path or the batch tier, is validated
-against the JSON schema sent with the request; a mismatch or a truncated answer (`MAX_TOKENS`)
-is retried like any other failure instead of reaching the report.
+against the JSON schema sent with the request; a mismatch or a truncated answer (`MAX_TOKENS`,
+or a `CONTINUATION` the SDK did not follow) is retried like any other failure instead of
+reaching the report. No sampling parameters are sent: Argon ignores `temperature`/`top_p`/`top_k`
+and rejects the rest, so determinism lives in the prompt and the schema.
 
 With the maker/checker enabled, every answer that reaches the report or produces a finding is
 re-judged by a second, independent call against the same source documents: it checks evidence,
@@ -162,7 +163,7 @@ verdict is written to `output/intermediate/checker_log.json` as the QS trail of 
 review it alongside the report. This roughly doubles the AI calls on those stages; set
 `ENABLE_MAKER_CHECKER=false` to fall back to a single pass.
 
-Before rolling out changed model IDs, verify them against the real project:
+Before rolling out a model or SDK change, make one live call per thinking level against the real project:
 ```bash
 cd audit-automator && GCP_PROJECT_ID=<project> python tests/manual/live_ai_smoke.py
 ```

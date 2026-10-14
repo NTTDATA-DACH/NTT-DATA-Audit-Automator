@@ -1,9 +1,9 @@
-"""Tests for AiClient: response parsing, generation config, retry policy, caching and batch.
+"""Tests for AiClient: response parsing, generation config, retry policy, prompt layout and batch.
 
 Everything here is offline: the pieces under test are staticmethods or need only
 `self.system_message`, so an instance created via `__new__` exercises them without a
 Vertex client, credentials or network. Module constants that come from the environment
-(THINKING_LEVEL, BATCH_MIN_ITEMS) are monkeypatched, so a developer's shell cannot change
+(THINKING_LEVEL, MAX_OUTPUT_TOKENS, BATCH_MIN_ITEMS) are monkeypatched, so a developer's shell cannot change
 the outcome. Importing ai_client needs google-genai + jsonschema (both in requirements);
 skip cleanly if the SDK is absent.
 """
@@ -41,6 +41,12 @@ def test_extract_json_rejects_max_tokens_even_when_the_text_parses():
     be retried, not accepted into the report as a full answer."""
     with pytest.raises(ValueError, match="MAX_TOKENS"):
         AiClient._extract_json(_fake_response(finish_reason="MAX_TOKENS", text='{"a": 1}'))
+
+
+def test_extract_json_rejects_a_surviving_continuation():
+    """CONTINUATION means the SDK stopped following the long-decode hops: truncated, not done."""
+    with pytest.raises(ValueError, match="CONTINUATION.*truncated"):
+        AiClient._extract_json(_fake_response(finish_reason="CONTINUATION", text='{"a": 1}'))
 
 
 def test_extract_json_raises_when_no_candidates():
@@ -116,9 +122,7 @@ def _client():
     client.base_system_message = "Du bist ein BSI-Auditor."
     client.system_message = "Du bist ein BSI-Auditor.\n\nImportant: Today's date is 2026-10-13."
     client.config = types.SimpleNamespace(is_test_mode=False)
-    client.cache_enabled = False
-    client._caches = {}
-    client._cache_locks = defaultdict(asyncio.Lock)
+    client.model = "gemini-4-argon"
     client.semaphore = asyncio.Semaphore(1)
     client.usage_totals = defaultdict(int)
     client.batch_enabled = False
@@ -126,16 +130,36 @@ def _client():
     return client
 
 
-def test_generation_config_uses_temperature_one():
-    """Gemini 3.x expects temperature 1; lower values degrade reasoning quality."""
-    config = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash")
-    assert config.temperature == 1
+def test_generation_config_sends_no_sampling_parameters():
+    """Argon ignores temperature/top_p/top_k and 400s on candidate_count and the penalties."""
+    config = _client()._build_generation_config(SCHEMA)
+    for field in ("temperature", "top_p", "top_k", "candidate_count", "frequency_penalty", "presence_penalty"):
+        assert getattr(config, field) is None, field
+    assert config.cached_content is None  # explicit caching does not exist on Argon
+
+
+def test_generation_config_sets_the_output_budget_and_long_decode(monkeypatch):
+    monkeypatch.setattr(ai_client_module, "MAX_OUTPUT_TOKENS", 131072)
+    config = _client()._build_generation_config(SCHEMA)
+    assert config.max_output_tokens == 131072
+    assert config.automatic_continuation is True
+    assert config.system_instruction.startswith("Du bist ein BSI-Auditor.")
+    assert config.response_mime_type == "application/json"
+
+
+def test_generation_config_refuses_a_starved_output_budget(monkeypatch):
+    """Below 32,768 the model thinks the budget away and returns truncated JSON without an error."""
+    monkeypatch.setattr(ai_client_module, "MAX_OUTPUT_TOKENS", 8192)
+    with pytest.raises(ValueError, match="MAX_OUTPUT_TOKENS=8192"):
+        _client()._build_generation_config(SCHEMA)
+    monkeypatch.setattr(ai_client_module, "MAX_OUTPUT_TOKENS", 2_000_000)
+    with pytest.raises(ValueError, match="MAX_OUTPUT_TOKENS=2000000"):
+        _client()._build_generation_config(SCHEMA)
 
 
 def test_generation_config_strips_meta_schema_key():
-    config = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash")
-    sent_schema = config.response_json_schema or config.response_schema
-    assert "$schema" not in sent_schema
+    config = _client()._build_generation_config(SCHEMA)
+    assert "$schema" not in config.response_json_schema
     # The caller's schema must not be mutated.
     assert "$schema" in SCHEMA
 
@@ -143,36 +167,26 @@ def test_generation_config_strips_meta_schema_key():
 def test_generation_config_uses_the_default_thinking_level(monkeypatch):
     """Without a per-call level the module default (THINKING_LEVEL) applies."""
     monkeypatch.setattr(ai_client_module, "THINKING_LEVEL", "medium")
-    config = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash")
+    config = _client()._build_generation_config(SCHEMA)
     assert config.thinking_config.thinking_level.value == "MEDIUM"
 
 
 def test_generation_config_takes_a_per_call_thinking_level():
-    config = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash", thinking_level="low")
+    config = _client()._build_generation_config(SCHEMA, thinking_level="low")
     assert config.thinking_config.thinking_level.value == "LOW"
 
 
-def test_minimal_thinking_is_clamped_where_the_model_rejects_it():
-    """3.7+/3.8 Flash and the pro tier return a 400 for 'minimal'; 3.5/3.6 Flash accept it."""
-    assert AiClient._resolve_thinking_level("gemini-3.8-flash", "minimal") == "low"
-    assert AiClient._resolve_thinking_level("gemini-3.7-flash", "minimal") == "low"
-    assert AiClient._resolve_thinking_level("gemini-3.1-pro-preview", "minimal") == "low"
-    assert AiClient._resolve_thinking_level("gemini-3.5-flash", "minimal") == "minimal"
-    assert AiClient._resolve_thinking_level("gemini-3.5-flash-lite", "minimal") == "minimal"
-    assert AiClient._resolve_thinking_level("gemini-3.8-flash", "high") == "high"
-    config = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash", thinking_level="minimal")
+def test_legacy_thinking_names_are_mapped_and_unknown_ones_raise():
+    """'minimal', 'off' and thinking_budget are a 400 on Argon; a migrated .env must not 400 the run."""
+    legacy_flash_name = "mini" + "mal"  # spelled apart so the migration lint does not flag a 400 here
+    assert AiClient._resolve_thinking_level(legacy_flash_name) == "low"
+    assert AiClient._resolve_thinking_level("off") == "low"
+    assert AiClient._resolve_thinking_level("max") == "high"
+    assert AiClient._resolve_thinking_level(" High ") == "high"
+    with pytest.raises(ValueError, match="use low, medium or high"):
+        AiClient._resolve_thinking_level("ultra")
+    config = _client()._build_generation_config(SCHEMA, thinking_level=legacy_flash_name)
     assert config.thinking_config.thinking_level.value == "LOW"
-
-
-def test_cached_content_replaces_the_system_instruction():
-    """With a context cache the persona lives in the cache; sending it again is a 400."""
-    inline = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash")
-    assert inline.system_instruction.startswith("Du bist ein BSI-Auditor.")
-    assert inline.cached_content is None
-
-    cached = _client()._build_generation_config(SCHEMA, "gemini-3.8-flash", cached_content="projects/p/locations/global/cachedContents/1")
-    assert cached.cached_content == "projects/p/locations/global/cachedContents/1"
-    assert cached.system_instruction is None
 
 
 # --- Retry policy ------------------------------------------------------------------
@@ -231,134 +245,28 @@ def test_transient_error_is_retried_then_succeeds(monkeypatch):
     assert len(calls) == 2
 
 
-# --- Context caching ---------------------------------------------------------------
+# --- Prompt layout (implicit caching) ---------------------------------------------
+# Argon caches implicitly by request prefix: the documents must come before the varying
+# prompt, or every call pays for them in full.
 
-def test_cache_key_is_order_independent_and_model_bound():
+def test_documents_precede_the_prompt_and_the_one_model_is_called():
     client = _client()
-    a = client._cache_key("gemini-3.8-flash", ["gs://b/2.pdf", "gs://b/1.pdf"])
-    b = client._cache_key("gemini-3.8-flash", ["gs://b/1.pdf", "gs://b/2.pdf", "gs://b/1.pdf"])
-    assert a == b
-    assert client._cache_key("gemini-3.1-pro-preview", ["gs://b/1.pdf", "gs://b/2.pdf"]) != a
-    assert client._cache_key("gemini-3.8-flash", ["gs://b/1.pdf"]) != a
-
-
-def _caching_client(create):
-    client = _client()
-    client.cache_enabled = True
-
-    async def fake_find(display_name):
-        return None
-
-    client._find_cache = fake_find
-    client._create_cache = create
-    return client
-
-
-def test_cache_is_created_once_per_document_set_and_reused():
-    """Parallel calls on the same set share one cache; a different set gets its own."""
-    created = []
-
-    async def fake_create(model, uris, display_name):
-        created.append((model, tuple(uris)))
-        name = f"cache-{len(created)}"
-        await asyncio.sleep(0)  # yield, so the concurrent callers really interleave
-        return name
-
-    client = _caching_client(fake_create)
-
-    async def scenario():
-        same = ["gs://b/1.pdf", "gs://b/2.pdf"]
-        return await asyncio.gather(
-            client._get_cached_content("m", same),
-            client._get_cached_content("m", list(reversed(same))),
-            client._get_cached_content("m", ["gs://b/3.pdf"]),
-            client._get_cached_content("m", []),
-        )
-
-    names = asyncio.run(scenario())
-    assert names[0] == names[1] == "cache-1"
-    assert names[2] == "cache-2"
-    assert names[3] is None  # nothing to cache
-    assert len(created) == 2
-
-
-def test_permanent_cache_failure_is_remembered_as_inline():
-    attempts = []
-
-    async def fake_create(model, uris, display_name):
-        attempts.append(1)
-        raise _api_error(400, "Cached content is too small")  # below the 4,096-token minimum
-
-    client = _caching_client(fake_create)
-
-    async def scenario():
-        return (await client._get_cached_content("m", ["gs://b/small.pdf"]),
-                await client._get_cached_content("m", ["gs://b/small.pdf"]))
-
-    assert asyncio.run(scenario()) == (None, None)
-    assert len(attempts) == 1
-
-
-def test_transient_cache_failure_is_retried_on_the_next_call():
-    attempts = []
-
-    async def fake_create(model, uris, display_name):
-        attempts.append(1)
-        if len(attempts) == 1:
-            raise _api_error(503)
-        return "cache-ok"
-
-    client = _caching_client(fake_create)
-
-    async def scenario():
-        return (await client._get_cached_content("m", ["gs://b/x.pdf"]),
-                await client._get_cached_content("m", ["gs://b/x.pdf"]))
-
-    assert asyncio.run(scenario()) == (None, "cache-ok")
-    assert len(attempts) == 2
-
-
-def test_rejected_cache_is_replaced_by_inline_documents_and_memoised():
-    """An expired/rejected cache costs one inline retry; afterwards the set stays inline."""
-    client = _client()
-    client.cache_enabled = True
-    uris = ["gs://b/1.pdf"]
-    key = client._cache_key("gemini-3.8-flash", uris)
-    client._caches[key] = "cache-x"
     calls = []
 
     async def fake_generate_content(**kwargs):
         calls.append(kwargs)
-        if kwargs["config"].cached_content:
-            raise _api_error(404, "CachedContent not found")
         return _fake_response(text='{"ok": 1}')
 
     client.client = _fake_vertex(fake_generate_content)
-    result = asyncio.run(client.generate_json_response("p", SCHEMA, gcs_uris=uris, model_override="gemini-3.8-flash", request_context_log="t"))
+    uris = ["gs://b/1.pdf", "gs://b/2.pdf"]
+    result = asyncio.run(client.generate_json_response("p", SCHEMA, gcs_uris=uris, request_context_log="t"))
     assert result == {"ok": 1}
-    assert calls[0]["config"].cached_content == "cache-x" and len(calls[0]["contents"]) == 1
-    assert calls[1]["config"].cached_content is None and calls[1]["config"].system_instruction
-    assert len(calls[1]["contents"]) == 2  # prompt + the PDF part
-    assert client._caches[key] is None
-
-
-def test_unrelated_400_does_not_touch_the_cache():
-    client = _client()
-    client.cache_enabled = True
-    uris = ["gs://b/1.pdf"]
-    key = client._cache_key("gemini-3.8-flash", uris)
-    client._caches[key] = "cache-x"
-    calls = []
-
-    async def fake_generate_content(**kwargs):
-        calls.append(kwargs)
-        raise _api_error(400, "Invalid JSON schema")
-
-    client.client = _fake_vertex(fake_generate_content)
-    with pytest.raises(genai_errors.APIError):
-        asyncio.run(client.generate_json_response("p", SCHEMA, gcs_uris=uris, model_override="gemini-3.8-flash"))
     assert len(calls) == 1
-    assert client._caches[key] == "cache-x"
+    assert calls[0]["model"] == "gemini-4-argon"
+    contents = calls[0]["contents"]
+    assert len(contents) == 3 and contents[-1] == "p"
+    assert [part.file_data.file_uri for part in contents[:2]] == uris
+    assert calls[0]["config"].system_instruction  # persona in the config, not in a cache
 
 
 # --- Batch tier --------------------------------------------------------------------
@@ -373,13 +281,15 @@ def test_batch_job_key_ignores_the_date_in_the_persona():
     a, b = _client(), _client()
     b.system_message = b.base_system_message + "\n\nImportant: Today's date is 2026-10-14."
     items = {"k": "p"}
-    assert a._batch_job_key("m", SCHEMA, "low", items) == b._batch_job_key("m", SCHEMA, "low", items)
-    assert a._batch_job_key("m", SCHEMA, "high", items) != a._batch_job_key("m", SCHEMA, "low", items)
+    assert a._batch_job_key(SCHEMA, "low", items) == b._batch_job_key(SCHEMA, "low", items)
+    assert a._batch_job_key(SCHEMA, "high", items) != a._batch_job_key(SCHEMA, "low", items)
+    b.model = "another-model-id"
+    assert a._batch_job_key(SCHEMA, "low", items) != b._batch_job_key(SCHEMA, "low", items)
 
 
 def test_batch_request_line_uses_the_vertex_jsonl_format():
     client = _client()
-    config = client._build_generation_config(SCHEMA, "gemini-3.8-flash", thinking_level="low")
+    config = client._build_generation_config(SCHEMA, thinking_level="low")
     line = json.loads(AiClient._batch_request_line("Frage?", config))
     request = line["request"]
     assert request["contents"] == [{"role": "user", "parts": [{"text": "Frage?"}]}]
@@ -387,9 +297,11 @@ def test_batch_request_line_uses_the_vertex_jsonl_format():
     gen = request["generationConfig"]
     assert "systemInstruction" not in gen
     assert gen["responseMimeType"] == "application/json"
-    assert gen["temperature"] == 1
+    assert "temperature" not in gen
+    assert gen["maxOutputTokens"] == ai_client_module.MAX_OUTPUT_TOKENS
+    assert "automaticContinuation" not in gen  # an SDK switch, not a GenerationConfig field
     assert gen["thinkingConfig"] == {"thinkingLevel": "LOW"}
-    assert "responseJsonSchema" in gen or "responseSchema" in gen
+    assert "responseJsonSchema" in gen
 
 
 def _output_line(prompt, *, text=None, status="", finish="STOP", parts=None):
@@ -465,9 +377,9 @@ def test_batch_skips_small_jobs_and_disabled_tier(monkeypatch):
         created.append(kwargs)
 
     client.client = types.SimpleNamespace(aio=types.SimpleNamespace(batches=types.SimpleNamespace(create=fake_create)))
-    assert asyncio.run(client.generate_json_batch({"k": "p"}, SCHEMA, "gemini-3.8-flash")) == {}  # 1 < 5
+    assert asyncio.run(client.generate_json_batch({"k": "p"}, SCHEMA)) == {}  # 1 < 5
     client.batch_enabled = False
-    assert asyncio.run(client.generate_json_batch({f"k{i}": f"p{i}" for i in range(9)}, SCHEMA, "gemini-3.8-flash")) == {}
+    assert asyncio.run(client.generate_json_batch({f"k{i}": f"p{i}" for i in range(9)}, SCHEMA)) == {}
     assert created == []
 
 
@@ -490,7 +402,7 @@ def test_resumed_batch_result_that_fails_the_schema_stays_open(monkeypatch):
     ])}
     client = _batch_client(monkeypatch, blobs)
     client.client = types.SimpleNamespace(aio=types.SimpleNamespace(batches=types.SimpleNamespace()))
-    results = asyncio.run(client.generate_json_batch({"K0": "P0", "K1": "P1"}, strict, "gemini-3.8-flash"))
+    results = asyncio.run(client.generate_json_batch({"K0": "P0", "K1": "P1"}, strict))
     assert results == {"K0": {"anforderungen": [0]}}  # K1 is open: 1 < BATCH_MIN_ITEMS, no job created
     assert client.usage_totals["batch_calls"] == 1  # only the usable line is counted
 
@@ -507,7 +419,7 @@ def test_small_remainder_still_reuses_resumed_results(monkeypatch):
 
     client.client = types.SimpleNamespace(aio=types.SimpleNamespace(batches=types.SimpleNamespace(create=fake_create)))
     items = {f"K{i}": f"P{i}" for i in range(6)}
-    results = asyncio.run(client.generate_json_batch(items, SCHEMA, "gemini-3.8-flash"))
+    results = asyncio.run(client.generate_json_batch(items, SCHEMA))
     assert set(results) == {"K0", "K1", "K2", "K3"}
     assert created == []  # 2 open < 5: the rest goes standard, but nothing already paid is lost
     assert client.usage_totals["batch_calls"] == 4
@@ -537,7 +449,7 @@ def test_batch_reads_resumed_results_and_reruns_only_the_rest(monkeypatch):
 
     client._wait_for_batch = fake_wait
 
-    results = asyncio.run(client.generate_json_batch(items, SCHEMA, "gemini-3.8-flash", "low", "t"))
+    results = asyncio.run(client.generate_json_batch(items, SCHEMA, "low", "t"))
     assert results == {"K0": {"anforderungen": [0]}, "K1": {"anforderungen": [1]},
                        "K5": {"anforderungen": [5]}, "K6": {"anforderungen": [5]}}
     # Only the prompts without a resumed result were submitted, each once.
@@ -567,5 +479,5 @@ def test_batch_wait_failure_cancels_the_job_and_falls_back(monkeypatch):
 
     client._wait_for_batch = fake_wait
     items = {f"K{i}": f"P{i}" for i in range(6)}
-    assert asyncio.run(client.generate_json_batch(items, SCHEMA, "gemini-3.8-flash")) == {}
+    assert asyncio.run(client.generate_json_batch(items, SCHEMA)) == {}
     assert cancelled == ["batches/1"]

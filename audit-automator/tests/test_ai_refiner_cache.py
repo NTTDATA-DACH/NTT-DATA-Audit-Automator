@@ -52,7 +52,7 @@ class _FakeGcsClient:
 class _NoBatchAiClient:
     """The batch tier delivers nothing, so every chunk takes the standard path under test."""
 
-    async def generate_json_batch(self, items, json_schema, model, thinking_level=None, request_context_log=""):
+    async def generate_json_batch(self, items, json_schema, thinking_level=None, request_context_log=""):
         return {}
 
 
@@ -65,7 +65,7 @@ def _refiner(gcs, per_kuerzel_results):
     AiRefiner.__init__(refiner, ai_client=_NoBatchAiClient(), gcs_client=gcs)
     refiner.ai_calls = []
 
-    async def fake_call(model_name, prompt, schema, chunk_info, thinking_level=None):
+    async def fake_call(prompt, schema, chunk_info, thinking_level=None):
         kuerzel = chunk_info.split("'")[1]
         refiner.ai_calls.append(kuerzel)
         outcome = per_kuerzel_results[kuerzel]

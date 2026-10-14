@@ -62,18 +62,19 @@ def test_findings_path_constant_is_consistent():
     assert ALL_FINDINGS_PATH == f"{RESULTS_BASE}/all_findings.json"
 
 
-def test_models_are_current_generation():
-    """MAX-5: defaults must stay on current, generally available models.
+def test_the_one_model_is_argon():
+    """MAX-5: one GA model for every task; quality and cost are set by thinking level only.
 
     Preview models are excluded deliberately: they get shut down without much notice
-    (gemini-3.1-flash-lite-preview and gemini-3-pro-preview both did), which would
-    break an audit run mid-flight.
+    (two Gemini 3 previews did in 2026), which would break an audit run mid-flight; the
+    2.5 generation retires on Cloud on 2026-10-20.
     """
-    from src.constants import GROUND_TRUTH_MODEL, CHUNK_PROCESSING_MODEL
-    for model in (GROUND_TRUTH_MODEL, CHUNK_PROCESSING_MODEL):
-        assert "gemini-2.5" not in model
-        assert "gemini-2.0" not in model
-        assert not model.endswith("-preview")
+    from src import constants
+    assert constants.GEMINI_MODEL == "gemini-4-argon"
+    assert not hasattr(constants, "CHUNK_PROCESSING_MODEL")  # a second model is a second set of rules
+    assert not hasattr(constants, "CHECKER_MODEL")
+    assert constants.CHECKER_THINKING_LEVEL == "high"
+    assert constants.MAX_OUTPUT_TOKENS == 65536
 
 
 def test_block_grouper_does_not_call_sys_exit():

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Live smoke test for the google-genai migration (MAX-5b).
+"""Live smoke test for the Gemini client (gemini-4-argon on the Agent Platform).
 
 Unlike tests/test_smoke.py (offline, no SDK calls), this script makes a REAL
-Vertex AI request through the migrated `AiClient`, exercising the full path:
-client init -> GenerateContentConfig (system_instruction + response_schema) ->
-async client.aio.models.generate_content -> finish_reason / response.text parsing.
+request through `AiClient`, exercising the full path: client init ->
+GenerateContentConfig (system_instruction + response_json_schema + thinking level +
+output budget) -> async client.aio.models.generate_content -> finish_reason /
+response.text parsing. Run it once after every model or SDK change (one call per posture).
 
 It is a MANUAL test: it needs GCP creds + network, so it is not part of the
 default pytest run. It is named `live_ai_smoke.py` (not `test_*.py`) and kept
@@ -35,7 +36,7 @@ os.chdir(PACKAGE_ROOT)
 
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
-from src.constants import GROUND_TRUTH_MODEL, CHUNK_PROCESSING_MODEL
+from src.constants import CHECKER_THINKING_LEVEL, GEMINI_MODEL, THINKING_LEVEL
 
 
 def _build_config() -> AppConfig:
@@ -80,42 +81,39 @@ async def _run() -> int:
     if pdf_uri:
         print(f"PDF attachment leg enabled (Part.from_uri): {pdf_uri}")
 
-    # Check BOTH configured models: the ground-truth default (no override) and
-    # the chunk-processing model (via model_override, which also exercises that path).
-    # De-duplicate in case both env vars resolve to the same ID.
-    models = [("GROUND_TRUTH_MODEL", GROUND_TRUTH_MODEL)]
-    if CHUNK_PROCESSING_MODEL != GROUND_TRUTH_MODEL:
-        models.append(("CHUNK_PROCESSING_MODEL", CHUNK_PROCESSING_MODEL))
+    # One model, two roles: the document level (maker) and the checker level. Each leg is a
+    # real call, so a wrong id, a rejected thinking level or a starved output budget shows here.
+    legs = [("THINKING_LEVEL", THINKING_LEVEL)]
+    if CHECKER_THINKING_LEVEL != THINKING_LEVEL:
+        legs.append(("CHECKER_THINKING_LEVEL", CHECKER_THINKING_LEVEL))
 
     failures = 0
-    for label, model_id in models:
-        print(f"\n--- {label} = {model_id} (calling Vertex AI, hits the network) ---")
-        # Report what is actually sent: this script is the gate for the model refresh
-        # (current model IDs, temperature 1, thinking level, JSON-Schema field).
-        effective = client._build_generation_config(schema, model_id)
-        # getattr, not attribute access: _build_generation_config falls back to the older
-        # fields when the installed SDK lacks them, and reading them directly would make
-        # this script fail on exactly the SDKs the fallback exists for.
-        schema_field = "response_json_schema" if getattr(effective, "response_json_schema", None) else "response_schema"
-        thinking_config = getattr(effective, "thinking_config", None)
-        thinking = thinking_config.thinking_level if thinking_config else None
-        print(f"    config: temperature={effective.temperature}, thinking_level={thinking}, schema via {schema_field}")
+    for label, level in legs:
+        print(f"\n--- {GEMINI_MODEL} at {label} = {level} (calling the Agent Platform, hits the network) ---")
+        # Report what is actually sent: this script is the gate for a model refresh
+        # (model id, thinking level, output budget, no sampling params, JSON-Schema field).
+        effective = client._build_generation_config(schema, thinking_level=level)
+        print(
+            f"    config: thinking_level={effective.thinking_config.thinking_level}, "
+            f"max_output_tokens={effective.max_output_tokens}, automatic_continuation={effective.automatic_continuation}, "
+            f"schema via response_json_schema"
+        )
         try:
             result = await client.generate_json_response(
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=gcs_uris,
                 request_context_log=f"live_ai_smoke[{label}]",
-                model_override=model_id,
+                thinking_level=level,
             )
-            print(f"SUCCESS ({model_id}) — schema-validated response: {result}")
-        except Exception as e:  # noqa: BLE001 — smoke test: report per-model, keep going
+            print(f"SUCCESS ({label}) — schema-validated response: {result}")
+        except Exception as e:  # noqa: BLE001 — smoke test: report per leg, keep going
             failures += 1
-            print(f"FAILED  ({model_id}) — {type(e).__name__}: {e}")
+            print(f"FAILED  ({label}) — {type(e).__name__}: {e}")
 
-    print(f"\n{len(models) - failures}/{len(models)} model(s) OK.")
-    # With TEST_PDF_GCS_URI set, the call above went through the context-cache path (or fell
-    # back to inline below the 4,096-token minimum); the totals show which.
+    print(f"\n{len(legs) - failures}/{len(legs)} leg(s) OK.")
+    # With TEST_PDF_GCS_URI set, the second leg repeats the first leg's prefix (persona + PDF):
+    # once that prefix exceeds 6,144 tokens the totals show cached input tokens > 0.
     print(client.usage_summary())
     return 1 if failures else 0
 

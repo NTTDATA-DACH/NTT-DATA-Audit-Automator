@@ -28,14 +28,15 @@ CORRECTION = {"answer": "Nein, die Leitlinie fehlt (Beleg: A.0, S. 3)."}
 def _client(responses, enabled=True):
     """An AiClient whose generate_json_response replays `responses` in order."""
     client = AiClient.__new__(AiClient)
+    client.model = "gemini-4-argon"
     client.system_message = "x"
     client.checker_enabled = enabled
     client.checker_prompt_template = "Prüfe:\n{original_prompt}\n---\n{antwort_json}"
     client.checker_log = []
     client.calls = []
 
-    async def fake_generate(prompt, json_schema, gcs_uris=None, request_context_log="", model_override=None, max_retries=None):
-        client.calls.append({"prompt": prompt, "schema": json_schema, "log": request_context_log})
+    async def fake_generate(prompt, json_schema, gcs_uris=None, request_context_log="", max_retries=None, thinking_level=None):
+        client.calls.append({"prompt": prompt, "schema": json_schema, "log": request_context_log, "thinking_level": thinking_level})
         result = responses[len(client.calls) - 1]
         if isinstance(result, Exception):
             raise result
@@ -123,9 +124,15 @@ def test_checker_prompt_carries_task_and_answer_without_format_errors():
     assert "{antwort_json}" not in checker_prompt
 
 
-def test_checker_uses_the_checker_model_and_its_own_schema():
+def test_checker_runs_at_the_checker_thinking_level_with_its_own_schema(monkeypatch):
+    """Same model in two roles: the maker at the default level, the checker at CHECKER_THINKING_LEVEL."""
+    from src.clients import ai_client as ai_client_module
+    monkeypatch.setattr(ai_client_module, "CHECKER_THINKING_LEVEL", "high")
     client = _client([MAKER_ANSWER, {"freigabe": True, "probleme": []}])
     _run(client)
+    assert client.calls[0]["thinking_level"] is None  # maker: THINKING_LEVEL default
+    assert client.calls[1]["thinking_level"] == "high"
+    assert client.checker_log[0]["checker_thinking_level"] == "high"
     checker_schema = client.calls[1]["schema"]
     assert set(checker_schema["required"]) == {"freigabe", "probleme"}
     # The correction is nullable via anyOf, carrying the task schema unchanged.

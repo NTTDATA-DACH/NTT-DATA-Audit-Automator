@@ -14,35 +14,37 @@ def _env_int(name: str, default: int) -> int:
     return int(value) if value.isdigit() else default
 
 
-# Model IDs are config-driven (env override). One model serves every task (verified against the
-# Vertex AI model pages on 2026-10-13): gemini-3.8-flash is GA on the global endpoint with batch
-# and context caching. The only pro model on Vertex is gemini-3.1-pro-preview, a preview that can
-# be shut down without notice, so quality is dialled via the thinking level instead of a second
-# model. Both env vars remain the rollback lever if a model is unavailable in a given project.
-DEFAULT_MODEL = "gemini-3.8-flash"
-CHUNK_PROCESSING_MODEL = os.getenv("CHUNK_PROCESSING_MODEL", DEFAULT_MODEL)
-GROUND_TRUTH_MODEL = os.getenv("GROUND_TRUTH_MODEL", DEFAULT_MODEL)
+# One model for every task: gemini-4-argon on the Gemini Enterprise Agent Platform (formerly
+# Vertex AI), GA on the global endpoint since 2026-10-13. Cost and quality are set per call by
+# the thinking level and the output budget, never by a second model: there is no "flash" bulk
+# model and no "pro" checker model any more. The env var is the rollback lever if the id is
+# unavailable in a project, not a model menu.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-4-argon")
 
-# Reasoning depth per call (Gemini 3.x thinking_level): low | medium | high. THINKING_LEVEL
+# Reasoning depth per call: low | medium | high (the API default is medium). THINKING_LEVEL
 # applies to every call that reasons over customer documents, CHUNK_THINKING_LEVEL to the bulk
-# extraction in the AI refiner. "minimal" exists only on 3.5/3.6 Flash and Flash-Lite; AiClient
-# clamps it to "low" everywhere else (3.7+/3.8 Flash and the pro tier reject it with a 400).
+# extraction in the AI refiner, CHECKER_THINKING_LEVEL to the second opinion of the maker/checker
+# pass. Legacy values "minimal"/"off" become "low" and "max" becomes "high" in AiClient; Argon
+# returns 400 for them, and for thinking_budget.
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "medium")
 CHUNK_THINKING_LEVEL = os.getenv("CHUNK_THINKING_LEVEL", "low")
+CHECKER_THINKING_LEVEL = os.getenv("CHECKER_THINKING_LEVEL", "high")
+
+# Output budget per call: max_output_tokens counts thinking AND answer tokens. 65,536 is the API
+# default; below 32,768 the model thinks the budget away and returns truncated JSON, so AiClient
+# refuses such a value. Above 65,536 the SDK continues the answer in 64K hops (long decode); the
+# 1,048,576-token window is shared by input, thinking and output.
+MAX_OUTPUT_TOKENS = _env_int("MAX_OUTPUT_TOKENS", 65536)
 
 # Maker/checker (Vier-Augen-Prinzip): every answer that ends up in the report or produces
 # a finding is re-judged by a second, independent call against the same source documents.
 # Roughly doubles the calls on those stages — set to "false" to fall back to single-pass.
 ENABLE_MAKER_CHECKER = _env_bool("ENABLE_MAKER_CHECKER", True)
-# The checker runs on the ground-truth model by default, whatever the maker used.
-CHECKER_MODEL = os.getenv("CHECKER_MODEL", GROUND_TRUTH_MODEL)
 
-# Context caching: the source PDFs attached to a call are cached once per (model, document set)
-# on Vertex AI and reused by every later call with the same set — the maker and its checker, and
-# the Chapter-3 subchapters that read the same documents. Cached input costs a tenth of fresh
-# input; a set below the 4,096-token minimum falls back to inline attachment automatically.
-ENABLE_CONTEXT_CACHE = _env_bool("ENABLE_CONTEXT_CACHE", True)
-CONTEXT_CACHE_TTL_S = _env_int("CONTEXT_CACHE_TTL_S", 3600)
+# Caching is implicit on gemini-4-argon: a request whose prefix (system instruction, then the
+# attached documents) repeats a recent request's prefix of at least 6,144 tokens is billed at
+# about 5 % for that part, for 15-20 minutes, with no API call. AiClient orders every request
+# that way; there is no cache to create, configure or expire.
 
 # Batch tier: the AI refiner sends its chunk requests as one Vertex batch job (half price).
 # A job that is not done after BATCH_DEADLINE_S is cancelled; what it delivered is kept and the

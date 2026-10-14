@@ -105,10 +105,11 @@ def test_ai_client_sends_pdfs_as_file_parts_and_sheets_as_text():
         return first, second
 
     first, second = asyncio.run(scenario())
-    assert first[0] == "Frage?"
-    assert first[1].file_data.file_uri == "gs://b/source_documents/A.1.pdf"
-    assert "Zeile 1: S001 | Fileserver" in first[2].text
+    # Documents first, the varying prompt last: implicit caching discounts the repeated prefix.
+    assert first[-1] == "Frage?"
+    assert first[0].file_data.file_uri == "gs://b/source_documents/A.1.pdf"
+    assert "Zeile 1: S001 | Fileserver" in first[1].text
     assert downloads == ["source_documents/A.1.xlsx"]  # rendered once, reused by the second call
-    assert second[1].text == first[2].text
+    assert second[0].text == first[1].text and second[-1] == "Frage?"
     with pytest.raises(ValueError, match="Unsupported document format"):
         asyncio.run(client._build_contents("x", ["gs://b/source_documents/Notizen.docx"]))
