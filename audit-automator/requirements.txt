@@ -34,7 +34,7 @@ google-api-core[grpc]==2.30.3
     #   google-cloud-core
     #   google-cloud-documentai
     #   google-cloud-storage
-google-auth[requests]==2.53.0
+google-auth[requests]==2.62.0
     # via
     #   google-api-core
     #   google-cloud-core
@@ -51,7 +51,7 @@ google-crc32c==1.8.0
     # via
     #   google-cloud-storage
     #   google-resumable-media
-google-genai==1.75.0
+google-genai==2.30.1
     # via -r requirements.in
 google-resumable-media==2.9.0
     # via google-cloud-storage

@@ -6,10 +6,12 @@
 
 # GCP and Vertex AI
 google-cloud-storage
-# Current Vertex AI / Gemini SDK (replaces deprecated google-cloud-aiplatform).
-# Capped to <2: the MAX-5b migration was live-tested against the 1.x line; bumping
-# to 2.x is a deliberate, separately-validated change, not an automatic lock refresh.
-google-genai>=1.68,<2
+# Current Gemini SDK for the Gemini Enterprise Agent Platform (formerly Vertex AI).
+# Floor 2.30.1: automatic long-decode continuation (gemini-4-argon returns up to 65,536
+# tokens per hop and finish_reason CONTINUATION; the SDK resends with the continuation
+# token from this version on). Capped to <3: a major bump is a deliberate, separately
+# validated change, not an automatic lock refresh.
+google-genai>=2.30.1,<3
 google-cloud-documentai
 
 # For local development, to load .env files

@@ -12,9 +12,7 @@ from src.audit.async_utils import gather_resilient
 from src.constants import (
     GROUPED_BLOCKS_PATH,
     EXTRACTED_CHECK_DATA_PATH,
-    CHUNK_PROCESSING_MODEL,
     CHUNK_THINKING_LEVEL,
-    GROUND_TRUTH_MODEL,
     THINKING_LEVEL,
     PROMPT_CONFIG_PATH,
 )
@@ -30,9 +28,9 @@ class AiRefiner:
     Delegates specific responsibilities to specialized components.
 
     Order of work per run: Zielobjekte with a cached result are skipped, every open chunk is
-    sent through the Vertex batch tier in one job, and whatever the batch did not deliver in
-    time runs through standard calls (2 attempts at the chunk thinking level, then 2 at the
-    ground-truth level).
+    sent through the batch tier in one job, and whatever the batch did not deliver in time
+    runs through standard calls (2 attempts at the chunk thinking level, then 2 at the full
+    document thinking level: same model, more thinking).
     """
 
     def __init__(self, ai_client: AiClient, gcs_client: GcsClient):
@@ -160,7 +158,6 @@ class AiRefiner:
         results = await self.ai_client.generate_json_batch(
             items=items,
             json_schema=schema,
-            model=CHUNK_PROCESSING_MODEL,
             thinking_level=CHUNK_THINKING_LEVEL,
             request_context_log="RefineGroup batch",
         )
@@ -246,35 +243,31 @@ class AiRefiner:
         chunk_info = f"chunk {chunk_idx + 1}/{total_chunks} for '{kuerzel}' ({len(clean_chunk)} blocks, ~{total_chars:,} chars)"
         logging.info(f"Processing {chunk_info}")
 
-        # Try with the chunk model at the bulk thinking level (2 attempts)
-        flash_result = await self._try_model_with_retries(
-            model_name=CHUNK_PROCESSING_MODEL,
-            model_display_name="flash",
-            prompt=prompt,
-            schema=schema,
-            chunk_info=chunk_info,
-            attempts=2,
+        # Two attempts at the bulk thinking level, then two at the full document level. Same
+        # model: on gemini-4-argon the escalation is more thinking, not a second model.
+        bulk_result = await self._try_level_with_retries(
             thinking_level=CHUNK_THINKING_LEVEL,
-        )
-
-        if flash_result:
-            return flash_result
-
-        # Flash failed, try with ground truth model at the full thinking level (2 attempts)
-        logging.info(f"⚡ Flash model exhausted for {chunk_info}. Switching to 🎯 ground truth model...")
-
-        gt_result = await self._try_model_with_retries(
-            model_name=GROUND_TRUTH_MODEL,
-            model_display_name="ground-truth",
             prompt=prompt,
             schema=schema,
             chunk_info=chunk_info,
             attempts=2,
-            thinking_level=THINKING_LEVEL,
         )
 
-        if gt_result:
-            return gt_result
+        if bulk_result:
+            return bulk_result
+
+        logging.info(f"⚡ Thinking level '{CHUNK_THINKING_LEVEL}' exhausted for {chunk_info}. Escalating to 🎯 '{THINKING_LEVEL}'...")
+
+        full_result = await self._try_level_with_retries(
+            thinking_level=THINKING_LEVEL,
+            prompt=prompt,
+            schema=schema,
+            chunk_info=chunk_info,
+            attempts=2,
+        )
+
+        if full_result:
+            return full_result
 
         # All attempts failed
         logging.error(f"❌ All 4 attempts failed for {chunk_info}.")
@@ -292,23 +285,21 @@ class AiRefiner:
 
         return prompt_template.format(zielobjekt_blocks_json=json.dumps(clean_chunk, indent=2)) + chunk_context
 
-    async def _try_model_with_retries(self, model_name: str, model_display_name: str, prompt: str,
-                                     schema: Dict[str, Any], chunk_info: str, attempts: int,
-                                     thinking_level: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def _try_level_with_retries(self, thinking_level: str, prompt: str, schema: Dict[str, Any],
+                                      chunk_info: str, attempts: int) -> Optional[Dict[str, Any]]:
         """
-        Try a specific model with the given number of attempts.
+        Try a thinking level with the given number of attempts.
 
         Returns:
             The result dict if successful, None if all attempts failed.
         """
+        label = f"thinking '{thinking_level}'"
         for attempt in range(attempts):
             try:
-                model_icon = "⚡" if "flash" in model_display_name else "🎯"
-                logging.info(f"{model_icon} Attempt {attempt + 1}/{attempts} with {model_display_name} for {chunk_info}")
+                logging.info(f"Attempt {attempt + 1}/{attempts} at {label} for {chunk_info}")
 
                 # Call AI without internal retries - we handle retries here
                 result = await self._call_ai_model(
-                    model_name=model_name,
                     prompt=prompt,
                     schema=schema,
                     chunk_info=chunk_info,
@@ -317,17 +308,17 @@ class AiRefiner:
 
                 # Validate result
                 if result and self._is_valid_result(result):
-                    logging.info(f"✅ Success with {model_display_name} on attempt {attempt + 1}")
+                    logging.info(f"✅ Success at {label} on attempt {attempt + 1}")
                     return result
                 else:
-                    logging.warning(f"⚠️  {model_display_name} returned invalid/empty result on attempt {attempt + 1}")
+                    logging.warning(f"⚠️  {label} returned invalid/empty result on attempt {attempt + 1}")
 
             except Exception as e:
                 error_type = self._classify_error(e)
                 if attempt < attempts - 1:  # Not the last attempt
-                    logging.warning(f"⚠️  {model_display_name} attempt {attempt + 1}/{attempts} failed: {error_type}")
+                    logging.warning(f"⚠️  {label} attempt {attempt + 1}/{attempts} failed: {error_type}")
                 else:  # Last attempt
-                    logging.error(f"❌ {model_display_name} final attempt {attempt + 1}/{attempts} failed: {error_type}")
+                    logging.error(f"❌ {label} final attempt {attempt + 1}/{attempts} failed: {error_type}")
 
         return None
 
@@ -348,7 +339,7 @@ class AiRefiner:
         else:
             return f"Unexpected error: {error_str[:100]}..."
 
-    async def _call_ai_model(self, model_name: str, prompt: str, schema: Dict[str, Any],
+    async def _call_ai_model(self, prompt: str, schema: Dict[str, Any],
                            chunk_info: str, thinking_level: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Make a single AI call without retries.
@@ -358,7 +349,6 @@ class AiRefiner:
             prompt=prompt,
             json_schema=schema,
             request_context_log=f"RefineGroup: {chunk_info}",
-            model_override=model_name,
             max_retries=1,
             thinking_level=thinking_level,
         )

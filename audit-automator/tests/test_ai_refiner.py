@@ -30,13 +30,13 @@ class FakeAiClient:
         self.batch_items = None
         self.standard_calls = []
 
-    async def generate_json_batch(self, items, json_schema, model, thinking_level=None, request_context_log=""):
+    async def generate_json_batch(self, items, json_schema, thinking_level=None, request_context_log=""):
         self.batch_items = dict(items)
         return {k: v for k, v in self.batch_results.items() if k in items}
 
     async def generate_json_response(self, prompt, json_schema, gcs_uris=None, request_context_log="",
-                                     model_override=None, max_retries=None, thinking_level=None):
-        self.standard_calls.append((request_context_log, model_override, thinking_level))
+                                     max_retries=None, thinking_level=None):
+        self.standard_calls.append((request_context_log, thinking_level))
         return {"anforderungen": [{"id": "STD", "zielobjekt_kuerzel": "x"}]}
 
 
