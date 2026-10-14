@@ -45,7 +45,7 @@ Together, these files allow the audit process to be modified and extended by sim
 
 1.  **Trigger & Idempotency Check:** The `RagClient` (acting as the "Document Finder") first checks GCS for `output/intermediate/rag/document_category_map.json`. If this map already exists, the entire classification phase is skipped, making the process efficient and idempotent.
 2.  **On-Demand Creation:** If the map is missing, the `RagClient` orchestrates its creation:
-    *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to the model (`GEMINI_MODEL`, at `THINKING_LEVEL`) with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
+    *   **List & Classify:** It lists all filenames from the source GCS directory and sends this list to the model (`GEMINI_MODEL`, at `EXTRACTION_THINKING_LEVEL`) with a prompt (from `prompt_config.json`) instructing it to classify each file into a BSI category based on naming conventions.
     *   **Robust Fallback:** This step is designed for resilience. If the AI call fails for any reason (e.g., API error, invalid response), the application does not halt. Instead, the `RagClient` logs a critical warning and generates a **fallback map**, classifying every document as "Sonstiges" (Miscellaneous). This ensures the pipeline can always proceed, with the known consequence of reduced precision in document selection.
 3.  **Load into Memory:** The `RagClient` parses the final JSON map and loads it into an in-memory dictionary. This dictionary, mapping categories to lists of GCS paths, enables near-instantaneous lookup of document URIs for all subsequent audit tasks.
 4.  **Format Inventory and Selection:** Customers deliver a mix of PDFs and spreadsheet exports, and the model reads PDFs (as file parts) and plain text, not office formats. Per category the finder therefore decides deterministically what the model gets: a spreadsheet is rendered as row text (`Zeile N: Zelle | Zelle`, exact values, citable row numbers, a fraction of the tokens of a page scan) and replaces a PDF of the same name; PDFs without a sheet twin are sent as they are; DOCX and the like are skipped. The decision per file is logged at start-up and persisted as `document_inventory.json`, so the audit trail shows which format fed the model.
@@ -138,7 +138,7 @@ The audit generation follows a structured approach where each chapter has specia
 - **Coverage Validation:** Ensures all modeled Zielobjekte have corresponding requirements
 - **Quality Assessments:** 
   - Status coverage completeness
-  - MUSS-requirement compliance (using BSI Control Catalog)
+  - MUSS-requirement compliance (deterministic: BSI Control Catalog ids against the extracted status, no model call)
   - Date recency validation (<12 months)
   - Cross-reference with Risikoanalyse and Realisierungsplan
 
@@ -156,7 +156,7 @@ The audit generation follows a structured approach where each chapter has specia
   - `1. Überwachungsaudit` → 4.1.2 (First surveillance, minimum 3 Bausteine) 
   - `2. Überwachungsaudit` → 4.1.3 (Second surveillance, avoid repeats from first)
 - **Ground Truth Integration:** Injects complete `system_structure_map.json` into AI prompts
-- **Compliance Enforcement:** AI instructed to only select valid Baustein-Zielobjekt combinations
+- **Compliance Enforcement:** The three Baustein prompts are rendered from one template (audit type and selection rules are data). Every returned row is validated in code against the ground-truth map: process-layer Bausteine (ISMS/ORP/CON/OPS/DER) must point at the Informationsverbund, all others at a Zielobjekt the A.3 mapping lists for them. One retry with the violations named, then invalid rows are dropped and logged.
 - **Mixed Generation:** 
   - **AI-Driven:** Baustein selection and risk analysis measures
   - **Deterministic:** Standard location selection

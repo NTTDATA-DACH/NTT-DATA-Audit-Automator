@@ -42,6 +42,8 @@ class Chapter3Runner:
         "stichprobenDokuStrukturanalyse": ((0, "Netzplan"),),
         "schutzbedarfKommunikationsverbindungen": ((2, "Netzplan"),),
     }
+    # A finding names at most this many requirement ids before it counts the rest.
+    MAX_LISTED_REQUIREMENTS = 50
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
@@ -184,23 +186,32 @@ class Chapter3Runner:
             if entbehrlich_items and not risikoanalyse_uris:
                 findings.append({"category": "AG", "description": "Es gibt als 'entbehrlich' deklarierte Anforderungen, aber die Risikoanalyse wurde nicht gefunden, um die Begründungen zu überprüfen."})
 
-        # Q3: MUSS-Anforderungen erfüllt? (Targeted AI)
+        # Q3: MUSS-Anforderungen erfüllt? (Deterministic)
+        # The catalog knows the Basis-Anforderungen and the extracted check carries each
+        # status, so the answer is a filter, not a judgment. The model used to be asked the
+        # question with exactly the unmet items as input, i.e. with the answer already fixed.
         muss_ids = set(self.control_catalog.get_muss_control_ids())
-        # Only the requirements that are actually in question need to be transmitted;
-        # a status of 'Ja' cannot violate a MUSS obligation.
-        muss_anforderungen = [
-            a for a in anforderungen
-            if a.get("id") in muss_ids and a.get("umsetzungsstatus") != STATUS_JA
-        ]
-        if muss_anforderungen:
-            prompt = targeted_prompt_template.format(
-                question=questions_config["muss_anforderungen"],
-                json_data=json.dumps(muss_anforderungen, ensure_ascii=False)
-            )
-            res = await self.ai_client.generate_checked_json_response(prompt, load_asset_json("assets/schemas/generic_1_question_schema.json"), request_context_log="3.6.1-Q3")
-            self._record_targeted_answer(res, answers, 2, findings, "3.6.1-Q3 (MUSS-Anforderungen)")
-        else:
-            answers[2] = True
+        unmet_muss: Dict[str, set] = {}
+        for a in anforderungen:
+            if a.get("id") in muss_ids and a.get("umsetzungsstatus") != STATUS_JA:
+                unmet_muss.setdefault(a["id"], set()).add(str(a.get("umsetzungsstatus")))
+        answers[2] = not unmet_muss
+        logging.info(
+            f"3.6.1-Q3: {sum(1 for a in anforderungen if a.get('id') in muss_ids)} MUSS requirements "
+            f"checked in code, {len(unmet_muss)} not 'Ja'; no model call."
+        )
+        if unmet_muss:
+            listed = [f"{rid} ({'/'.join(sorted(st))})" for rid, st in sorted(unmet_muss.items())]
+            shown = ", ".join(listed[:self.MAX_LISTED_REQUIREMENTS])
+            if len(listed) > self.MAX_LISTED_REQUIREMENTS:
+                shown += f" und {len(listed) - self.MAX_LISTED_REQUIREMENTS} weitere"
+            findings.append({
+                "category": "AG",
+                "description": (
+                    f"{len(unmet_muss)} Basis-Anforderungen (MUSS) sind im IT-Grundschutz-Check nicht "
+                    f"mit Status 'Ja' umgesetzt: {shown}."
+                ),
+            })
 
         # Requirements of the institution's own Bausteine are not in the official
         # Kompendium, so no MUSS check above can cover them. Losing them silently would
@@ -369,7 +380,7 @@ class Chapter3Runner:
                 finding = result_data['finding']
                 if finding.get('category') != "OK":
                     findings.append(f"- [{finding.get('category')}]: {finding.get('description')}")
-        return "\n".join(findings) if findings else "No specific findings were generated."
+        return "\n".join(findings) if findings else "Keine Feststellungen in den vorangegangenen Abschnitten."
 
     async def run(self, force_overwrite: bool = False) -> dict:
         """Executes the dynamically generated plan for Chapter 3."""

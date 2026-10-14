@@ -1,7 +1,7 @@
 # src/audit/stages/stage_4_pruefplan.py
 import logging
 import json
-from typing import Dict, Any
+from typing import Any, Dict, List, Tuple
 from google.cloud.exceptions import NotFound
 
 from src.assets_loader import load_asset_json
@@ -19,6 +19,16 @@ class Chapter4Runner:
     and accurate audit plan.
     """
     STAGE_NAME = "Chapter-4"
+    # Which Baustein selection runs is decided by the audit type.
+    BAUSTEIN_SECTIONS = {
+        "Zertifizierungsaudit": "auswahlBausteineErstRezertifizierung",
+        "1. Überwachungsaudit": "auswahlBausteine1Ueberwachungsaudit",
+        "2. Überwachungsaudit": "auswahlBausteine2Ueberwachungsaudit",
+    }
+    # Process-layer Bausteine apply to the whole Informationsverbund; the ground-truth
+    # extraction deliberately leaves them out of baustein_to_zielobjekt_mapping.
+    PROCESS_LAYERS = frozenset({"ISMS", "ORP", "CON", "OPS", "DER"})
+    INFORMATIONSVERBUND_KUERZEL = "Informationsverbund"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config
@@ -53,15 +63,10 @@ class Chapter4Runner:
         ch4_config = self.prompt_config["stages"]["Chapter-4"]
 
         # AI-driven Baustein selection, conditional on the specific audit type
-        if self.config.audit_type == "Zertifizierungsaudit":
-            logging.info("Loading definitions for 'Zertifizierungsaudit'.")
-            definitions["auswahlBausteineErstRezertifizierung"] = ch4_config["auswahlBausteineErstRezertifizierung"]
-        elif self.config.audit_type == "1. Überwachungsaudit":
-            logging.info("Loading definitions for '1. Überwachungsaudit'.")
-            definitions["auswahlBausteine1Ueberwachungsaudit"] = ch4_config["auswahlBausteine1Ueberwachungsaudit"]
-        elif self.config.audit_type == "2. Überwachungsaudit":
-            logging.info("Loading definitions for '2. Überwachungsaudit'.")
-            definitions["auswahlBausteine2Ueberwachungsaudit"] = ch4_config["auswahlBausteine2Ueberwachungsaudit"]
+        section = self.BAUSTEIN_SECTIONS.get(self.config.audit_type)
+        if section:
+            logging.info(f"Loading Baustein selection '{section}' for '{self.config.audit_type}'.")
+            definitions[section] = self._baustein_definition(ch4_config, section)
         else:
             logging.warning(f"Unknown audit type '{self.config.audit_type}'. No Baustein selection definitions loaded.")
             
@@ -75,6 +80,85 @@ class Chapter4Runner:
                 definitions[key]["type"] = "ai_driven"
 
         return definitions
+
+    @staticmethod
+    def _baustein_definition(ch4_config: Dict[str, Any], section: str) -> Dict[str, Any]:
+        """The three Baustein selections share one prompt; only the audit type and its
+        selection rules differ, so they are kept as data and rendered into the template here."""
+        entry = dict(ch4_config[section])
+        template = ch4_config["auswahlBausteineTemplate"]["prompt"]
+        # replace(), not format(): the template still holds {ground_truth_map_json}.
+        entry["prompt"] = (
+            template.replace("{audit_type}", entry["audit_type"])
+            .replace("{selection_rules}", entry["selection_rules"])
+        )
+        entry["validate_mapping"] = True
+        return entry
+
+    def _plan_violations(self, rows: List[Dict[str, Any]]) -> List[Tuple[int, str]]:
+        """Rows of a Baustein plan whose Zielobjekt the ground-truth map does not support.
+
+        The prompt states these rules, but a rule the model may ignore is not a rule: the
+        map is the evidence, so the check is done here. Process-layer Bausteine must point
+        at the Informationsverbund (or at a Zielobjekt the mapping lists for them), every
+        other Baustein at a Zielobjekt the mapping lists for it.
+        """
+        mapping = (self.ground_truth_map or {}).get("baustein_to_zielobjekt_mapping") or {}
+        violations: List[Tuple[int, str]] = []
+        for index, row in enumerate(rows):
+            baustein = (row.get("Baustein") or "").split(" ")[0].strip()
+            kuerzel = (row.get("Zielobjekt-Kürzel") or "").strip()
+            if not baustein:
+                violations.append((index, "Zeile ohne Baustein"))
+                continue
+            allowed = mapping.get(baustein, [])
+            if baustein.split(".")[0] in self.PROCESS_LAYERS:
+                if kuerzel != self.INFORMATIONSVERBUND_KUERZEL and kuerzel not in allowed:
+                    violations.append((index, (
+                        f"{baustein}: Zielobjekt-Kürzel '{kuerzel}' ist weder "
+                        f"'{self.INFORMATIONSVERBUND_KUERZEL}' noch in der Zuordnung enthalten")))
+            elif not allowed:
+                violations.append((index, f"{baustein}: nicht in baustein_to_zielobjekt_mapping enthalten"))
+            elif kuerzel not in allowed:
+                violations.append((index, f"{baustein}: Zielobjekt-Kürzel '{kuerzel}' nicht zugeordnet (zulässig: {', '.join(allowed)})"))
+        return violations
+
+    async def _validated_plan(self, name: str, prompt: str, schema: Dict[str, Any], gcs_uris: List[str]) -> Dict[str, Any]:
+        """Generate a Baustein plan and hold it against the ground-truth map.
+
+        One retry with the violations named; rows that still fail are dropped rather than
+        handed to Chapter 5, where an unmapped Zielobjekt yields a checklist with no
+        customer data behind it.
+        """
+        if not (self.ground_truth_map or {}).get("baustein_to_zielobjekt_mapping"):
+            logging.warning(f"Chapter-4 '{name}': no Baustein mapping in the ground-truth map; the plan is not validated.")
+            return await self.ai_client.generate_checked_json_response(
+                prompt=prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-4: {name}")
+
+        data = await self.ai_client.generate_checked_json_response(
+            prompt=prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-4: {name}")
+        violations = self._plan_violations(data.get("rows") or [])
+        if violations:
+            problems = "\n".join(f"- {msg}" for _, msg in violations)
+            logging.warning(f"Chapter-4 '{name}': {len(violations)} row(s) violate the Zielobjekt mapping, retrying once:\n{problems}")
+            retry_prompt = (
+                f"{prompt}\n\n**Correction required:** the previous draft violated the binding rules:\n{problems}\n"
+                "Produce the plan again and satisfy every rule for every row."
+            )
+            data = await self.ai_client.generate_checked_json_response(
+                prompt=retry_prompt, json_schema=schema, gcs_uris=gcs_uris, request_context_log=f"Chapter-4: {name} (retry)")
+            violations = self._plan_violations(data.get("rows") or [])
+        if violations:
+            bad = {index for index, _ in violations}
+            rows = data.get("rows") or []
+            logging.warning(
+                f"Chapter-4 '{name}': dropping {len(bad)} of {len(rows)} row(s) after the retry; "
+                f"the plan must be completed manually: " + "; ".join(msg for _, msg in violations)
+            )
+            data["rows"] = [row for index, row in enumerate(rows) if index not in bad]
+        else:
+            logging.info(f"Chapter-4 '{name}': all {len(data.get('rows') or [])} rows match the ground-truth map.")
+        return data
 
     async def _process_single_subchapter(self, name: str, definition: dict) -> Dict[str, Any]:
         """Generates planning content for a single subchapter, supporting AI and deterministic modes."""
@@ -109,12 +193,15 @@ class Chapter4Runner:
                 return {name: {"rows": []}}
 
         try:
-            generated_data = await self.ai_client.generate_checked_json_response(
-                prompt=prompt,
-                json_schema=schema,
-                gcs_uris=gcs_uris,
-                request_context_log=f"Chapter-4: {name}"
-            )
+            if definition.get("validate_mapping"):
+                generated_data = await self._validated_plan(name, prompt, schema, gcs_uris)
+            else:
+                generated_data = await self.ai_client.generate_checked_json_response(
+                    prompt=prompt,
+                    json_schema=schema,
+                    gcs_uris=gcs_uris,
+                    request_context_log=f"Chapter-4: {name}"
+                )
             logging.info(f"Successfully generated plan for subchapter {definition.get('key', name)}")
             # The AI response is the table content itself, e.g. {"rows": [...]}.
             return {name: generated_data}

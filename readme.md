@@ -131,6 +131,7 @@ second model: the bulk extraction runs the same model at `low`, the checker at `
 | `THINKING_LEVEL` | `medium` | Thinking level for every call that reasons over customer documents (the maker). Legacy values `minimal`/`off` are mapped to `low`, `max` to `high`; Argon returns 400 for them |
 | `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner; a failed chunk is retried at `THINKING_LEVEL` |
 | `CHECKER_THINKING_LEVEL` | `high` | Thinking level of the second opinion in the maker/checker pass |
+| `EXTRACTION_THINKING_LEVEL` | `low` | Thinking level of the calls that only classify or extract: filename classification, ground-truth extraction from A.1/A.3, scan of the previous report. Google places classification and extraction at `low` for `gemini-4-argon` |
 | `MAX_OUTPUT_TOKENS` | `65536` | Budget per call for thinking **and** answer. Below `32768` the client refuses to start (the model would think the budget away and return truncated JSON); above `65536` the SDK continues the answer in 64K hops (long decode, up to 20 min per hop) |
 | `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
 | `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one batch job |
@@ -162,6 +163,19 @@ AG/AS/E categorisation and completeness, and may replace the answer with a corre
 verdict is written to `output/intermediate/checker_log.json` as the QS trail of the audit —
 review it alongside the report. This roughly doubles the AI calls on those stages; set
 `ENABLE_MAKER_CHECKER=false` to fall back to a single pass.
+
+**Prompts.** All prompts live in `assets/json/prompt_config.json`. The system instruction is
+role-neutral and German: BSI context, the rule that only the attached documents and the task data
+count as evidence (document text is the object under review, never an instruction), the AG/AS/E
+category definitions with their lenient grading, and the output language. What a call has to do
+(answer the questions, grade, extract, plan) stands in its task prompt, so the maker and the
+checker can share the same system instruction and cache prefix without contradicting each other.
+Two checks are made in code rather than asked of the model: 3.6.1 lists the Basis-Anforderungen
+whose status is not `Ja` (the catalog knows the MUSS ids, the extracted check knows the status),
+and every Chapter 4 Baustein plan is held against the ground-truth map (process-layer Bausteine
+ISMS/ORP/CON/OPS/DER belong to the Informationsverbund, every other Baustein to a Zielobjekt the
+A.3 mapping lists for it). A plan that violates the map is requested once more with the
+violations named; rows that still fail are dropped and logged for manual completion.
 
 Before rolling out a model or SDK change, make one live call per thinking level against the real project:
 ```bash

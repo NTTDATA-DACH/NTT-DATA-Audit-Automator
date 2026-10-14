@@ -55,7 +55,7 @@ class _FakeAiClient:
         self._document_map = document_map
         self.calls = []
 
-    async def generate_json_response(self, prompt, schema, request_context_log=None):
+    async def generate_json_response(self, prompt, schema, request_context_log=None, thinking_level=None):
         self.calls.append(prompt)
         return {"document_map": self._document_map}
 

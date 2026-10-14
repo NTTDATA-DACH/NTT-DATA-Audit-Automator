@@ -29,6 +29,10 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-4-argon")
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "medium")
 CHUNK_THINKING_LEVEL = os.getenv("CHUNK_THINKING_LEVEL", "low")
 CHECKER_THINKING_LEVEL = os.getenv("CHECKER_THINKING_LEVEL", "high")
+# Calls that only classify or extract (filename classification, ground-truth extraction, the
+# scan of the previous report) run at "low": Google places classification and extraction at the
+# low level for gemini-4-argon; the medium default is meant for document Q&A.
+EXTRACTION_THINKING_LEVEL = os.getenv("EXTRACTION_THINKING_LEVEL", "low")
 
 # Output budget per call: max_output_tokens counts thinking AND answer tokens. 65,536 is the API
 # default; below 32,768 the model thinks the budget away and returns truncated JSON, so AiClient

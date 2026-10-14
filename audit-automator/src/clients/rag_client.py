@@ -10,7 +10,12 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.spreadsheet import SHEET_SUFFIXES
-from src.constants import DOCUMENT_CATEGORY_MAP_PATH, DOCUMENT_INVENTORY_PATH, PROMPT_CONFIG_PATH
+from src.constants import (
+    DOCUMENT_CATEGORY_MAP_PATH,
+    DOCUMENT_INVENTORY_PATH,
+    EXTRACTION_THINKING_LEVEL,
+    PROMPT_CONFIG_PATH,
+)
 
 DOC_MAP_PATH = DOCUMENT_CATEGORY_MAP_PATH
 MAX_FILES_TEST_MODE = 3
@@ -112,7 +117,8 @@ class RagClient:
         classification_result = await self.ai_client.generate_json_response(
             prompt,
             schema,
-            request_context_log="Document Classification"
+            request_context_log="Document Classification",
+            thinking_level=EXTRACTION_THINKING_LEVEL,
         )
 
         validated_items = []

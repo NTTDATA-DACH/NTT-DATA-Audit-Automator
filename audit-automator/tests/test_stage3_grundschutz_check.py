@@ -18,6 +18,7 @@ import pytest
 
 pytest.importorskip("google.genai")
 
+from src.audit.stages.gs_extraction.anforderung_fields import STATUS_NEIN, STATUS_TEILWEISE
 from src.audit.stages.stage_3_dokumentenpruefung import Chapter3Runner
 from src.constants import PROMPT_CONFIG_PATH
 
@@ -46,7 +47,7 @@ class _FakeAiClient:
     def __init__(self):
         self.requests = []
 
-    async def generate_checked_json_response(self, prompt, json_schema, gcs_uris=None, request_context_log=""):
+    async def generate_checked_json_response(self, prompt, json_schema, gcs_uris=None, request_context_log="", thinking_level=None):
         self.requests.append({"prompt": prompt, "log": request_context_log})
         return {"answers": [True], "finding": {"category": "OK", "description": "ok"}}
 
@@ -131,6 +132,32 @@ def test_recent_dates_and_met_requirements_pass_cleanly():
 
     assert result["finding"]["category"] == "OK"
     assert result["answers"][0] is True and result["answers"][4] is True
+
+
+def test_unmet_muss_requirements_are_listed_in_code_without_a_model_call():
+    """Q3 is a filter over catalog ids and statuses; the model used to be asked a question
+    whose input was already the list of unmet items."""
+    ai = _FakeAiClient()
+    runner = _runner(
+        [_anforderung("ISMS.1.A1", "nein"), _anforderung("ISMS.1.A2", "teilweise"), _anforderung("ISMS.1.A3", "Ja")],
+        ai_client=ai,
+    )
+    runner.control_catalog.get_muss_control_ids = lambda: ["ISMS.1.A1", "ISMS.1.A2", "ISMS.1.A3"]
+
+    result = _run(runner)
+
+    assert result["answers"][2] is False
+    assert not [r for r in ai.requests if "Q3" in r["log"]]
+    desc = result["finding"]["description"]
+    # statuses are normalised to their canonical spelling before the check
+    assert f"ISMS.1.A1 ({STATUS_NEIN})" in desc and f"ISMS.1.A2 ({STATUS_TEILWEISE})" in desc
+    assert "ISMS.1.A3" not in desc
+
+
+def test_all_muss_requirements_met_answers_q3_true():
+    runner = _runner([_anforderung("ISMS.1.A1", "ja")])
+    runner.control_catalog.get_muss_control_ids = lambda: ["ISMS.1.A1"]
+    assert _run(runner)["answers"][2] is True
 
 
 def test_requirements_outside_the_official_catalog_are_named_in_the_report():

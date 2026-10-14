@@ -514,10 +514,13 @@ class AiClient:
         json_schema: Dict[str, Any],
         gcs_uris: List[str] = None,
         request_context_log: str = "Generic AI Request",
-        max_retries: int = None
+        max_retries: int = None,
+        thinking_level: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generates an answer and has a second, independent call verify it (maker/checker).
+        `thinking_level` applies to the maker only (default THINKING_LEVEL); the checker always
+        runs at CHECKER_THINKING_LEVEL.
 
         The checker sees the same source documents and the maker's answer, and returns a
         verdict plus an optional correction. Only answers that end up in the report or
@@ -529,7 +532,8 @@ class AiClient:
         practice an empty chapter breaks the report assembly.
         """
         answer = await self.generate_json_response(
-            prompt, json_schema, gcs_uris, request_context_log, max_retries=max_retries
+            prompt, json_schema, gcs_uris, request_context_log, max_retries=max_retries,
+            thinking_level=thinking_level,
         )
         if not self.checker_enabled:
             return answer
