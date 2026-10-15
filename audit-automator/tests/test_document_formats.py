@@ -24,6 +24,12 @@ FILES = [
     "source_documents/A.1 Strukturanalyse.xlsx",
     "source_documents/Netzplan.pdf",
     "source_documents/Notizen.docx",
+    # export tools keep the source suffix in the print's name: this PDF is the sheet's twin
+    "source_documents/A.3 Modellierung.xlsx",
+    "source_documents/A.3 Modellierung.xlsx.pdf",
+    # a Word print next to a sheet of the same base name is a different document: both go
+    "source_documents/A.6 Realisierungsplan.xlsx",
+    "source_documents/A.6 Realisierungsplan.docx.pdf",
 ]
 
 
@@ -41,6 +47,8 @@ def test_sheet_replaces_pdf_twin_and_unreadable_formats_are_skipped():
     assert decisions["source_documents/A.1 Strukturanalyse.xlsx"][0] is True
     assert decisions["source_documents/A.1 Strukturanalyse.pdf"] == (False, "a spreadsheet with the same name is sent instead")
     assert decisions["source_documents/Netzplan.pdf"][0] is True  # no sheet twin: the PDF goes
+    assert decisions["source_documents/A.3 Modellierung.xlsx.pdf"] == (False, "a spreadsheet with the same name is sent instead")
+    assert decisions["source_documents/A.6 Realisierungsplan.docx.pdf"][0] is True
     assert decisions["source_documents/Notizen.docx"][0] is False
     assert "PDF or XLSX" in decisions["source_documents/Notizen.docx"][1]
 
@@ -57,8 +65,18 @@ def _rag():
 def test_document_finder_returns_model_ready_uris_only():
     rag = _rag()
     uris = rag.get_gcs_uris_for_categories(["Strukturanalyse"])
-    assert uris == ["gs://b/source_documents/A.1 Strukturanalyse.xlsx", "gs://b/source_documents/Netzplan.pdf"]
-    assert rag.get_blob_names_for_categories(["Strukturanalyse"], suffixes=(".xlsx",)) == ["source_documents/A.1 Strukturanalyse.xlsx"]
+    assert uris == [
+        "gs://b/source_documents/A.1 Strukturanalyse.xlsx",
+        "gs://b/source_documents/A.3 Modellierung.xlsx",
+        "gs://b/source_documents/A.6 Realisierungsplan.docx.pdf",
+        "gs://b/source_documents/A.6 Realisierungsplan.xlsx",
+        "gs://b/source_documents/Netzplan.pdf",
+    ]
+    assert rag.get_blob_names_for_categories(["Strukturanalyse"], suffixes=(".xlsx",)) == [
+        "source_documents/A.1 Strukturanalyse.xlsx",
+        "source_documents/A.3 Modellierung.xlsx",
+        "source_documents/A.6 Realisierungsplan.xlsx",
+    ]
 
 
 def test_inventory_lists_every_file_with_its_decision_and_is_persisted():

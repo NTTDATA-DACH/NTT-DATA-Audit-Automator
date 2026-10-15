@@ -125,6 +125,16 @@ resource "google_storage_bucket_iam_member" "sa_gcs_access" {
   member = "serviceAccount:${google_service_account.bsi_job_sa.email}"
 }
 
+# Grant the Vertex AI Service Agent read access to the bucket. Gemini on the Gemini
+# Enterprise Agent Platform fetches `gs://` file parts (the customer's PDFs) with this
+# Google-managed identity, not with the job's service account; without this binding every
+# call that attaches a PDF fails with 403 storage.objects.get.
+resource "google_storage_bucket_iam_member" "vertex_service_agent_gcs_read" {
+  bucket = google_storage_bucket.bsi_audit_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:service-${var.project_number}@gcp-sa-aiplatform.iam.gserviceaccount.com"
+}
+
 # Grant the default Cloud Build Service Account permission to push images
 # to our new Artifact Registry repository. This is the permission that was
 # previously missing and caused the build to fail.
