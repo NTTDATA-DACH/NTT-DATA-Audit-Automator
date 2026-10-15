@@ -30,9 +30,13 @@ THINKING_LEVEL = os.getenv("THINKING_LEVEL", "medium")
 CHUNK_THINKING_LEVEL = os.getenv("CHUNK_THINKING_LEVEL", "low")
 CHECKER_THINKING_LEVEL = os.getenv("CHECKER_THINKING_LEVEL", "high")
 # Calls that only classify or extract (filename classification, ground-truth extraction, the
-# scan of the previous report) run at "low": Google places classification and extraction at the
-# low level for gemini-4-argon; the medium default is meant for document Q&A.
-EXTRACTION_THINKING_LEVEL = os.getenv("EXTRACTION_THINKING_LEVEL", "low")
+# scan of the previous report). Google places classification and extraction at "low" for
+# gemini-4-argon, but the default stays at the maker's level: the ground-truth map is the
+# foundation of every later stage, and the implicit cache only serves a later call at the same
+# thinking level (two real runs: every same-level maker on the same documents hit the cache,
+# every checker at "high" missed), so an extraction at "low" would leave the Chapter-3 calls on
+# the same documents without a warm prefix.
+EXTRACTION_THINKING_LEVEL = os.getenv("EXTRACTION_THINKING_LEVEL", "medium")
 
 # Output budget per call: max_output_tokens counts thinking AND answer tokens. 65,536 is the API
 # default; below 32,768 the model thinks the budget away and returns truncated JSON, so AiClient

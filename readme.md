@@ -131,7 +131,7 @@ second model: the bulk extraction runs the same model at `low`, the checker at `
 | `THINKING_LEVEL` | `medium` | Thinking level for every call that reasons over customer documents (the maker). Legacy values `minimal`/`off` are mapped to `low`, `max` to `high`; Argon returns 400 for them |
 | `CHUNK_THINKING_LEVEL` | `low` | Thinking level of the bulk extraction in the AI refiner; a failed chunk is retried at `THINKING_LEVEL` |
 | `CHECKER_THINKING_LEVEL` | `high` | Thinking level of the second opinion in the maker/checker pass |
-| `EXTRACTION_THINKING_LEVEL` | `low` | Thinking level of the calls that only classify or extract: filename classification, ground-truth extraction from A.1/A.3, scan of the previous report. Google places classification and extraction at `low` for `gemini-4-argon` |
+| `EXTRACTION_THINKING_LEVEL` | `medium` | Thinking level of the calls that only classify or extract: filename classification, ground-truth extraction from A.1/A.3, scan of the previous report. Google places classification and extraction at `low` for `gemini-4-argon`; the default keeps the maker's level because the ground-truth map carries every later stage and because the implicit cache serves only calls at the same thinking level, so the extraction warms the prefix the Chapter-3 calls reuse |
 | `MAX_OUTPUT_TOKENS` | `65536` | Budget per call for thinking **and** answer. Below `32768` the client refuses to start (the model would think the budget away and return truncated JSON); above `65536` the SDK continues the answer in 64K hops (long decode, up to 20 min per hop) |
 | `ENABLE_MAKER_CHECKER` | `true` | Second-opinion pass over report-relevant answers |
 | `ENABLE_BATCH` | `true` | Send the refiner's chunk requests as one batch job |
@@ -143,7 +143,10 @@ prefix repeats a recent request's prefix of at least 6,144 tokens is billed at a
 part, for 15–20 minutes, with no API call. The client therefore sends the persona and the source
 documents first and the varying prompt last, so the maker and its checker, and the Chapter-3
 subchapters that read the same documents, share the discount. Every call logs its input, cached,
-thinking and output tokens and its finish reason.
+thinking and output tokens and its finish reason. The hit is best effort and, as two production runs
+showed, only served to a later call at the **same thinking level**: the checker at `high` never reuses
+the maker's prefix, parallel calls fired in the same second do not seed each other, and an extraction
+at `low` leaves nothing warm for the Chapter-3 calls at `medium`.
 
 **Batch tier.** The Grundschutz-Check refiner sends all open chunks as one batch job under
 `output/temp/batch/<job-key>/` at half the standard price. After `BATCH_DEADLINE_S` the job is
