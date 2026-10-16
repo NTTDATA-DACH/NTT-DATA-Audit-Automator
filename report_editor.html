@@ -495,7 +495,10 @@
                     const itemPath = `${path}.content[${index}]`;
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'content-item';
-                    if (item.type === 'question') {
+                    if (item.type === 'question' && item.answerType === 'date') {
+                        // A dated question (3.1: last change of the A.4 check) holds an ISO date, not Ja/Nein.
+                        itemDiv.appendChild(createInputField(item.questionText, item.answer, 'date', `${itemPath}.answer`));
+                    } else if (item.type === 'question') {
                         itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
                     } else if (item.type === 'finding') {
                         itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
