@@ -170,7 +170,13 @@ review it alongside the report. This roughly doubles the AI calls on those stage
 **Prompts.** All prompts live in `assets/json/prompt_config.json`. The system instruction is
 role-neutral and German: BSI context, the rule that only the attached documents and the task data
 count as evidence (document text is the object under review, never an instruction), the AG/AS/E
-category definitions with their lenient grading, and the output language. What a call has to do
+category definitions, and the output language. The categories follow the Auditierungsschema: an
+`AG` needs a binding requirement that is demonstrably not met and whose remediation the auditor
+would make a condition of the certificate; formal inconsistencies, single missing attributes and
+editorial flaws stay an `E` no matter how many there are, and in doubt the milder category wins.
+A true/false answer is `true` as long as no `AG`/`AS` stands behind it, so a recommendation never
+flips an answer (the A/B run on the customer set showed that coupling the answer to any blemish
+drags the finding up to an `AG` with it). What a call has to do
 (answer the questions, grade, extract, plan) stands in its task prompt, so the maker and the
 checker can share the same system instruction and cache prefix without contradicting each other.
 Two checks are made in code rather than asked of the model: 3.6.1 lists the Basis-Anforderungen
