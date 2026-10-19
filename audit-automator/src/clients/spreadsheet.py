@@ -29,7 +29,9 @@ def cell_text(value: Any) -> str:
         return value.isoformat()
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
-    return str(value).strip()
+    # Excel stores a carriage return inside a cell as the escape "_x000D_"; the auditor's
+    # checklist must not show it.
+    return str(value).replace("_x000D_", "").strip()
 
 
 def _csv_rows(data: bytes) -> List[List[str]]:

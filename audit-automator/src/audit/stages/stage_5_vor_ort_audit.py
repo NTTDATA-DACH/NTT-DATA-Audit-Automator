@@ -1,7 +1,7 @@
 # file: src/audit/stages/stage_5_vor_ort_audit.py
 import logging
 import re
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from google.cloud.exceptions import NotFound
 
 from src.config import AppConfig
@@ -87,6 +87,19 @@ class Chapter5Runner:
             if kuerzel == zielobjekt_kuerzel and control_id.startswith(prefix)
         ]
 
+    NO_CHECK_ENTRY = "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden."
+
+    @staticmethod
+    def _customer_documentation(extracted_details: Dict[str, Any], status: Optional[str]) -> str:
+        """The A.4 entry as the auditor reads it: the Umsetzungsstatus as stated, then the
+        Umsetzungserläuterung. 'Bewertung der Anforderung' is the auditor's own verdict, so
+        the customer's status has to be visible here, not only mapped into that field."""
+        if not extracted_details:
+            return Chapter5Runner.NO_CHECK_ENTRY
+        status_text = status or str(extracted_details.get("umsetzungsstatus") or "").strip() or "nicht angegeben"
+        explanation = str(extracted_details.get("umsetzungserlaeuterung") or "").strip() or "(keine Umsetzungserläuterung im A.4)"
+        return f"Umsetzungsstatus: {status_text}\n\n{explanation}"
+
     def _generate_control_checklist(self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Dict[str, Any]:
         """
         Deterministically generates the control checklist for subchapter 5.5.2,
@@ -146,11 +159,10 @@ class Chapter5Runner:
                 lookup_key = (control_id, planned_zielobjekt_kuerzel) if planned_zielobjekt_kuerzel else None
                 extracted_details = extracted_data_map.get(lookup_key, {})
                 
-                customer_explanation = extracted_details.get("umsetzungserlaeuterung", "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden.")
-
                 # Normalise before mapping: raw casing from the customer document would
                 # otherwise be passed straight into the auditor's checklist.
                 status = normalize_status(extracted_details.get("umsetzungsstatus"))
+                customer_explanation = self._customer_documentation(extracted_details, status)
                 status_map = {
                     STATUS_JA: "Umgesetzt",
                     STATUS_NEIN: "Nicht umgesetzt",

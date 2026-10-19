@@ -168,7 +168,7 @@
           {"type": "question", "questionText": "Wurden alle Referenzdokumente A.0 gemäß den Vorgaben von A.0.3 Lenkung von Dokumenten überarbeitet?", "answer": null},
           {"type": "question", "questionText": "Wurden alle Dateien zu den Referenzdokumenten A.1, A.2, A.3, A.5 und A.6 für das Audit neu erstellt?", "answer": null},
           {"type": "question", "questionText": "Wurden alle Maßnahmen im A.4 IT-Grundschutz-Check innerhalb der letzten 12 Monate neu bewertet?", "answer": null},
-          {"type": "question", "questionText": "Datum der letzten inhaltlichen Änderung im Referenzdokument A.4 IT-Grundschutz-Check.", "answer": ""},
+          {"type": "question", "answerType": "date", "questionText": "Datum der letzten inhaltlichen Änderung im Referenzdokument A.4 IT-Grundschutz-Check.", "answer": ""},
           {"type": "finding", "label": "Feststellung:", "findingText": ""}
         ]
       },

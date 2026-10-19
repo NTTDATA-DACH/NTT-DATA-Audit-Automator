@@ -29,6 +29,14 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-4-argon")
 THINKING_LEVEL = os.getenv("THINKING_LEVEL", "medium")
 CHUNK_THINKING_LEVEL = os.getenv("CHUNK_THINKING_LEVEL", "low")
 CHECKER_THINKING_LEVEL = os.getenv("CHECKER_THINKING_LEVEL", "high")
+# Calls that only classify or extract (filename classification, ground-truth extraction, the
+# scan of the previous report). Google places classification and extraction at "low" for
+# gemini-4-argon, but the default stays at the maker's level: the ground-truth map is the
+# foundation of every later stage, and the implicit cache only serves a later call at the same
+# thinking level (two real runs: every same-level maker on the same documents hit the cache,
+# every checker at "high" missed), so an extraction at "low" would leave the Chapter-3 calls on
+# the same documents without a warm prefix.
+EXTRACTION_THINKING_LEVEL = os.getenv("EXTRACTION_THINKING_LEVEL", "medium")
 
 # Output budget per call: max_output_tokens counts thinking AND answer tokens. 65,536 is the API
 # default; below 32,768 the model thinks the budget away and returns truncated JSON, so AiClient
@@ -65,7 +73,10 @@ RESULTS_BASE = "output/results"
 STAGE_RESULTS_PATH = f"{RESULTS_BASE}/{{stage_name}}.json"  # Format with stage_name
 ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
 # The assembled report is written as results/report_<YYMMDD>.json (ReportGenerator);
-# the date stamp is deliberate, so there is no single constant path for it.
+# the date stamp is deliberate, so there is no single constant path for it. The final
+# stage (ReportFinalizer) reads the newest of them and writes report_<YYMMDD>_final.json.
+REPORT_FILE_PREFIX = "report_"
+FINAL_REPORT_SUFFIX = "_final"
 
 # =============================================================================
 # TEMPORARY PATHS - Short-lived processing files
@@ -103,6 +114,14 @@ DOCUMENT_INVENTORY_PATH = f"{RAG_BASE}/document_inventory.json"
 # shows what the second pass objected to and whether its correction was taken.
 CHECKER_LOG_PATH = f"{INTERMEDIARY_BASE}/checker_log.json"
 
+# Final stage over the assembled report: the model's duplicate groups are stored under a
+# key over the findings and the prompt (a rerun on an unchanged report costs no call), and
+# one log per report records every merge decision, including those not applied.
+FINALIZER_BASE = f"{INTERMEDIARY_BASE}/report_finalizer"
+# A duplicate group is applied only when the model is at least this sure; groups below the
+# threshold are logged for the auditor and leave the report untouched.
+FINALIZER_CONFIDENCE_THRESHOLD = 0.9
+
 # =============================================================================
 # ASSET PATHS
 # =============================================================================
@@ -111,6 +130,12 @@ PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 # BSI IT-Grundschutz-Kompendium, Edition 2023. Generated from the sha256-pinned official
 # BSI XML by `python -m src.tools.build_bsi_catalog`; see readme.md ("Katalog aktualisieren").
 CONTROL_CATALOG_PATH = "assets/json/bsi_kompendium_ed2023.json"
+
+# The Kürzel under which the audit plan (Chapter 4), the parsed Grundschutz-Check and the
+# checklist (Chapter 5) address the Informationsverbund as a whole. Process-layer Bausteine
+# (ISMS, ORP, CON, OPS, DER) apply to it, and GRC exports give it no Kürzel of its own, so the
+# three must agree on this fixed one or the customer's explanations never reach 5.5.2.
+INFORMATIONSVERBUND_KUERZEL = "Informationsverbund"
 
 # JSON Schema for the fully-assembled audit report (used by ReportGenerator to
 # validate the report before saving). Replaces the former no-op structural check.

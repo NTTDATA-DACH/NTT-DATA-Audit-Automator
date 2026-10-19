@@ -10,6 +10,7 @@ from .clients.rag_client import RagClient
 from .clients.ai_client import AiClient
 from .audit.controller import AuditController
 from .audit.report_generator import ReportGenerator
+from .audit.report_finalizer import ReportFinalizer
 
 async def main_async():
     """
@@ -48,6 +49,16 @@ async def main_async():
         action='store_true',
         help='Assemble the final report from completed stage stubs.'
     )
+    group.add_argument(
+        '--finalize-report',
+        nargs='?',
+        const='',
+        metavar='REPORT_PATH',
+        help=('Final stage over an assembled (and edited) report: merge duplicate findings, assign '
+              'the final numbers and write them into the chapter texts. Takes the bucket path of '
+              'the report (e.g. output/results/report_261019.json); without it the newest '
+              'output/results/report_*.json is used. Writes <report>_final.json.')
+    )
 
     parser.add_argument(
         '--force',
@@ -64,6 +75,12 @@ async def main_async():
         logging.info("Starting final report assembly...")
         generator = ReportGenerator(config, gcs_client)
         await generator.assemble_report()
+        return
+
+    if args.finalize_report is not None:
+        logging.info("Starting final report stage (duplicates, numbers, references)...")
+        finalizer = ReportFinalizer(config, gcs_client, ai_client)
+        await finalizer.run(args.finalize_report or None)
         return
         
     # For all other tasks, we need the RagClient (Document Finder)

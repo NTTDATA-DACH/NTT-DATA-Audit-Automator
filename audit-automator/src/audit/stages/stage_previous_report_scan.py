@@ -7,7 +7,7 @@ from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
-from src.constants import PROMPT_CONFIG_PATH
+from src.constants import EXTRACTION_THINKING_LEVEL, PROMPT_CONFIG_PATH
 
 class PreviousReportScanner:
     """
@@ -50,7 +50,8 @@ class PreviousReportScanner:
                 prompt=prompt,
                 json_schema=schema,
                 gcs_uris=[gcs_uri],
-                request_context_log=f"{self.STAGE_NAME}: {task_name}"
+                request_context_log=f"{self.STAGE_NAME}: {task_name}",
+                thinking_level=EXTRACTION_THINKING_LEVEL,
             )
         except Exception as e:
             logging.error(f"Extraction task '{task_name}' failed: {e}", exc_info=True)

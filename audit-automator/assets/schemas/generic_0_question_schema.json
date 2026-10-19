@@ -1,17 +1,35 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Generic Schema for a finding only",
-    "description": "A schema for a response that only contains a structured audit finding.",
-    "type": "object",
-    "properties": {
-      "finding": {
-        "type": "object",
-        "properties": {
-          "category": { "type": "string", "enum": ["AG", "AS", "E", "OK"] },
-          "description": { "type": "string" }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Generic Schema for a finding only",
+  "description": "A schema for a response that only contains a structured audit finding.",
+  "type": "object",
+  "properties": {
+    "finding": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "Category of the finding: 'AG' (geringfügige Abweichung), 'AS' (schwerwiegende Abweichung), 'E' (Empfehlung), or 'OK' when nothing deviates.",
+          "enum": [
+            "AG",
+            "AS",
+            "E",
+            "OK"
+          ]
         },
-        "required": ["category", "description"]
-      }
-    },
-    "required": ["finding"]
-  }
+        "description": {
+          "type": "string",
+          "description": "A clear, concise description of the finding in German, including evidence and the document reference; a brief confirmation when the category is 'OK'."
+        }
+      },
+      "required": [
+        "category",
+        "description"
+      ],
+      "description": "A single, structured finding for this section."
+    }
+  },
+  "required": [
+    "finding"
+  ]
+}

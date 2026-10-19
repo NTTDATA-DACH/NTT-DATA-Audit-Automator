@@ -10,7 +10,12 @@ from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.spreadsheet import SHEET_SUFFIXES
-from src.constants import DOCUMENT_CATEGORY_MAP_PATH, DOCUMENT_INVENTORY_PATH, PROMPT_CONFIG_PATH
+from src.constants import (
+    DOCUMENT_CATEGORY_MAP_PATH,
+    DOCUMENT_INVENTORY_PATH,
+    EXTRACTION_THINKING_LEVEL,
+    PROMPT_CONFIG_PATH,
+)
 
 DOC_MAP_PATH = DOCUMENT_CATEGORY_MAP_PATH
 MAX_FILES_TEST_MODE = 3
@@ -28,9 +33,25 @@ def _format_of(filename: str) -> str:
     return "other"
 
 
+# Suffixes an export tool leaves in the name of the sheet it printed: "A.1 Struktur.xlsx.pdf"
+# is the print of "A.1 Struktur.xlsx", so the twin match has to look through them. Only
+# sheet suffixes: "A.6 Plan.docx.pdf" is a Word document, not a print of "A.6 Plan.xlsx".
+EXPORT_SOURCE_SUFFIXES = SHEET_SUFFIXES + (".xls",)
+
+
 def _stem(filename: str) -> str:
-    base = filename.rsplit("/", 1)[-1]
-    return base.rsplit(".", 1)[0].lower() if "." in base else base.lower()
+    """The name without its format, lower-cased, for the sheet-replaces-PDF twin match.
+
+    One trailing format is stripped, then one sheet suffix if the export tool kept it,
+    so "A.1 Struktur.xlsx.pdf", "A.1 Struktur.xlsx" and "A.1 Struktur.pdf" share a stem.
+    """
+    base = filename.rsplit("/", 1)[-1].lower()
+    if "." in base:
+        base = base.rsplit(".", 1)[0]
+    for suffix in EXPORT_SOURCE_SUFFIXES:
+        if base.endswith(suffix):
+            return base[: -len(suffix)]
+    return base
 
 
 def select_model_documents(names: List[str]) -> List[Tuple[str, bool, str]]:
@@ -112,7 +133,8 @@ class RagClient:
         classification_result = await self.ai_client.generate_json_response(
             prompt,
             schema,
-            request_context_log="Document Classification"
+            request_context_log="Document Classification",
+            thinking_level=EXTRACTION_THINKING_LEVEL,
         )
 
         validated_items = []

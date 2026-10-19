@@ -61,10 +61,11 @@ ROWS = [
 def test_parse_rows_extracts_requirements_with_their_zielobjekt():
     result = parse_rows(ROWS)
     by_id = {(a["id"], a["zielobjekt_kuerzel"]): a for a in result["anforderungen"]}
-    assert set(by_id) == {("ISMS.1.A1", "Hauptsitz Rostock"), ("ISMS.1.A2", "Hauptsitz Rostock"),
+    # The section named like the document's Informationsverbund gets the plan's fixed Kürzel.
+    assert set(by_id) == {("ISMS.1.A1", "Informationsverbund"), ("ISMS.1.A2", "Informationsverbund"),
                           ("SYS.1.1.A1", "S001"), ("SYS.1.1.A2", "S001")}
 
-    a1 = by_id[("ISMS.1.A1", "Hauptsitz Rostock")]
+    a1 = by_id[("ISMS.1.A1", "Informationsverbund")]
     assert a1["titel"].startswith("Übernahme der Gesamtverantwortung")
     assert a1["umsetzungsstatus"] == "Ja"
     assert "Managementbericht" in a1["umsetzungserlaeuterung"]
@@ -72,7 +73,7 @@ def test_parse_rows_extracts_requirements_with_their_zielobjekt():
     assert a1["pagenumber"] == 15  # the row number stands in for the page
     assert a1["zielobjekt_name"] == "Hauptsitz Rostock"
 
-    assert by_id[("ISMS.1.A2", "Hauptsitz Rostock")]["umsetzungsstatus"] == "Nein"
+    assert by_id[("ISMS.1.A2", "Informationsverbund")]["umsetzungsstatus"] == "Nein"
 
     s1 = by_id[("SYS.1.1.A1", "S001")]
     assert s1["titel"] == "Geeignete Aufstellung [IT-Betrieb]"  # ID and title in one cell
@@ -85,12 +86,12 @@ def test_parse_rows_extracts_requirements_with_their_zielobjekt():
 def test_parse_rows_builds_zielobjekte_and_mapping_and_drops_empty_sections():
     result = parse_rows(ROWS)
     assert result["zielobjekte"] == [
-        {"kuerzel": "Hauptsitz Rostock", "name": "Hauptsitz Rostock"},
+        {"kuerzel": "Informationsverbund", "name": "Hauptsitz Rostock"},
         {"kuerzel": "S001", "name": "Fileserver"},
     ]
     # "A.4 IT-Grundschutz-Check" and "Informationsverbund" are single-cell rows without requirements.
     assert all(z["name"] not in ("A.4 IT-Grundschutz-Check", "Informationsverbund") for z in result["zielobjekte"])
-    assert result["baustein_to_zielobjekt_mapping"] == {"ISMS.1": ["Hauptsitz Rostock"], "SYS.1.1": ["S001"]}
+    assert result["baustein_to_zielobjekt_mapping"] == {"ISMS.1": ["Informationsverbund"], "SYS.1.1": ["S001"]}
     assert result["dokument"] == {"informationsverbund_name": "Hauptsitz Rostock", "datum": "2026-10-07",
                                   "version": "2.6", "autor": "Patrick Nimmich"}
 
@@ -115,10 +116,69 @@ def test_helpers_normalise_status_dates_and_kuerzel():
 
 def test_reconcile_uses_the_system_map_kuerzel_where_names_match():
     anforderungen = parse_rows(ROWS)["anforderungen"]
-    system_map = {"zielobjekte": [{"kuerzel": "HQ-01", "name": "Hauptsitz Rostock"}, {"kuerzel": "S001", "name": "Fileserver"}]}
+    system_map = {"zielobjekte": [{"kuerzel": "HQ-01", "name": "Hauptsitz Rostock"}, {"kuerzel": "SRV-01", "name": "Fileserver"}]}
     changed = reconcile_zielobjekte(anforderungen, system_map)
+    # The Fileserver takes the map's Kürzel; the Informationsverbund keeps the plan's fixed one
+    # even though the map lists it under HQ-01, because Chapter 4 and 5 address it that way.
     assert changed == 2
-    assert {a["zielobjekt_kuerzel"] for a in anforderungen} == {"HQ-01", "S001"}
+    assert {a["zielobjekt_kuerzel"] for a in anforderungen} == {"Informationsverbund", "SRV-01"}
+
+
+def test_excel_carriage_return_escape_is_removed_from_cell_text():
+    rows = VERINICE_ROWS[:9]
+    rows[8] = [None, "Umsetzungserläuterung:", "Vom Vorstand getragen._x000D_\n_x000D_\nAudit: 08.06.2026"]
+    result = parse_rows(rows)
+    assert result["anforderungen"][0]["umsetzungserlaeuterung"] == "Vom Vorstand getragen.\n\nAudit: 08.06.2026"
+
+
+def test_reconcile_never_writes_an_empty_kuerzel_from_the_map():
+    anforderungen = [{"id": "SYS.1.1.A1", "zielobjekt_kuerzel": "S001", "zielobjekt_name": "Fileserver"}]
+    system_map = {"zielobjekte": [{"kuerzel": "", "name": "Fileserver"}]}
+    assert reconcile_zielobjekte(anforderungen, system_map) == 0
+    assert anforderungen[0]["zielobjekt_kuerzel"] == "S001"
+
+
+# A Verinice export: category rows in the first column, Zielobjekt rows with the Kürzel in the
+# first and the name in the fourth column, Bausteine, requirements and labels indented by one.
+VERINICE_ROWS = [
+    ["A.4 IT-Grundschutz-Check"],
+    ["Informationsverbund:", "Hauptsitz Rostock"],
+    ["Datum:", "07.10.2026"],
+    ["Informationsverbund"],
+    [None, None, None, "Hauptsitz Rostock"],
+    [None, "ISMS.1", "Sicherheitsmanagement"],
+    [None, "ISMS.1.A1", None, "Übernahme der Gesamtverantwortung"],
+    [None, "Umsetzungsstatus:", "Ja"],
+    [None, "Umsetzungserläuterung:", "Vom Vorstand getragen."],
+    ["Anwendungen"],
+    ["AE-002", None, None, "Active Directory Domain Services"],
+    [None, "APP.2.2", "Active Directory Domain Services"],
+    [None, "Beschreibung:", "Verzeichnisdienst."],
+    [None, "APP.2.2.A1", None, "Planung des Active Directory"],
+    [None, "Umsetzung durch:", "Umsetzung bis:", "7.7.2026"],
+    [None, "Umsetzungsstatus:", "teilweise"],
+    [None, "Umsetzungserläuterung:", "Planungsdokument liegt vor, Rollenmodell fehlt."],
+    ["IT-Systeme"],
+    ["ES-007", None, None, "Jump-Host Kunden-Verwaltung"],
+    [None, "SYS.1.2.3", "Windows Server"],
+    [None, "SYS.1.2.3.A1", None, "Planung von Windows Server"],
+    [None, "Umsetzungsstatus:", "Ja"],
+    [None, "Umsetzungserläuterung:", "Gehärtet nach CIS Benchmark."],
+]
+
+
+def test_verinice_layout_attaches_requirements_to_the_zielobjekt_not_the_category():
+    result = parse_rows(VERINICE_ROWS)
+    by_key = {(a["id"], a["zielobjekt_kuerzel"]): a for a in result["anforderungen"]}
+    assert set(by_key) == {("ISMS.1.A1", "Informationsverbund"), ("APP.2.2.A1", "AE-002"), ("SYS.1.2.3.A1", "ES-007")}
+    assert by_key[("APP.2.2.A1", "AE-002")]["umsetzungserlaeuterung"] == "Planungsdokument liegt vor, Rollenmodell fehlt."
+    assert by_key[("APP.2.2.A1", "AE-002")]["zielobjekt_name"] == "Active Directory Domain Services"
+    assert by_key[("SYS.1.2.3.A1", "ES-007")]["umsetzungsstatus"] == "Ja"
+    # The category rows opened no section with requirements and are gone.
+    assert [z["kuerzel"] for z in result["zielobjekte"]] == ["Informationsverbund", "AE-002", "ES-007"]
+    assert result["baustein_to_zielobjekt_mapping"] == {
+        "ISMS.1": ["Informationsverbund"], "APP.2.2": ["AE-002"], "SYS.1.2.3": ["ES-007"],
+    }
 
 
 def test_xlsx_round_trip_matches_the_row_parse():

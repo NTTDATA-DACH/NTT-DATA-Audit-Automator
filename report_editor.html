@@ -98,6 +98,24 @@
             margin-left: var(--sidebar-width);
             width: calc(100% - var(--sidebar-width));
         }
+        body.nav-collapsed .sidebar-nav { display: none; }
+        body.nav-collapsed #main-content { margin-left: 0; width: 100%; }
+        #nav-toggle {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 1100;
+            padding: 6px 10px;
+            font-size: 1.1em;
+            cursor: pointer;
+            background-color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+        .sidebar-nav h2 { padding-left: 44px; }
+        .nav-tools { display: flex; gap: 8px; margin-bottom: 10px; }
+        .nav-tools button { font-size: 0.85em; padding: 4px 8px; cursor: pointer; }
+        .sidebar-nav li a.sub-sub { font-size: 0.92em; }
 
         .container {
             max-width: 1200px;
@@ -270,8 +288,13 @@
     </style>
 </head>
 <body>
+    <button id="nav-toggle" title="Navigation ein-/ausblenden">☰</button>
     <nav id="sidebar-nav" class="sidebar-nav">
         <h2>Navigation</h2>
+        <div class="nav-tools">
+            <button type="button" id="nav-expand-all">Alle aufklappen</button>
+            <button type="button" id="nav-collapse-all">Alle zuklappen</button>
+        </div>
         <input type="text" id="nav-search" placeholder="Search sections...">
         <ul id="nav-list"></ul>
     </nav>
@@ -306,6 +329,9 @@
         fileInput.addEventListener('change', handleFileSelect);
         exportButton.addEventListener('click', handleExport);
         navSearch.addEventListener('keyup', filterNav);
+        document.getElementById('nav-toggle').addEventListener('click', () => document.body.classList.toggle('nav-collapsed'));
+        document.getElementById('nav-expand-all').addEventListener('click', () => navList.querySelectorAll('details').forEach(d => d.open = true));
+        document.getElementById('nav-collapse-all').addEventListener('click', () => navList.querySelectorAll('details').forEach(d => d.open = false));
         
         reportContainer.addEventListener('click', (event) => {
             if (event.target.classList.contains('add-row-btn')) {
@@ -356,6 +382,8 @@
                 let value;
                 if (input.type === 'checkbox') {
                     value = input.checked;
+                } else if (input.tagName === 'SELECT' && input.dataset.valueType === 'text') {
+                    value = input.value;
                 } else if (input.tagName === 'SELECT') {
                     const strVal = input.value;
                     value = strVal === 'true' ? true : (strVal === 'false' ? false : null);
@@ -370,46 +398,52 @@
             navList.innerHTML = '';
             const report = data.bsiAuditReport || {};
             
-            function buildNavRecursive(currentObject, parentUl) {
-                Object.keys(currentObject).forEach(key => {
-                    const child = currentObject[key];
-                    if (typeof child === 'object' && child !== null && child.title) {
-                        const newPath = `${parentUl.dataset.path || 'bsiAuditReport'}.${key}`;
-                        const navId = `nav-${newPath.replace(/[.\[\]]/g, '-')}`;
+            // Every titled section at any depth is a nav entry. Untitled containers (such as
+            // 'einzelergebnisse' and the 'bausteinPruefungen' array around the 5.5.2.x
+            // Baustein subchapters) are passed through, so their titled children show up at
+            // the level of the enclosing section. Branches start open; the buttons above the
+            // search and the <details> arrows fold them.
+            function hasTitledDescendant(obj) {
+                if (typeof obj !== 'object' || obj === null) return false;
+                return Object.values(obj).some(v => typeof v === 'object' && v !== null && (v.title || hasTitledDescendant(v)));
+            }
 
-                        const li = document.createElement('li');
-                        
-                        const childKeys = Object.keys(child).filter(k => typeof child[k] === 'object' && child[k] !== null && child[k].title);
-                        
-                        if (childKeys.length > 0) {
-                            const details = document.createElement('details');
-                            const summary = document.createElement('summary');
-                            const a = document.createElement('a');
-                            a.href = `#${navId}`;
-                            a.textContent = `${child.subchapterNumber || child.chapterNumber || ''} ${child.title}`;
-                            if (!child.subchapterNumber) a.className = 'chapter-title';
-                            summary.appendChild(a);
-                            details.appendChild(summary);
-                            
-                            const nestedUl = document.createElement('ul');
-                            nestedUl.dataset.path = newPath;
-                            buildNavRecursive(child, nestedUl);
-                            details.appendChild(nestedUl);
-                            li.appendChild(details);
-                        } else {
-                            const a = document.createElement('a');
-                            a.href = `#${navId}`;
-                            a.textContent = `${child.subchapterNumber || child.chapterNumber || ''} ${child.title}`;
-                            if (!child.subchapterNumber) a.className = 'chapter-title';
-                            li.appendChild(a);
-                        }
-                        parentUl.appendChild(li);
+            function buildNavRecursive(currentObject, parentUl, basePath, depth) {
+                const keys = Array.isArray(currentObject) ? currentObject.map((_, i) => i) : Object.keys(currentObject);
+                keys.forEach(key => {
+                    const child = currentObject[key];
+                    if (typeof child !== 'object' || child === null) return;
+                    const newPath = Array.isArray(currentObject) ? `${basePath}[${key}]` : `${basePath}.${key}`;
+                    if (!child.title) {
+                        buildNavRecursive(child, parentUl, newPath, depth);
+                        return;
                     }
+                    const navId = `nav-${newPath.replace(/[.\[\]]/g, '-')}`;
+                    const li = document.createElement('li');
+                    const a = document.createElement('a');
+                    a.href = `#${navId}`;
+                    a.textContent = `${child.subchapterNumber || child.chapterNumber || ''} ${child.title}`;
+                    if (!child.subchapterNumber) a.className = 'chapter-title';
+                    else if (depth >= 2) a.className = 'sub-sub';
+
+                    if (hasTitledDescendant(child)) {
+                        const details = document.createElement('details');
+                        details.open = true;
+                        const summary = document.createElement('summary');
+                        summary.appendChild(a);
+                        details.appendChild(summary);
+                        const nestedUl = document.createElement('ul');
+                        buildNavRecursive(child, nestedUl, newPath, depth + 1);
+                        details.appendChild(nestedUl);
+                        li.appendChild(details);
+                    } else {
+                        li.appendChild(a);
+                    }
+                    parentUl.appendChild(li);
                 });
             }
-            
-            navList.dataset.path = 'bsiAuditReport';
-            buildNavRecursive(report, navList);
+
+            buildNavRecursive(report, navList, 'bsiAuditReport', 0);
         }
 
         function filterNav() {
@@ -495,7 +529,10 @@
                     const itemPath = `${path}.content[${index}]`;
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'content-item';
-                    if (item.type === 'question') {
+                    if (item.type === 'question' && item.answerType === 'date') {
+                        // A dated question (3.1: last change of the A.4 check) holds an ISO date, not Ja/Nein.
+                        itemDiv.appendChild(createInputField(item.questionText, item.answer, 'date', `${itemPath}.answer`));
+                    } else if (item.type === 'question') {
                         itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
                     } else if (item.type === 'finding') {
                         itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
@@ -569,6 +606,28 @@
             return wrapper;
         }
 
+        function createChoiceField(label, value, path, options) {
+            // A text-valued select (unlike createSelect, which holds Ja/Nein as booleans).
+            const wrapper = document.createElement('div');
+            wrapper.className = 'content-item';
+            if (label) wrapper.innerHTML = `<label for="${path}">${label}</label>`;
+            const select = document.createElement('select');
+            const current = value || '';
+            const choices = options.includes(current) || !current ? options : [current, ...options];
+            choices.forEach(opt => {
+                const o = document.createElement('option');
+                o.value = opt;
+                o.textContent = opt;
+                o.selected = opt === current;
+                select.appendChild(o);
+            });
+            select.id = path;
+            select.dataset.path = path;
+            select.dataset.valueType = 'text';
+            wrapper.appendChild(select);
+            return wrapper;
+        }
+
         function createTextArea(label, value, path, isFindingSource = false, context = {}) {
             const wrapper = document.createElement('div');
             wrapper.className = 'content-item';
@@ -588,18 +647,9 @@
         }
 
         function renderTable(tableData, path) {
-             const editableTablePaths = [
-                'allgemeines.versionshistorie', 'allgemeines.auditierteInstitution',
-                'allgemeines.auditteam.auditteamleiter', 'allgemeines.auditteam.auditor',
-                'allgemeines.auditteam.fachexperte', 'allgemeines.auditteam.berater',
-                'allgemeines.absprachen', 'allgemeines.formaleGrundlagen',
-                'dokumentenpruefung.strukturanalyseA1.stichprobenDokuStrukturanalyse',
-                'dokumentenpruefung.schutzbedarfsfeststellungA2.stichprobenDokuSchutzbedarf',
-                'anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen',
-                'anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen',
-                'anhang.abweichungenUndEmpfehlungen.empfehlungen'
-            ];
-            const isEditable = editableTablePaths.some(p => path.includes(p));
+            // Every table takes rows and loses rows: the auditor trims the Baustein sample of
+            // chapter 4 or adds a site just like a finding (issue #23).
+            const isEditable = true;
 
             const tableContainer = document.createElement('div');
             if (!tableData || !Array.isArray(tableData.headers)) {
@@ -707,7 +757,8 @@
                     fieldset.className = 'baustein-pruefung';
                     
                     const legend = document.createElement('legend');
-                    legend.textContent = `Prüfung für Baustein: ${pruefung.baustein || 'N/A'}`;
+                    legend.textContent = `${pruefung.subchapterNumber || ''} Prüfung für Baustein: ${pruefung.baustein || 'N/A'}`;
+                    fieldset.id = `nav-${pPath.replace(/[.\[\]]/g, '-')}`;
                     fieldset.appendChild(legend);
 
                     fieldset.appendChild(createInputField('bezogen auf Zielobjekt', pruefung.bezogenAufZielobjekt, 'text', `${pPath}.bezogenAufZielobjekt`));
@@ -723,7 +774,8 @@
 
                             anfBlock.appendChild(createReadOnlyField('Nummer', anf.nummer));
                             anfBlock.appendChild(createReadOnlyField('Anforderung', anf.anforderung));
-                            anfBlock.appendChild(createReadOnlyField('Bewertung der Anforderung', anf.bewertung));
+                            anfBlock.appendChild(createChoiceField('Bewertung der Anforderung', anf.bewertung, `${aPath}.bewertung`,
+                                ['Umgesetzt', 'Teilweise umgesetzt', 'Nicht umgesetzt', 'Entbehrlich', 'N/A']));
                             anfBlock.appendChild(createReadOnlyField('Dokumentation des Antragstellers zur Umsetzung', anf.dokuAntragsteller));
 
                             const pmGroup = document.createElement('div');

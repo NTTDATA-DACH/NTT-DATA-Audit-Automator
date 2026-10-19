@@ -43,7 +43,7 @@ def test_checklist_rows_carry_official_title_and_level(runner):
     first = next(a for a in anforderungen if a["nummer"] == "ISMS.1.A1")
     assert first["anforderung"].endswith("(B)")
     assert first["bewertung"] == "Umgesetzt"
-    assert first["dokuAntragsteller"] == "Leitung hat die Verantwortung übernommen."
+    assert first["dokuAntragsteller"] == "Umsetzungsstatus: Ja\n\nLeitung hat die Verantwortung übernommen."
     # Every row must show its BSI level so the auditor sees the obligation.
     assert all(a["anforderung"].endswith(("(B)", "(S)", "(H)")) for a in anforderungen)
 
@@ -83,7 +83,7 @@ def test_custom_baustein_is_filled_from_the_extracted_check_data(runner):
 
     assert [a["nummer"] for a in pruefung["anforderungen"]] == ["ORP.6.A1", "ORP.6.A2"]
     assert pruefung["anforderungen"][0]["bewertung"] == "Teilweise umgesetzt"
-    assert pruefung["anforderungen"][0]["dokuAntragsteller"] == "IAM-Rollen sind teilweise dokumentiert."
+    assert pruefung["anforderungen"][0]["dokuAntragsteller"] == "Umsetzungsstatus: teilweise\n\nIAM-Rollen sind teilweise dokumentiert."
     assert pruefung["baustein"] == "ORP.6 Benutzerdefiniert: Cloud-IAM"
 
 
