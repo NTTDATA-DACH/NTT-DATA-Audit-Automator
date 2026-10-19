@@ -131,6 +131,12 @@ PROMPT_CONFIG_PATH = "assets/json/prompt_config.json"
 # BSI XML by `python -m src.tools.build_bsi_catalog`; see readme.md ("Katalog aktualisieren").
 CONTROL_CATALOG_PATH = "assets/json/bsi_kompendium_ed2023.json"
 
+# The Kürzel under which the audit plan (Chapter 4), the parsed Grundschutz-Check and the
+# checklist (Chapter 5) address the Informationsverbund as a whole. Process-layer Bausteine
+# (ISMS, ORP, CON, OPS, DER) apply to it, and GRC exports give it no Kürzel of its own, so the
+# three must agree on this fixed one or the customer's explanations never reach 5.5.2.
+INFORMATIONSVERBUND_KUERZEL = "Informationsverbund"
+
 # JSON Schema for the fully-assembled audit report (used by ReportGenerator to
 # validate the report before saving). Replaces the former no-op structural check.
 REPORT_SCHEMA_PATH = "assets/schemas/master_report_schema.json"

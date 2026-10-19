@@ -10,7 +10,7 @@ from src.clients.gcs_client import GcsClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.audit.async_utils import gather_resilient
-from src.constants import GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
+from src.constants import GROUND_TRUTH_MAP_PATH, INFORMATIONSVERBUND_KUERZEL, PROMPT_CONFIG_PATH
 
 class Chapter4Runner:
     """
@@ -32,7 +32,7 @@ class Chapter4Runner:
     # Process-layer Bausteine apply to the whole Informationsverbund; the ground-truth
     # extraction deliberately leaves them out of baustein_to_zielobjekt_mapping.
     PROCESS_LAYERS = frozenset({"ISMS", "ORP", "CON", "OPS", "DER"})
-    INFORMATIONSVERBUND_KUERZEL = "Informationsverbund"
+    INFORMATIONSVERBUND_KUERZEL = INFORMATIONSVERBUND_KUERZEL
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient, ai_client: AiClient, rag_client: RagClient):
         self.config = config

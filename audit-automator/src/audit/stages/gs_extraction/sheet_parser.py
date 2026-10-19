@@ -9,9 +9,15 @@ Layout assumptions (taken from a customer export of October 2026; a tool that ex
 differently shows up as "0 requirements" in the log and fails the stage, never as wrong data):
 
 * An info block at the top: label/value rows such as "Datum:", "Version:", "Autor:".
-* A row with a single non-empty cell opens a Zielobjekt section ("Hauptsitz Rostock",
-  "S001 Fileserver"). A leading or bracketed token like S001 or SVR-01 is taken as its Kürzel;
-  without one, the name doubles as Kürzel until the system map supplies the real one.
+* A Zielobjekt section is opened by a row with a single non-empty cell ("Hauptsitz Rostock",
+  "S001 Fileserver") or by an outermost row (first column) that is neither a label nor an ID
+  and carries the Kürzel in the first and the name in a later cell ("AE-002" | "Active Directory
+  Domain Services" in a Verinice export). In a single cell a leading or bracketed token like
+  S001 or SVR-01 is the Kürzel; without one, the name doubles as Kürzel until the system map
+  supplies the real one. The Informationsverbund itself (the section named like the document's
+  "Informationsverbund:" header) gets the fixed Kürzel the audit plan uses for it.
+* Category rows of the export ("Anwendungen", "IT-Systeme", "Räume") look like Zielobjekt
+  headers too; they open a section no requirement falls into and are dropped.
 * A row starting with a Baustein ID (ISMS.1, SYS.1.2.2) opens that Baustein under the current
   Zielobjekt; a row starting with a requirement ID (ISMS.1.A1) opens a requirement.
 * The rows below a requirement are label/value pairs: "Umsetzungsstatus:",
@@ -25,6 +31,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from src.clients.spreadsheet import cell_text as _cell_text, read_sheet_rows
+from src.constants import INFORMATIONSVERBUND_KUERZEL
 
 # "ISMS.1.A1  Titel" / "ISMS.1.A1" alone (title in the next cell). Checked before the Baustein
 # pattern, which would otherwise match the "ISMS.1" prefix of a requirement ID.
@@ -132,7 +139,7 @@ def parse_rows(rows: Iterable[Sequence[Any]]) -> Dict[str, Any]:
 
         m = _ANFORDERUNG_RE.match(first)
         if m:
-            kuerzel, name = current_zo or (header.get("information", ""), header.get("information", ""))
+            kuerzel, name = current_zo or (INFORMATIONSVERBUND_KUERZEL, header.get("information", ""))
             current = {
                 "id": m["id"],
                 "titel": (m["rest"].strip() or value).strip(),
@@ -157,12 +164,19 @@ def parse_rows(rows: Iterable[Sequence[Any]]) -> Dict[str, Any]:
 
         kind = _label_kind(first)
         if kind is None:
+            first_col = next(i for i, t in enumerate(cells) if t)
             if len(nonempty) == 1:
                 kuerzel, name = split_kuerzel(first)
-                current_zo = (kuerzel, name)
-                zielobjekte.setdefault(kuerzel, {"kuerzel": kuerzel, "name": name})
-                current = None
-            continue  # a value without a label (continuation line): nothing to assign it to
+            elif first_col == 0:
+                kuerzel, name = first, nonempty[-1]
+            else:
+                continue  # a value without a label (continuation line): nothing to assign it to
+            if header.get("information") and _norm(name) == _norm(header["information"]):
+                kuerzel = INFORMATIONSVERBUND_KUERZEL
+            current_zo = (kuerzel, name)
+            zielobjekte.setdefault(kuerzel, {"kuerzel": kuerzel, "name": name})
+            current = None
+            continue
 
         if current is not None:
             if kind == "status":
@@ -222,7 +236,10 @@ def reconcile_zielobjekte(anforderungen: List[Dict[str, Any]], system_map: Dict[
 
     Stage 3's coverage check compares the Kürzel of the modelled Zielobjekte with those in the
     check, so both must speak the same identifiers. Returns the number of changed entries;
-    unmatched entries keep the sheet's own values.
+    unmatched entries keep the sheet's own values. Two entries are never touched: the
+    Informationsverbund keeps the fixed Kürzel the audit plan addresses it by (the map often
+    lists it without one, or under a name), and a map entry without a Kürzel cannot identify
+    anything and so never replaces a Kürzel the sheet provided.
     """
     by_key: Dict[str, Dict[str, Any]] = {}
     for z in system_map.get("zielobjekte", []) or []:
@@ -231,8 +248,10 @@ def reconcile_zielobjekte(anforderungen: List[Dict[str, Any]], system_map: Dict[
                 by_key.setdefault(_norm(str(key)), z)
     changed = 0
     for a in anforderungen:
+        if a.get("zielobjekt_kuerzel") == INFORMATIONSVERBUND_KUERZEL:
+            continue
         match = by_key.get(_norm(a.get("zielobjekt_kuerzel", ""))) or by_key.get(_norm(a.get("zielobjekt_name", "")))
-        if match and a.get("zielobjekt_kuerzel") != match.get("kuerzel"):
+        if match and match.get("kuerzel") and a.get("zielobjekt_kuerzel") != match["kuerzel"]:
             a["zielobjekt_kuerzel"] = match["kuerzel"]
             a["zielobjekt_name"] = match.get("name") or a.get("zielobjekt_name", "")
             changed += 1
