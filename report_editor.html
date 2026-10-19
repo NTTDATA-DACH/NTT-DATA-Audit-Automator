@@ -591,18 +591,9 @@
         }
 
         function renderTable(tableData, path) {
-             const editableTablePaths = [
-                'allgemeines.versionshistorie', 'allgemeines.auditierteInstitution',
-                'allgemeines.auditteam.auditteamleiter', 'allgemeines.auditteam.auditor',
-                'allgemeines.auditteam.fachexperte', 'allgemeines.auditteam.berater',
-                'allgemeines.absprachen', 'allgemeines.formaleGrundlagen',
-                'dokumentenpruefung.strukturanalyseA1.stichprobenDokuStrukturanalyse',
-                'dokumentenpruefung.schutzbedarfsfeststellungA2.stichprobenDokuSchutzbedarf',
-                'anhang.abweichungenUndEmpfehlungen.schwerwiegendeAbweichungen',
-                'anhang.abweichungenUndEmpfehlungen.geringfuegigeAbweichungen',
-                'anhang.abweichungenUndEmpfehlungen.empfehlungen'
-            ];
-            const isEditable = editableTablePaths.some(p => path.includes(p));
+            // Every table takes rows and loses rows: the auditor trims the Baustein sample of
+            // chapter 4 or adds a site just like a finding (issue #23).
+            const isEditable = true;
 
             const tableContainer = document.createElement('div');
             if (!tableData || !Array.isArray(tableData.headers)) {

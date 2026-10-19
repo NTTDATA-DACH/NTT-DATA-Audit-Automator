@@ -81,6 +81,7 @@ tasks=(
     "Run Single Audit Stage"
     "Run All Audit Stages (Full Pipeline)"
     "Generate Final Report"
+    "Finalize Report (duplicates, numbers, references)"
     "Quit"
 )
 PS3="Select task number: "
@@ -133,6 +134,14 @@ select task in "${tasks[@]}"; do
       ;;
     "Generate Final Report")
       main_arg="--generate-report"
+      break
+      ;;
+    "Finalize Report (duplicates, numbers, references)")
+      main_arg="--finalize-report"
+      read -p "   Report path in the bucket (empty = newest output/results/report_*.json): " report_path
+      if [[ -n "$report_path" ]]; then
+          main_arg="--finalize-report,${report_path}"
+      fi
       break
       ;;
     "Quit")

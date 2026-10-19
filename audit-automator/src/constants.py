@@ -73,7 +73,10 @@ RESULTS_BASE = "output/results"
 STAGE_RESULTS_PATH = f"{RESULTS_BASE}/{{stage_name}}.json"  # Format with stage_name
 ALL_FINDINGS_PATH = f"{RESULTS_BASE}/all_findings.json"
 # The assembled report is written as results/report_<YYMMDD>.json (ReportGenerator);
-# the date stamp is deliberate, so there is no single constant path for it.
+# the date stamp is deliberate, so there is no single constant path for it. The final
+# stage (ReportFinalizer) reads the newest of them and writes report_<YYMMDD>_final.json.
+REPORT_FILE_PREFIX = "report_"
+FINAL_REPORT_SUFFIX = "_final"
 
 # =============================================================================
 # TEMPORARY PATHS - Short-lived processing files
@@ -110,6 +113,14 @@ DOCUMENT_INVENTORY_PATH = f"{RAG_BASE}/document_inventory.json"
 # Maker/checker protocol: one entry per checked AI answer, so the QS trail of the audit
 # shows what the second pass objected to and whether its correction was taken.
 CHECKER_LOG_PATH = f"{INTERMEDIARY_BASE}/checker_log.json"
+
+# Final stage over the assembled report: the model's duplicate groups are stored under a
+# key over the findings and the prompt (a rerun on an unchanged report costs no call), and
+# one log per report records every merge decision, including those not applied.
+FINALIZER_BASE = f"{INTERMEDIARY_BASE}/report_finalizer"
+# A duplicate group is applied only when the model is at least this sure; groups below the
+# threshold are logged for the auditor and leave the report untouched.
+FINALIZER_CONFIDENCE_THRESHOLD = 0.9
 
 # =============================================================================
 # ASSET PATHS

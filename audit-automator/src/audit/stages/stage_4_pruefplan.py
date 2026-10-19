@@ -25,6 +25,10 @@ class Chapter4Runner:
         "1. Überwachungsaudit": "auswahlBausteine1Ueberwachungsaudit",
         "2. Überwachungsaudit": "auswahlBausteine2Ueberwachungsaudit",
     }
+    # Upper bound of the sample per section. The certification audit samples exactly six
+    # Bausteine (ISMS.1 plus five); the model tends to over-deliver, so the plan is cut here.
+    BAUSTEIN_LIMITS = {"auswahlBausteineErstRezertifizierung": 6}
+    MANDATORY_BAUSTEIN = "ISMS.1"
     # Process-layer Bausteine apply to the whole Informationsverbund; the ground-truth
     # extraction deliberately leaves them out of baustein_to_zielobjekt_mapping.
     PROCESS_LAYERS = frozenset({"ISMS", "ORP", "CON", "OPS", "DER"})
@@ -123,6 +127,21 @@ class Chapter4Runner:
                 violations.append((index, f"{baustein}: Zielobjekt-Kürzel '{kuerzel}' nicht zugeordnet (zulässig: {', '.join(allowed)})"))
         return violations
 
+    def _capped_rows(self, name: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Cuts a Baustein plan to the sample size of its section, ISMS.1 kept first."""
+        limit = self.BAUSTEIN_LIMITS.get(name)
+        if limit is None or len(rows) <= limit:
+            return rows
+        mandatory = [r for r in rows if (r.get("Baustein") or "").split(" ")[0] == self.MANDATORY_BAUSTEIN]
+        others = [r for r in rows if r not in mandatory]
+        kept = (mandatory + others)[:limit]
+        dropped = [(r.get("Baustein") or "?").split(" ")[0] for r in rows if r not in kept]
+        logging.warning(
+            f"Chapter-4 '{name}': the model selected {len(rows)} Bausteine, the sample is {limit}; "
+            f"dropping {', '.join(dropped)}."
+        )
+        return kept
+
     async def _validated_plan(self, name: str, prompt: str, schema: Dict[str, Any], gcs_uris: List[str]) -> Dict[str, Any]:
         """Generate a Baustein plan and hold it against the ground-truth map.
 
@@ -195,6 +214,7 @@ class Chapter4Runner:
         try:
             if definition.get("validate_mapping"):
                 generated_data = await self._validated_plan(name, prompt, schema, gcs_uris)
+                generated_data["rows"] = self._capped_rows(name, generated_data.get("rows") or [])
             else:
                 generated_data = await self.ai_client.generate_checked_json_response(
                     prompt=prompt,

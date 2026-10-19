@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "gruppen": {
+      "type": "array",
+      "description": "Eine Gruppe je Sachverhalt, der von mindestens zwei Feststellungen beschrieben wird. Leer, wenn es keine Dubletten gibt.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Alle IDs der Gruppe (mindestens zwei), exakt wie in der Aufgabe geliefert."
+          },
+          "behalten": {
+            "type": "string",
+            "description": "Die ID der umfassendsten Feststellung der Gruppe; sie bleibt bestehen."
+          },
+          "begruendung": {
+            "type": "string",
+            "description": "Ein bis zwei Saetze: welcher gemeinsame Sachverhalt vorliegt und warum die behaltene Feststellung die umfassendste ist."
+          },
+          "konfidenz": {
+            "type": "number",
+            "description": "Sicherheit von 0 bis 1, dass alle IDs der Gruppe denselben Sachverhalt beschreiben."
+          }
+        },
+        "required": [
+          "ids",
+          "behalten",
+          "begruendung",
+          "konfidenz"
+        ]
+      }
+    },
+    "dokumentenpruefung_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs der offenen Feststellungen des vorherigen Audits (offen=true), die sich auf die Dokumentenpruefung beziehen; leer, wenn keine."
+    }
+  },
+  "required": [
+    "gruppen",
+    "dokumentenpruefung_ids"
+  ]
+}

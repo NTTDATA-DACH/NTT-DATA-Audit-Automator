@@ -109,6 +109,29 @@ def test_process_layer_baustein_must_point_at_the_informationsverbund():
     assert [index for index, _ in violations] == [0]
 
 
+def test_certification_sample_is_cut_to_six_with_isms1_kept():
+    rows = [_row(f"SYS.1.1 Allgemeiner Server", "SRV-01") for _ in range(8)]
+    rows.insert(4, _row("ISMS.1 Sicherheitsmanagement", "Informationsverbund"))
+    runner = _runner("Zertifizierungsaudit", [{"rows": rows}])
+
+    plan = _plan(runner, "auswahlBausteineErstRezertifizierung")
+    assert len(plan) == 6
+    assert plan[0]["Baustein"].startswith("ISMS.1")
+    assert plan[1:] == rows[:4] + rows[5:6]
+
+
+def test_surveillance_sample_is_not_cut():
+    rows = [_row("ISMS.1 Sicherheitsmanagement", "Informationsverbund")] + [_row("SYS.1.1 Allgemeiner Server", "SRV-01")] * 7
+    runner = _runner("1. Überwachungsaudit", [{"rows": rows}])
+    assert len(_plan(runner, "auswahlBausteine1Ueberwachungsaudit")) == 8
+
+
+def test_certification_rule_in_the_prompt_says_exactly_six():
+    runner = _runner("Zertifizierungsaudit", [])
+    prompt = runner.subchapter_definitions["auswahlBausteineErstRezertifizierung"]["prompt"]
+    assert "exactly 6" in prompt and "at least 6" not in prompt
+
+
 def test_without_a_mapping_the_plan_is_taken_as_is():
     rows = [_row("SYS.1.1 Allgemeiner Server", "whatever")]
     runner = _runner("Zertifizierungsaudit", [{"rows": rows}], ground_truth={})

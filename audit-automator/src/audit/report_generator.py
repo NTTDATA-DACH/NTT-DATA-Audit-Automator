@@ -16,6 +16,8 @@ class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
     LOCAL_MASTER_TEMPLATE_PATH = "assets/json/master_report_template.json"
     STAGES_TO_AGGREGATE = ["Scan-Report", "Chapter-1", "Chapter-3", "Chapter-4", "Chapter-5", "Chapter-7"]
+    # The AUDIT_TYPE value of a (re-)certification audit; the same name keys Chapter4Runner.BAUSTEIN_SECTIONS.
+    CERTIFICATION_AUDIT_TYPE = "Zertifizierungsaudit"
 
     def __init__(self, config: AppConfig, gcs_client: GcsClient):
         self.config = config
@@ -397,9 +399,15 @@ class ReportGenerator:
         self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.auditor.table.rows', auditteam_data.get('auditor', {}).get('table', {}).get('rows', []))
         self._set_value_by_path(report, 'bsiAuditReport.allgemeines.auditteam.fachexperte.table.rows', auditteam_data.get('fachexperte', {}).get('table', {}).get('rows', []))
         
-        # 2. Populate Chapter 4 tables as a fallback/baseline
-        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteineErstRezertifizierung.table.rows', stage_data.get('auswahlBausteineErstRezertifizierung', {}).get('table', {}).get('rows', []))
-        self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteine1Ueberwachungsaudit.table.rows', stage_data.get('auswahlBausteine1Ueberwachungsaudit', {}).get('table', {}).get('rows', []))
+        # 2. Populate Chapter 4 tables as a fallback/baseline. The Baustein tables of the
+        # previous report belong to its certification cycle: a surveillance audit continues
+        # that cycle and shows them, a (re-)certification audit starts a new one and plans
+        # 4.1.1 itself, with 4.1.2/4.1.3 left empty until the surveillance audits happen.
+        if self.config.audit_type == self.CERTIFICATION_AUDIT_TYPE:
+            logging.info("Zertifizierungsaudit: the previous report's Baustein tables (4.1.1-4.1.3) are not carried over.")
+        else:
+            self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteineErstRezertifizierung.table.rows', stage_data.get('auswahlBausteineErstRezertifizierung', {}).get('table', {}).get('rows', []))
+            self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteine1Ueberwachungsaudit.table.rows', stage_data.get('auswahlBausteine1Ueberwachungsaudit', {}).get('table', {}).get('rows', []))
         self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlStandorte.table.rows', stage_data.get('auswahlStandorte', {}).get('table', {}).get('rows', []))
 
 

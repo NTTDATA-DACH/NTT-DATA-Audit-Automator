@@ -40,6 +40,46 @@ def _load_template():
         return json.load(f)
 
 
+def _generator(audit_type):
+    import types
+    generator = ReportGenerator.__new__(ReportGenerator)
+    generator.config = types.SimpleNamespace(audit_type=audit_type)
+    return generator
+
+
+SCAN = {
+    "auswahlBausteineErstRezertifizierung": {"table": {"rows": [{"Baustein": "ISMS.1"}]}},
+    "auswahlBausteine1Ueberwachungsaudit": {"table": {"rows": [{"Baustein": "ORP.4"}]}},
+    "auswahlStandorte": {"table": {"rows": [{"Standort": "Rostock"}]}},
+}
+
+
+def _plan_tables(report):
+    plan = report["bsiAuditReport"]["erstellungEinesPruefplans"]["auditplanung"]
+    return {k: plan[k]["table"]["rows"] for k in SCAN}
+
+
+def test_surveillance_audit_carries_the_previous_baustein_tables_over():
+    report = _load_template()
+    _generator("2. Überwachungsaudit")._populate_from_scan_report(report, SCAN)
+    tables = _plan_tables(report)
+    assert tables["auswahlBausteineErstRezertifizierung"] == [{"Baustein": "ISMS.1"}]
+    assert tables["auswahlBausteine1Ueberwachungsaudit"] == [{"Baustein": "ORP.4"}]
+    assert tables["auswahlStandorte"] == [{"Standort": "Rostock"}]
+
+
+def test_certification_audit_leaves_the_previous_baustein_tables_out_but_keeps_the_sites():
+    # A (re-)certification starts a new cycle: 4.1.1 is planned by Chapter-4, 4.1.2 stays
+    # empty; the old cycle's samples would otherwise show up in the new report (issue #23).
+    report = _load_template()
+    before = _plan_tables(report)
+    _generator("Zertifizierungsaudit")._populate_from_scan_report(report, SCAN)
+    tables = _plan_tables(report)
+    assert tables["auswahlBausteineErstRezertifizierung"] == before["auswahlBausteineErstRezertifizierung"]
+    assert tables["auswahlBausteine1Ueberwachungsaudit"] == before["auswahlBausteine1Ueberwachungsaudit"]
+    assert tables["auswahlStandorte"] == [{"Standort": "Rostock"}]
+
+
 def test_real_template_passes_schema():
     # The canonical assembled-report skeleton must satisfy the schema.
     assert schema_validate(_load_template()) is True
