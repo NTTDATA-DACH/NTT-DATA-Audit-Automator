@@ -11,6 +11,7 @@ from src.assets_loader import load_asset_json
 from src.config import AppConfig
 from src.clients.gcs_client import GcsClient
 from src.constants import ALL_FINDINGS_PATH, RESULTS_BASE, STAGE_RESULTS_PATH, REPORT_SCHEMA_PATH
+from src.audit.staleness import stale_inputs
 
 class ReportGenerator:
     """Assembles the final audit report from individual stage stubs."""
@@ -124,6 +125,7 @@ class ReportGenerator:
                 logging.warning(f"Result for stage '{stage_name}' is empty or not a dictionary. Skipping.")
             else:
                 stage_data_map[stage_name] = result
+                stale_inputs(self.gcs_client, stage_name, STAGE_RESULTS_PATH.format(stage_name=stage_name))
 
         # The order of population matters. Populate from Scan-Report first as a baseline.
         if "Scan-Report" in stage_data_map:
@@ -240,16 +242,16 @@ class ReportGenerator:
             target_path = key_to_path_map.get(subchapter_key)
             if not target_path: continue
 
-            if 'finding' in result and isinstance(result.get('finding'), dict):
-                finding = result['finding']
-                finding_text = f"[{finding.get('category')}] {finding.get('description')}"
+            texts = []
+            if isinstance(result.get('finding'), dict):
+                texts.append(self._finding_text(result['finding']))
+            texts.extend(self._finding_text(f) for f in result.get('findings') or [] if isinstance(f, dict))
+            if texts:
                 # No padding: a section without a Feststellung slot (3.4.7 in the Muster) must not
                 # grow an empty prose item; its finding still reaches chapter 7.2.
                 finding_list = self._ensure_list_path_exists(report, f"{target_path}.content", min_length=0)
                 if finding_list:
-                    for item in finding_list:
-                        if item.get("type") == "finding":
-                            item["findingText"] = finding_text; break
+                    self._write_finding_items(finding_list, texts)
             
             if "answers" in result:
                 answers = result.get("answers", [])
@@ -269,6 +271,28 @@ class ReportGenerator:
             
             if "table" in result and isinstance(result.get("table"), dict):
                 self._set_value_by_path(report, f"{target_path}.table.rows", result['table'].get('rows', []))
+
+    @staticmethod
+    def _finding_text(finding: Dict[str, Any]) -> str:
+        return f"[{finding.get('category')}] {finding.get('description')}"
+
+    @staticmethod
+    def _write_finding_items(content_list: List[Dict[str, Any]], texts: List[str]) -> None:
+        """Fills the section's Feststellung slot. Several findings get one item each, in place
+        of the single template item, so every deficiency keeps its own number in chapter 7.2 and
+        the final stage can reference each one. A section without a slot gets no item."""
+        slot = next((i for i, item in enumerate(content_list) if item.get("type") == "finding"), None)
+        if slot is None:
+            return
+        template = content_list[slot]
+        items = []
+        for number, text in enumerate(texts, start=1):
+            item = dict(template)
+            item["findingText"] = text
+            if len(texts) > 1:
+                item["label"] = f"Feststellung {number}:"
+            items.append(item)
+        content_list[slot:slot + 1] = items
 
     def _populate_chapter_7_findings(self, report: dict) -> None:
         """

@@ -50,7 +50,7 @@ def _generator(audit_type):
 SCAN = {
     "auswahlBausteineErstRezertifizierung": {"table": {"rows": [{"Baustein": "ISMS.1"}]}},
     "auswahlBausteine1Ueberwachungsaudit": {"table": {"rows": [{"Baustein": "ORP.4"}]}},
-    "auswahlStandorte": {"table": {"rows": [{"Standort": "Rostock"}]}},
+    "auswahlStandorte": {"table": {"rows": [{"Standort": "Musterstadt"}]}},
 }
 
 
@@ -65,7 +65,7 @@ def test_surveillance_audit_carries_the_previous_baustein_tables_over():
     tables = _plan_tables(report)
     assert tables["auswahlBausteineErstRezertifizierung"] == [{"Baustein": "ISMS.1"}]
     assert tables["auswahlBausteine1Ueberwachungsaudit"] == [{"Baustein": "ORP.4"}]
-    assert tables["auswahlStandorte"] == [{"Standort": "Rostock"}]
+    assert tables["auswahlStandorte"] == [{"Standort": "Musterstadt"}]
 
 
 def test_certification_audit_leaves_the_previous_baustein_tables_out_but_keeps_the_sites():
@@ -77,7 +77,7 @@ def test_certification_audit_leaves_the_previous_baustein_tables_out_but_keeps_t
     tables = _plan_tables(report)
     assert tables["auswahlBausteineErstRezertifizierung"] == before["auswahlBausteineErstRezertifizierung"]
     assert tables["auswahlBausteine1Ueberwachungsaudit"] == before["auswahlBausteine1Ueberwachungsaudit"]
-    assert tables["auswahlStandorte"] == [{"Standort": "Rostock"}]
+    assert tables["auswahlStandorte"] == [{"Standort": "Musterstadt"}]
 
 
 def test_real_template_passes_schema():
@@ -101,3 +101,38 @@ def test_schema_rejects_findings_rows_not_an_array():
     report = _load_template()
     report["bsiAuditReport"]["anhang"]["abweichungenUndEmpfehlungen"]["empfehlungen"]["table"]["rows"] = "oops"
     assert schema_validate(report) is False
+
+
+# --- Feststellung items: one per finding of a section ---
+def _details_361(report):
+    return report["bsiAuditReport"]["dokumentenpruefung"]["itGrundschutzCheckA4"]["detailsZumItGrundschutzCheck"]["content"]
+
+
+def test_findings_list_expands_the_single_template_finding_item_in_place():
+    report = _load_template()
+    _generator("Zertifizierungsaudit")._populate_chapter_3(report, {"detailsZumItGrundschutzCheck": {
+        "answers": [True, False, True, True, True],
+        "findings": [{"category": "AG", "description": "Zielobjekte fehlen."}, {"category": "E", "description": "Kürzel nicht eindeutig."}],
+    }})
+    content = _details_361(report)
+    assert [item["type"] for item in content] == ["question"] * 5 + ["finding", "finding"]
+    assert [item["answer"] for item in content if item["type"] == "question"] == [True, False, True, True, True]
+    findings = [item for item in content if item["type"] == "finding"]
+    assert [item["findingText"] for item in findings] == ["[AG] Zielobjekte fehlen.", "[E] Kürzel nicht eindeutig."]
+    assert [item["label"] for item in findings] == ["Feststellung 1:", "Feststellung 2:"]
+    assert schema_validate(report) is True
+
+
+def test_single_finding_keeps_the_template_label():
+    report = _load_template()
+    _generator("Zertifizierungsaudit")._populate_chapter_3(report, {"detailsZumItGrundschutzCheck": {
+        "answers": [True] * 5, "finding": {"category": "OK", "description": "Alles gut."},
+    }})
+    findings = [item for item in _details_361(report) if item["type"] == "finding"]
+    assert [(item["label"], item["findingText"]) for item in findings] == [("Feststellung:", "[OK] Alles gut.")]
+
+
+def test_a_section_without_a_finding_slot_gets_no_item():
+    content = [{"type": "question", "questionText": "?", "answer": None}, {"type": "prose", "text": ""}]
+    ReportGenerator._write_finding_items(content, ["[AG] x"])
+    assert [item["type"] for item in content] == ["question", "prose"]

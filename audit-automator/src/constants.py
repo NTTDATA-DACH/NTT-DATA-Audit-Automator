@@ -121,6 +121,10 @@ FINALIZER_BASE = f"{INTERMEDIARY_BASE}/report_finalizer"
 # A duplicate group is applied only when the model is at least this sure; groups below the
 # threshold are logged for the auditor and leave the report untouched.
 FINALIZER_CONFIDENCE_THRESHOLD = 0.9
+# A model group may fold at most this many findings of the current audit into one. Larger
+# groups are topic clusters ("everything about A.1") rather than one deficiency and are left
+# for the auditor, as are groups that mix categories within one audit.
+FINALIZER_MAX_NEW_PER_GROUP = 3
 
 # =============================================================================
 # ASSET PATHS

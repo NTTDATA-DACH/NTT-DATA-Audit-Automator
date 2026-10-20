@@ -39,6 +39,7 @@ from src.constants import (
     FINAL_REPORT_SUFFIX,
     FINALIZER_BASE,
     FINALIZER_CONFIDENCE_THRESHOLD,
+    FINALIZER_MAX_NEW_PER_GROUP,
     PROMPT_CONFIG_PATH,
     REPORT_FILE_PREFIX,
     RESULTS_BASE,
@@ -172,16 +173,49 @@ def deterministic_groups(findings: List[Finding]) -> List[Decision]:
         if len(members) < 2:
             continue
         keep = _oldest(members)
-        decisions.append(Decision(
+        current = [m for m in members if not m.previous]
+        if current and len(current) < len(members) and len({m.category for m in members}) > 1:
+            keep = _oldest(current)  # the same text, re-graded: the current grading applies
+        decision = Decision(
             ids=[m.key for m in members], behalten=keep.key, konfidenz=1.0,
             begruendung="Identischer Text.", quelle="deterministisch",
-        ))
+        )
+        guard = group_guard(members, keep)
+        if guard:
+            decision.status = guard
+        decisions.append(decision)
     return decisions
 
 
 def _oldest(members: List[Finding]) -> Finding:
     """Previous-audit findings before new ones, then the lower number, then table order."""
     return min(members, key=lambda f: (not f.previous, f.number if f.number is not None else 10**9, f.order))
+
+
+def group_guard(members: List[Finding], keep: Finding) -> Optional[str]:
+    """Structural reasons not to apply a duplicate group, however sure the model (or the text match) is.
+
+    An Abweichung and an Empfehlung of the same audit are different things by the
+    Auditierungsschema, so a group mixing them within one audit is a topic cluster, not a
+    duplicate. Across audits a changed category is a re-grading (yesterday's AG is only an E
+    today, or the other way round); that is allowed, but the current finding must be the one
+    kept, since the current grading applies and the previous one is closed with a reference to
+    it. Groups with many current findings are clusters as well. Each case is logged as
+    'manuell pruefen' and leaves the report untouched.
+    """
+    for previous, origin in ((True, "des vorherigen Audits"), (False, "des aktuellen Audits")):
+        categories = sorted({m.category for m in members if m.previous == previous})
+        if len(categories) > 1:
+            return f"manuell pruefen: Kategorien gemischt ({', '.join(categories)}) innerhalb {origin}"
+    new_members = [m for m in members if not m.previous]
+    if len(new_members) > FINALIZER_MAX_NEW_PER_GROUP:
+        return (f"manuell pruefen: Gruppe zu gross ({len(new_members)} Feststellungen des aktuellen Audits, "
+                f"hoechstens {FINALIZER_MAX_NEW_PER_GROUP})")
+    if keep.previous and any(m.category != keep.category for m in new_members):
+        new_category = next(m.category for m in new_members)
+        return (f"manuell pruefen: Neubewertung ({keep.category} -> {new_category}), aber die alte "
+                f"Feststellung soll behalten werden")
+    return None
 
 
 class ReportFinalizer:
@@ -312,8 +346,15 @@ class ReportFinalizer:
                 decision.status = "verworfen: 'behalten' ist keine ID der Gruppe"
             else:
                 decision.behalten = keep
+                guard = self._group_guard(ids, keep, findings_by_key)
+                if guard:
+                    decision.status = guard
             decisions.append(decision)
         return decisions
+
+    @staticmethod
+    def _group_guard(ids: List[str], keep: str, findings_by_key: Dict[str, Finding]) -> Optional[str]:
+        return group_guard([findings_by_key[k] for k in ids], findings_by_key[keep])
 
     @staticmethod
     def _apply(decisions: List[Decision], findings_by_key: Dict[str, Finding]) -> None:
@@ -360,7 +401,8 @@ class ReportFinalizer:
                         chapter = member.source or "?"
                         keep.row["Status"] = f"Offen (erneut festgestellt, Kapitel {chapter})"
                         decision.wirkung.append(f"{keep_key}: Status auf 'Offen (erneut festgestellt, Kapitel {chapter})' gesetzt")
-            decision.status = "angewendet"
+            regraded = sorted({m.category for m in members if m.previous and m.category != keep.category})
+            decision.status = f"angewendet (Neubewertung {regraded[0]} -> {keep.category})" if regraded else "angewendet"
 
     @staticmethod
     def _close_not_refound(response: Dict[str, Any], findings_by_key: Dict[str, Finding]) -> Tuple[List[str], List[str]]:
@@ -514,7 +556,8 @@ class ReportFinalizer:
         self._rebuild_tables(report, findings, findings_by_key)
         references, unmatched = self._reference_chapters(report, findings, findings_by_key)
 
-        applied = [d for d in decisions if d.status == "angewendet"]
+        applied = [d for d in decisions if d.status.startswith("angewendet")]
+        manual = [d for d in decisions if d.status.startswith("manuell")]
         counts = {
             "findings": len(findings),
             "previous": previous,
@@ -522,7 +565,9 @@ class ReportFinalizer:
             "groups_deterministic": sum(1 for d in decisions if d.quelle == "deterministisch"),
             "groups_model": sum(1 for d in decisions if d.quelle == "modell"),
             "groups_applied": len(applied),
-            "groups_below_threshold": sum(1 for d in decisions if d.status.startswith("manuell")),
+            "regraded": sum(1 for d in applied if d.status.startswith("angewendet (Neubewertung")),
+            "groups_below_threshold": sum(1 for d in manual if d.status.startswith("manuell pruefen: Konfidenz")),
+            "groups_guarded": sum(1 for d in manual if not d.status.startswith("manuell pruefen: Konfidenz")),
             "groups_rejected": sum(1 for d in decisions if d.status.startswith(("verworfen", "uebersprungen"))),
             "new_dropped": sum(1 for f in findings if f.dropped),
             "previous_closed": sum(1 for f in findings if f.closed_by),
@@ -533,8 +578,10 @@ class ReportFinalizer:
             "chapter_unmatched": len(unmatched),
         }
         logging.info(
-            f"Finalize: {counts['groups_applied']} group(s) applied, {counts['groups_below_threshold']} below the "
-            f"confidence threshold, {counts['groups_rejected']} rejected; {counts['new_dropped']} new finding(s) folded, "
+            f"Finalize: {counts['groups_applied']} group(s) applied ({counts['regraded']} re-graded), "
+            f"{counts['groups_below_threshold']} below the confidence threshold, {counts['groups_guarded']} left for "
+            f"manual review (mixed categories, too large or a re-grading keeping the old finding), "
+            f"{counts['groups_rejected']} rejected; {counts['new_dropped']} new finding(s) folded, "
             f"{counts['previous_closed']} previous finding(s) closed, {counts['renumbered']} renumbered, "
             f"{counts['chapter_references']} chapter reference(s) written, {counts['chapter_unmatched']} unmatched."
         )
@@ -542,6 +589,7 @@ class ReportFinalizer:
             "stage": STAGE_NAME,
             "groups_source": groups_source,
             "confidence_threshold": FINALIZER_CONFIDENCE_THRESHOLD,
+            "max_new_per_group": FINALIZER_MAX_NEW_PER_GROUP,
             "counts": counts,
             "decisions": [d.as_dict() for d in decisions],
             "renumbering": renumbered,

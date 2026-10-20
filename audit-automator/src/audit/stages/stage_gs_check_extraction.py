@@ -10,14 +10,14 @@ from src.clients.document_ai_client import DocumentAiClient
 from src.clients.ai_client import AiClient
 from src.clients.rag_client import RagClient
 from src.clients.spreadsheet import SHEET_SUFFIXES
-from src.constants import EXTRACTED_CHECK_DATA_PATH
+from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH
 
 from .gs_extraction.ground_truth_mapper import GroundTruthMapper
 from .gs_extraction.document_processor import DocumentProcessor
 from .gs_extraction.block_grouper import BlockGrouper
 from .gs_extraction.ai_refiner import AiRefiner
 from .gs_extraction.data_processor import DataProcessor
-from .gs_extraction.sheet_parser import parse_grundschutz_check, reconcile_zielobjekte
+from .gs_extraction.sheet_parser import SHEET_PARSER_VERSION, parse_grundschutz_check, reconcile_zielobjekte
 
 
 class GrundschutzCheckExtractionRunner:
@@ -54,11 +54,55 @@ class GrundschutzCheckExtractionRunner:
             logging.warning(f"{len(sheets)} Grundschutz-Check spreadsheets found; using '{sheets[0]}': {sheets}")
         return sheets[0]
 
+    @staticmethod
+    def stored_parser_version(gcs_client: GcsClient) -> Optional[int]:
+        """Parser version recorded in the stored extraction; None for a PDF-path or pre-versioned file."""
+        try:
+            quelle = gcs_client.read_json(EXTRACTED_CHECK_DATA_PATH).get("quelle") or {}
+        except Exception as e:
+            logging.warning(f"Could not read the stored extraction to check its parser version: {e}")
+            return None
+        if quelle.get("verfahren") != "spreadsheet-parser":
+            return None
+        return quelle.get("parser_version")
+
+    @classmethod
+    def is_extraction_current(cls, gcs_client: GcsClient) -> bool:
+        """True when both intermediate files exist and a spreadsheet parse is of the current parser
+        version. The controller skips the stage on this, so a parser fix reaches a resumed run
+        without --force (which would also regenerate the system map with the model)."""
+        if not (gcs_client.blob_exists(EXTRACTED_CHECK_DATA_PATH) and gcs_client.blob_exists(GROUND_TRUTH_MAP_PATH)):
+            return False
+        quelle = {}
+        try:
+            quelle = gcs_client.read_json(EXTRACTED_CHECK_DATA_PATH).get("quelle") or {}
+        except Exception as e:
+            logging.warning(f"Could not read the stored extraction: {e}")
+            return False
+        if quelle.get("verfahren") != "spreadsheet-parser":
+            return True  # the PDF path carries no parser version
+        if quelle.get("parser_version") == SHEET_PARSER_VERSION:
+            return True
+        logging.info(
+            f"Stored extraction was written by sheet parser version {quelle.get('parser_version')}; "
+            f"current is {SHEET_PARSER_VERSION}. The stage will re-parse the sheet."
+        )
+        return False
+
+    def _stored_parser_version(self) -> Optional[int]:
+        return self.stored_parser_version(self.gcs_client)
+
     async def _extract_from_sheet(self, blob_name: str, system_map: Dict[str, Any], force_overwrite: bool) -> None:
         """Parse the spreadsheet into the same file the AI refiner would write."""
         if not force_overwrite and self.gcs_client.blob_exists(EXTRACTED_CHECK_DATA_PATH):
-            logging.info("Final extracted check results file exists. Skipping spreadsheet parse.")
-            return
+            stored_version = self._stored_parser_version()
+            if stored_version == SHEET_PARSER_VERSION:
+                logging.info("Final extracted check results file exists. Skipping spreadsheet parse.")
+                return
+            logging.info(
+                f"Extracted check results exist but were written by sheet parser version {stored_version}; "
+                f"re-parsing with version {SHEET_PARSER_VERSION}."
+            )
 
         logging.info(f"Grundschutz-Check delivered as spreadsheet '{blob_name}': parsing deterministically (no Document AI, no AI calls).")
         data = await asyncio.to_thread(self.gcs_client.download_blob_as_bytes, self.gcs_client.bucket.blob(blob_name))
@@ -70,12 +114,27 @@ class GrundschutzCheckExtractionRunner:
                 "assumptions (see sheet_parser.py). Fix the export or remove the sheet to fall back to the PDF path."
             )
 
-        matched = reconcile_zielobjekte(anforderungen, system_map)
+        matched = reconcile_zielobjekte(anforderungen, system_map, parsed["zielobjekte"])
         deduplicated = DataProcessor.deduplicate_requirements(anforderungen)
+        if len(deduplicated) < len(anforderungen):
+            # A sheet has one row per (requirement, Zielobjekt) by construction. Anything the
+            # dedup removes means two Zielobjekte collapsed into one Kürzel and the audit
+            # would silently lose their requirements.
+            logging.warning(
+                f"Deduplication removed {len(anforderungen) - len(deduplicated)} of {len(anforderungen)} parsed "
+                f"requirements: Zielobjekt identities collided. Check the Kürzel of '{blob_name}'."
+            )
         final_output = {
             "anforderungen": deduplicated,
+            # The Zielobjekte of the check with the document's spellings as aliases, so later
+            # stages resolve the identifiers of the system map and the audit plan to them.
+            "zielobjekte": parsed["zielobjekte"],
+            "kuerzel_kollisionen": parsed["kuerzel_kollisionen"],
             # Provenance: the stage-3 QS trail should show the check was computed, not generated.
-            "quelle": {"datei": blob_name, "verfahren": "spreadsheet-parser", "dokument": parsed["dokument"]},
+            "quelle": {
+                "datei": blob_name, "verfahren": "spreadsheet-parser",
+                "parser_version": SHEET_PARSER_VERSION, "dokument": parsed["dokument"],
+            },
         }
         await self.gcs_client.upload_from_string_async(
             json.dumps(final_output, indent=2, ensure_ascii=False), EXTRACTED_CHECK_DATA_PATH

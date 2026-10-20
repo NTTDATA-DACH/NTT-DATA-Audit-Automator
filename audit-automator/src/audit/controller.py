@@ -18,6 +18,7 @@ from src.audit.stages.stage_4_pruefplan import Chapter4Runner
 from src.audit.stages.stage_5_vor_ort_audit import Chapter5Runner
 from src.audit.stages.stage_7_anhang import Chapter7Runner
 from src.audit.stages.stage_gs_check_extraction import GrundschutzCheckExtractionRunner
+from src.audit.staleness import stale_inputs
 
 class AuditController:
     """Orchestrates the entire staged audit process with lazy initialization of runners."""
@@ -114,8 +115,17 @@ class AuditController:
                 finding_obj = data['finding']
                 if finding_obj and finding_obj.get('category') != 'OK':
                     found.append(finding_obj)
-            
-            for value in data.values():
+            # A section with several deficiencies lists them as `findings`: each becomes its
+            # own row in chapter 7.2, with its own number.
+            if isinstance(data.get('findings'), list):
+                found.extend(
+                    f for f in data['findings']
+                    if isinstance(f, dict) and f.get('category') and f.get('category') != 'OK'
+                )
+
+            for key, value in data.items():
+                if key == 'findings' and isinstance(value, list):
+                    continue
                 found.extend(self._extract_findings_recursive(value))
         
         elif isinstance(data, list):
@@ -301,13 +311,16 @@ class AuditController:
         if not force_overwrite:
             try:
                 if stage_name == "Grundschutz-Check-Extraction":
-                    if self.gcs_client.blob_exists(EXTRACTED_CHECK_DATA_PATH) and \
-                       self.gcs_client.blob_exists(GROUND_TRUTH_MAP_PATH):
+                    # The runner knows when its stored result is current (both intermediate
+                    # files exist, and a sheet parse is of the current parser version).
+                    is_current = getattr(self.stage_runner_classes[stage_name], "is_extraction_current", None)
+                    if is_current is not None and is_current(self.gcs_client):
                         logging.info(f"Stage '{stage_name}' already completed (intermediate files exist). Skipping.")
                         result_data = {"status": "skipped", "reason": "intermediate files found"}
                 else:
                     result_data = self.gcs_client.read_json(stage_output_path)
                     logging.info(f"Stage '{stage_name}' already completed. Skipping generation.")
+                    stale_inputs(self.gcs_client, stage_name, stage_output_path)
             except NotFound:
                 logging.info(f"No results for stage '{stage_name}' found. Generating...")
             except Exception as e:

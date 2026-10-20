@@ -20,6 +20,7 @@ from src.audit.stages.gs_extraction.anforderung_fields import (
     normalize_anforderungen,
     parse_pruefdatum,
 )
+from src.audit.stages.gs_extraction.zielobjekt_index import ZielobjektIndex
 from src.audit.async_utils import gather_resilient
 from src.constants import EXTRACTED_CHECK_DATA_PATH, GROUND_TRUTH_MAP_PATH, PROMPT_CONFIG_PATH
 
@@ -119,13 +120,7 @@ class Chapter3Runner:
         ground_truth_map = await self._get_ground_truth_map()
 
         # Task E: Coverage Check
-        all_mapped_kuerzel = {k for k_list in ground_truth_map.get("baustein_to_zielobjekt_mapping", {}).values() for k in k_list}
-        all_checked_kuerzel = {a.get("zielobjekt_kuerzel") for a in anforderungen}
-        missing_in_check = all_mapped_kuerzel - all_checked_kuerzel
-        if missing_in_check:
-            desc = f"Die Zielobjekte {sorted(list(missing_in_check))} sind in der Modellierung vorhanden, aber es wurden für sie keine Anforderungen im Grundschutz-Check gefunden oder verarbeitet."
-            findings.append({"category": "AG", "description": desc})
-            logging.warning(f"Coverage Check (Task E) failed: {desc}")
+        findings.extend(self._coverage_findings(check_data, anforderungen, ground_truth_map))
 
         # Q1: Status erhoben? (Deterministic)
         unknown_status = [a for a in anforderungen if a.get("umsetzungsstatus") not in VALID_STATUS]
@@ -247,13 +242,78 @@ class Chapter3Runner:
             if unmet_items and not realisierungsplan_uris:
                 findings.append({"category": "AG", "description": "Es gibt nicht umgesetzte Anforderungen, aber der Realisierungsplan (A.6) wurde nicht gefunden, um die Dokumentation zu überprüfen."})
 
-        # Consolidate findings
-        final_finding = {"category": "OK", "description": "Alle Prüfungen für den IT-Grundschutz-Check waren erfolgreich."}
-        if findings:
-            final_finding["category"] = "AS" if any(f['category'] == 'AS' for f in findings) else "AG"
-            final_finding["description"] = "Zusammenfassung: " + " | ".join([f['description'] for f in findings])
+        return {"detailsZumItGrundschutzCheck": {"answers": answers, **self._finding_payload(findings)}}
 
-        return {"detailsZumItGrundschutzCheck": {"answers": answers, "finding": final_finding}}
+    @staticmethod
+    def _finding_payload(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """One Feststellung per deficiency. The sub-checks used to be joined into a single
+        'Zusammenfassung: a | b | c' text, so chapter 7.2 carried one row mixing missing
+        Zielobjekte with wrongly justified 'entbehrlich' entries, and the final stage could
+        only merge or close that row as a whole."""
+        if not findings:
+            return {"finding": {"category": "OK", "description": "Alle Prüfungen für den IT-Grundschutz-Check waren erfolgreich."}}
+        return {"findings": findings}
+
+    def _coverage_findings(
+        self, check_data: Dict[str, Any], anforderungen: List[Dict[str, Any]], ground_truth_map: Dict[str, Any]
+    ) -> List[Dict[str, str]]:
+        """Task E: every Zielobjekt the Modellierung maps a Baustein to must carry requirements
+        in the check.
+
+        The map is what the model read out of A.1/A.3, in the documents' own spellings; the sheet
+        parser gives Zielobjekte that share a document Kürzel the canonical '<Kürzel> <Name>'. So
+        identifiers are resolved through the check's Zielobjekt registry (Kürzel, name, aliases),
+        also via the names the map lists for a Kürzel. A mapped Kürzel counts as covered when any
+        Zielobjekt it may mean carries requirements; only identifiers that resolve to nothing are
+        reported. Shared Kürzel are a data-quality finding of their own, not a coverage gap.
+        """
+        registry = check_data.get("zielobjekte")
+        index = ZielobjektIndex(registry) if registry else ZielobjektIndex.from_anforderungen(anforderungen)
+        checked = {a.get("zielobjekt_kuerzel") for a in anforderungen}
+        map_names: Dict[str, List[str]] = {}
+        for z in ground_truth_map.get("zielobjekte") or []:
+            if z.get("kuerzel"):
+                map_names.setdefault(str(z["kuerzel"]).strip(), []).append(str(z.get("name") or "").strip())
+        mapped = {k for k_list in ground_truth_map.get("baustein_to_zielobjekt_mapping", {}).values() for k in k_list}
+
+        missing = []
+        for kuerzel in sorted(mapped):
+            candidates = index.resolve(kuerzel)
+            for name in map_names.get(kuerzel, []):
+                candidates |= index.resolve(name)
+            if not candidates & checked:
+                names = [n for n in map_names.get(kuerzel, []) if n]
+                missing.append(f"{kuerzel} ({', '.join(names)})" if names else kuerzel)
+
+        findings: List[Dict[str, str]] = []
+        if missing:
+            shown = ", ".join(missing[:self.MAX_LISTED_REQUIREMENTS])
+            if len(missing) > self.MAX_LISTED_REQUIREMENTS:
+                shown += f" und {len(missing) - self.MAX_LISTED_REQUIREMENTS} weitere"
+            desc = (
+                f"{len(missing)} in der Modellierung (A.3) vorhandene Zielobjekte haben im IT-Grundschutz-Check (A.4) "
+                f"keine Anforderungen: {shown}. Für sie wurde kein Umsetzungsstatus erhoben oder verarbeitet."
+            )
+            findings.append({"category": "AG", "description": desc})
+            logging.warning(f"Coverage Check (Task E) failed: {desc}")
+
+        collisions = check_data.get("kuerzel_kollisionen") or index.collisions()
+        if collisions:
+            listed = "; ".join(f"'{k}' ({len(v)} Zielobjekte: {', '.join(v)})" for k, v in sorted(collisions.items()))
+            first_kuerzel, first_names = sorted(collisions.items())[0]
+            findings.append({
+                "category": "E",
+                "description": (
+                    f"Die Zielobjekt-Kürzel {listed} sind in den Referenzdokumenten A.1, A.3 und A.4 nicht eindeutig: "
+                    f"dasselbe Kürzel bezeichnet mehrere Zielobjekte, der eigentliche Bezeichner steht nur im Namen. "
+                    f"Die Anforderungen des IT-Grundschutz-Checks wurden diesen Zielobjekten über den Namen zugeordnet; "
+                    f"dieser Bericht adressiert sie als '<Kürzel> <Name>' (z. B. '{first_kuerzel} {first_names[0]}'). "
+                    f"Es wird empfohlen, in der Strukturanalyse eindeutige Kürzel zu vergeben und sie in Modellierung "
+                    f"und IT-Grundschutz-Check zu übernehmen."
+                ),
+            })
+            logging.warning(f"Zielobjekt Kürzel shared by several Zielobjekte: {listed}")
+        return findings
 
     def _check_document_coverage(self) -> Dict[str, Any]:
         """Checks if all critical BSI document types are present."""
@@ -376,9 +436,11 @@ class Chapter3Runner:
         for res_dict in results_list:
             if not res_dict: continue
             result_data = list(res_dict.values())[0]
-            if isinstance(result_data, dict) and isinstance(result_data.get('finding'), dict):
-                finding = result_data['finding']
-                if finding.get('category') != "OK":
+            if not isinstance(result_data, dict):
+                continue
+            section_findings = [result_data.get('finding')] + list(result_data.get('findings') or [])
+            for finding in section_findings:
+                if isinstance(finding, dict) and finding.get('category') != "OK":
                     findings.append(f"- [{finding.get('category')}]: {finding.get('description')}")
         return "\n".join(findings) if findings else "Keine Feststellungen in den vorangegangenen Abschnitten."
 

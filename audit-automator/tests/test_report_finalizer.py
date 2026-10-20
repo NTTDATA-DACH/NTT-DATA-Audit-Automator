@@ -74,8 +74,8 @@ PREV = "Previous Audit (N/A)"
 OLD_MODELLIERUNG = "Die Nachvollziehbarkeit der Modellierung ist im A.2 und A.4 nicht ausreichend."
 NEW_MODELLIERUNG = ("Die Modellierung des Informationsverbunds weist erhebliche Lücken auf; die Vorgaben "
                     "des BSI-Standards 200-2 Kapitel 8.3 sind in wesentlichen Teilen nicht umgesetzt.")
-NEW_NETZPLAN = "Der Netzplan ist nicht mit der Strukturanalyse synchronisiert (N-DMZ2 doppelt vergeben)."
-OLD_NETZPLAN = "Der Bezeichner 'N-DMZ2' wird für zwei Zielobjekte verwendet."
+NEW_NETZPLAN = "Der Netzplan ist nicht mit der Strukturanalyse synchronisiert (NET-07 doppelt vergeben)."
+OLD_NETZPLAN = "Der Bezeichner 'NET-07' wird für zwei Zielobjekte verwendet."
 NEW_TERMINE = "Im A.6 fehlen für zahlreiche Maßnahmen konkrete Umsetzungstermine."
 NEW_E_SCOPE = "Die Abgrenzung des Informationsverbundes weist redaktionelle Schwächen auf."
 
@@ -105,10 +105,10 @@ def _report():
     plan = report["bsiAuditReport"]["erstellungEinesPruefplans"]["auditplanung"]
     plan["auswahlBausteineErstRezertifizierung"]["table"]["rows"] = [
         {"Baustein": "ISMS.1", "Zielobjekt-Kürzel": "Verbund", "Begründung zur Auswahl": "Vorgeschrieben"},
-        {"Baustein": "NET.3.2 Firewall", "Zielobjekt-Kürzel": "FW-GP", "Begründung zur Auswahl": "Kritischer Kontrollpunkt"},
+        {"Baustein": "NET.3.2 Firewall", "Zielobjekt-Kürzel": "FW-ALL", "Begründung zur Auswahl": "Kritischer Kontrollpunkt"},
     ]
     plan["auswahlMassnahmenAusRisikoanalyse"]["table"]["rows"] = [
-        {"Maßnahme": "M-RA-01 Brandfrüherkennung", "Zielobjekt": "RZ-Zelle 1_3"},
+        {"Maßnahme": "M-RA-01 Brandfrüherkennung", "Zielobjekt": "Serverraum 1"},
     ]
     return report
 
@@ -207,7 +207,7 @@ def test_chapter_text_with_a_changed_word_still_matches_by_similarity():
 def test_new_finding_contained_in_previous_one_is_dropped_and_its_chapter_points_to_the_old_number():
     response = {"gruppen": [{
         "ids": ["AG-85", "AG-191"], "behalten": "AG-85", "konfidenz": 0.95,
-        "begruendung": "Beide bemängeln den doppelt vergebenen Bezeichner N-DMZ2.",
+        "begruendung": "Beide bemängeln den doppelt vergebenen Bezeichner NET-07.",
     }]}
     out, log, _, _ = _finalize(_report(), response)
     ag = {r["Nummer"]: r for r in _rows(out, "geringfuegigeAbweichungen")}
@@ -380,3 +380,82 @@ def test_prompt_placeholder_and_schema_agree_with_the_code():
     assert set(schema["properties"]["gruppen"]["items"]["required"]) == {"ids", "behalten", "begruendung", "konfidenz"}
     assert "dokumentenpruefung_ids" in schema["required"] and "dokumentenpruefung_ids" in cfg["prompt"]
     assert "offen=true" in cfg["prompt"]
+
+
+# ----------------------------------------------------------------------------- structural guards
+def _model_decision(log):
+    return [d for d in log["decisions"] if d["quelle"] == "modell"][0]
+
+
+def test_mixed_categories_within_the_current_audit_are_left_for_manual_review():
+    response = {"gruppen": [{"ids": ["AG-191", "E-1"], "behalten": "AG-191", "konfidenz": 0.95, "begruendung": "Beides A.1."}]}
+    out, log, _, _ = _finalize(_report(), response)
+    assert _model_decision(log)["status"].startswith("manuell pruefen: Kategorien gemischt (AG, E)")
+    assert NEW_E_SCOPE in {r["Beschreibung der Empfehlung"] for r in _rows(out, "empfehlungen")}
+    assert NEW_NETZPLAN in {r["Beschreibung der Abweichung"] for r in _rows(out, "geringfuegigeAbweichungen")}
+    assert log["counts"]["groups_guarded"] == 1 and log["counts"]["groups_below_threshold"] == 0
+
+
+def test_regrading_keeps_the_current_finding_and_closes_the_previous_one():
+    # Yesterday's AG-85 is only a recommendation today: the current E survives, the old AG closes.
+    response = {"gruppen": [{"ids": ["AG-85", "E-1"], "behalten": "E-1", "konfidenz": 0.95, "begruendung": "Neubewertung AG -> E."}]}
+    out, log, _, _ = _finalize(_report(), response)
+    assert _model_decision(log)["status"] == "angewendet (Neubewertung AG -> E)"
+    ag = {r["Nummer"]: r for r in _rows(out, "geringfuegigeAbweichungen")}
+    e = {r["Nummer"]: r for r in _rows(out, "empfehlungen")}
+    assert ag["AG-85"]["Status"] == "Geschlossen, siehe E-02"
+    assert e["E-02"]["Beschreibung der Empfehlung"] == NEW_E_SCOPE
+    assert log["counts"]["regraded"] == 1 and log["counts"]["previous_closed"] == 1
+
+
+def test_regrading_that_keeps_the_previous_finding_is_left_for_manual_review():
+    response = {"gruppen": [{"ids": ["AG-85", "E-1"], "behalten": "AG-85", "konfidenz": 0.95, "begruendung": "x"}]}
+    out, log, _, _ = _finalize(_report(), response)
+    assert _model_decision(log)["status"].startswith("manuell pruefen: Neubewertung (AG -> E)")
+    ag = {r["Nummer"]: r for r in _rows(out, "geringfuegigeAbweichungen")}
+    assert ag["AG-85"]["Status"] == "Offen"
+    assert NEW_E_SCOPE in {r["Beschreibung der Empfehlung"] for r in _rows(out, "empfehlungen")}
+
+
+def test_group_with_too_many_new_findings_is_left_for_manual_review():
+    report = _report()
+    _rows(report, "geringfuegigeAbweichungen").extend([
+        _row("AG-194", "Die Liste der Anwendungen nennt keine Verantwortlichen.", "3"),
+        _row("AG-195", "Die Liste der IT-Systeme nennt keine Aufstellungsorte.", "3"),
+    ])
+    response = {"gruppen": [{
+        "ids": ["AG-190", "AG-191", "AG-194", "AG-195"], "behalten": "AG-190", "konfidenz": 0.93, "begruendung": "Alles A.1.",
+    }]}
+    out, log, _, _ = _finalize(report, response)
+    assert _model_decision(log)["status"].startswith("manuell pruefen: Gruppe zu gross (4 Feststellungen")
+    assert len(_rows(out, "geringfuegigeAbweichungen")) == 7  # only the identical-text pair was folded
+    assert log["max_new_per_group"] == rf.FINALIZER_MAX_NEW_PER_GROUP
+
+
+def test_identical_text_in_an_ag_and_an_e_of_the_same_audit_is_not_folded_silently():
+    # The old rule kept the lower number, so two AGs would have vanished into an E.
+    report = _report()
+    _rows(report, "empfehlungen").append(_row("E-2", NEW_TERMINE, "3", category="E"))  # same text as AG-192/AG-193
+    out, log, _, _ = _finalize(report, NO_GROUPS)
+    [decision] = [d for d in log["decisions"] if d["quelle"] == "deterministisch"]
+    assert decision["status"].startswith("manuell pruefen: Kategorien gemischt (AG, E)")
+    assert set(decision["ids"]) == {"AG-192", "AG-193", "E-2"}
+    assert NEW_TERMINE in {r["Beschreibung der Empfehlung"] for r in _rows(out, "empfehlungen")}
+    assert sum(1 for r in _rows(out, "geringfuegigeAbweichungen") if r["Beschreibung der Abweichung"] == NEW_TERMINE) == 2
+
+
+def test_identical_text_with_a_changed_category_across_audits_keeps_the_current_grading():
+    report = _report()
+    _rows(report, "empfehlungen").append(_row("E-2", OLD_NETZPLAN, "3", category="E"))  # yesterday's AG-85, now an E
+    out, log, _, _ = _finalize(report, NO_GROUPS)
+    [decision] = [d for d in log["decisions"] if d["quelle"] == "deterministisch" and "AG-85" in d["ids"]]
+    assert decision["behalten"] == "E-2" and decision["status"] == "angewendet (Neubewertung AG -> E)"
+    ag = {r["Nummer"]: r for r in _rows(out, "geringfuegigeAbweichungen")}
+    assert ag["AG-85"]["Status"] == "Geschlossen, siehe E-03"
+
+
+def test_prompt_names_the_sammelfeststellung_and_neubewertung_rules():
+    prompt = rf.load_asset_json(rf.PROMPT_CONFIG_PATH)["stages"][rf.STAGE_NAME]["duplikate"]["prompt"]
+    assert "andere Mängel benennen" in prompt
+    assert "desselben Audits mit unterschiedlicher Kategorie" in prompt
+    assert "Neubewertung" in prompt and "behalten ist dann immer die aktuelle Feststellung" in prompt

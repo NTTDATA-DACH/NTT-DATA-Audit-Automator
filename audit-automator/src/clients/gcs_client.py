@@ -135,6 +135,11 @@ class GcsClient:
             None, lambda: [blob.name for blob in self.storage_client.list_blobs(self.bucket.name, prefix=prefix)]
         )
 
+    def blob_updated(self, blob_name: str):
+        """Last modification time of a blob (timezone-aware datetime), or None if it does not exist."""
+        blob = self.bucket.get_blob(blob_name)
+        return blob.updated if blob is not None else None
+
     def blob_exists(self, blob_name: str) -> bool:
         """Checks if a blob exists in the GCS bucket."""
         logging.debug(f"Checking for existence of blob: gs://{self.bucket.name}/{blob_name}")

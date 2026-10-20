@@ -115,3 +115,29 @@ def test_missing_customer_data_falls_back_to_a_placeholder(runner):
     first = _pruefungen(result)[0]["anforderungen"][0]
     assert first["bewertung"] == "N/A"
     assert "Keine spezifische Angabe" in first["dokuAntragsteller"]
+
+
+def test_plan_kuerzel_in_the_system_maps_spelling_finds_the_canonical_zielobjekt(runner):
+    """The plan names the firewall 'FW-01' (the map's spelling of the swapped export); the
+    check addresses it as 'Firewall FW-01'. The customer's answer must still reach the checklist."""
+    from src.audit.stages.gs_extraction.zielobjekt_index import ZielobjektIndex
+
+    runner._zielobjekt_index = ZielobjektIndex([
+        {"kuerzel": "Firewall FW-01", "name": "FW-01", "kuerzel_im_dokument": "Firewall", "aliases": ["Firewall", "FW-01"]},
+        {"kuerzel": "Firewall FW-02", "name": "FW-02", "kuerzel_im_dokument": "Firewall", "aliases": ["Firewall", "FW-02"]},
+    ])
+    try:
+        extracted = {
+            ("NET.3.2.A1", "Firewall FW-01"): {"umsetzungsstatus": "Ja", "umsetzungserlaeuterung": "Richtlinie liegt vor."},
+            ("NET.3.2.A1", "Firewall FW-02"): {"umsetzungsstatus": "Nein", "umsetzungserlaeuterung": "Fehlt."},
+        }
+        result = runner._generate_control_checklist(_chapter_4("NET.3.2 Firewall", kuerzel="FW-01"), extracted)
+        a1 = next(a for a in _pruefungen(result)[0]["anforderungen"] if a["nummer"] == "NET.3.2.A1")
+        assert a1["dokuAntragsteller"] == "Umsetzungsstatus: Ja\n\nRichtlinie liegt vor."
+
+        # The shared document Kürzel is ambiguous: no entry is taken rather than another object's.
+        result = runner._generate_control_checklist(_chapter_4("NET.3.2 Firewall", kuerzel="Firewall"), extracted)
+        a1 = next(a for a in _pruefungen(result)[0]["anforderungen"] if a["nummer"] == "NET.3.2.A1")
+        assert a1["dokuAntragsteller"] == Chapter5Runner.NO_CHECK_ENTRY
+    finally:
+        del runner._zielobjekt_index
