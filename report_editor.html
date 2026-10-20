@@ -173,6 +173,16 @@
         }
         #controls button:hover, #controls input[type="file"]::file-selector-button:hover { background-color: var(--button-hover-bg); }
         #controls button:disabled { background-color: #999; cursor: not-allowed; }
+        /* Unsaved edits: the export button turns orange until the JSON has been exported. */
+        #controls button.dirty { background-color: #e08a00; box-shadow: 0 0 0 3px rgba(224, 138, 0, 0.3); font-weight: 600; }
+        #controls button.dirty:hover { background-color: #c97a00; }
+        /* 7.2 filter: one bar for the three findings tables, regular expressions per column. */
+        .findings-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #f1f5fb; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin: 10px 0 15px 0; font-size: 0.9em; }
+        .findings-filter label { font-weight: 600; margin: 0; }
+        .findings-filter input { width: 170px; padding: 5px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; }
+        .findings-filter input.invalid { border-color: #c00; background: #fff0f0; }
+        .findings-filter .filter-count { color: #555; margin-left: auto; }
+        .findings-filter button { font-size: 0.85em; padding: 4px 8px; cursor: pointer; }
         
         .chapter {
             background-color: var(--card-bg);
@@ -350,6 +360,7 @@
         let reportData = null;
         let finalizeLog = null;   // the final stage's decision log, loaded next to the report
         let findingInputTimeout = null;
+        let dirty = false;        // edits since the last load or export; gates the export button
 
         fileInput.addEventListener('change', handleFileSelect);
         exportButton.addEventListener('click', handleExport);
@@ -366,6 +377,26 @@
                 handleDeleteRow(event.target);
             }
         });
+
+        // Every bound field (data-path) that changes marks the report as edited. The 7.2 filter
+        // inputs and the category switch carry no data-path: a filter is not an edit, and the
+        // switch marks the report itself once the move is confirmed.
+        reportContainer.addEventListener('input', (event) => { if (event.target.dataset.path) markDirty(); });
+        reportContainer.addEventListener('change', (event) => { if (event.target.dataset.path) markDirty(); });
+
+        function markDirty() {
+            dirty = true;
+            exportButton.disabled = false;
+            exportButton.classList.add('dirty');
+            exportButton.title = 'Ungespeicherte Änderungen: Export nicht vergessen.';
+        }
+
+        function markClean() {
+            dirty = false;
+            exportButton.disabled = true;
+            exportButton.classList.remove('dirty');
+            exportButton.title = 'Wird aktiv, sobald etwas geändert wurde.';
+        }
 
         reportContainer.addEventListener('change', (event) => {
             if (event.target.classList.contains('category-switch') && event.target.value) {
@@ -403,6 +434,7 @@
                     }
                     if (data && data.bsiAuditReport) {
                         reportData = data;
+                        markClean();
                     } else if (data && data.stage === 'Finalize-Report' && Array.isArray(data.decisions)) {
                         finalizeLog = data;
                         finalizeLog._fileName = file.name;
@@ -431,7 +463,7 @@
             initialMessage.style.display = 'none';
             renderReport(reportData);
             createSidebarNav(reportData);
-            exportButton.disabled = false;
+            exportButton.disabled = !dirty;
         }
 
         function syncUiToData() {
@@ -545,6 +577,7 @@
                      reportContainer.appendChild(renderChapter(key, chapterData, `bsiAuditReport.${key}`));
                 }
             }
+            applyFindingsFilter();
             window.scrollTo(0, currentScroll);
         }
         
@@ -582,6 +615,7 @@
             const navId = `nav-${path.replace(/[.\[\]]/g, '-')}`;
             if (sectionData.title) sectionDiv.innerHTML += `<h3 id="${navId}">${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
             if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
+            if (path === FINDINGS_PATH) sectionDiv.appendChild(createFindingsFilterBar());
             
             const handledKeys = ['title', 'description', 'subchapterNumber'];
             
@@ -723,6 +757,10 @@
                 return tableContainer;
             }
             const table = document.createElement('table');
+            if (path.startsWith(FINDINGS_PATH)) {
+                table.dataset.findingsTable = 'true';
+                table.dataset.headers = JSON.stringify(tableData.headers);
+            }
             const thead = table.createTHead();
             const tbody = table.createTBody();
             const tfoot = table.createTFoot();
@@ -1141,6 +1179,90 @@
             return select;
         }
 
+        // ------------------------------------------------------------ 7.2 filter
+        // One filter bar for the three findings tables. Each column takes a regular expression
+        // (case-insensitive); an invalid pattern is shown red and matched as plain text. The
+        // filter only hides rows in the view; the export still carries every row.
+        const FINDINGS_FILTER_COLUMNS = ['Quelle (Kapitel)', 'Behebungsfrist', 'Status'];
+        const findingsFilter = Object.fromEntries(FINDINGS_FILTER_COLUMNS.map(c => [c, '']));
+
+        function createFindingsFilterBar() {
+            const bar = document.createElement('div');
+            bar.className = 'findings-filter';
+            const label = document.createElement('label');
+            label.textContent = 'Filter (RegExp):';
+            bar.appendChild(label);
+            FINDINGS_FILTER_COLUMNS.forEach(column => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = column;
+                input.title = `Regulärer Ausdruck für die Spalte "${column}", z. B. ^3\. oder Offen|Erneut`;
+                input.value = findingsFilter[column];
+                input.dataset.filterColumn = column;
+                input.addEventListener('input', () => { findingsFilter[column] = input.value; applyFindingsFilter(); });
+                bar.appendChild(input);
+            });
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.textContent = 'Zurücksetzen';
+            reset.addEventListener('click', () => {
+                FINDINGS_FILTER_COLUMNS.forEach(c => { findingsFilter[c] = ''; });
+                bar.querySelectorAll('input').forEach(i => { i.value = ''; });
+                applyFindingsFilter();
+            });
+            bar.appendChild(reset);
+            const count = document.createElement('span');
+            count.className = 'filter-count';
+            bar.appendChild(count);
+            return bar;
+        }
+
+        function compileFindingsFilter() {
+            // One matcher per filled column; a broken pattern falls back to a substring match.
+            const matchers = [];
+            const invalid = new Set();
+            FINDINGS_FILTER_COLUMNS.forEach(column => {
+                const pattern = findingsFilter[column];
+                if (!pattern) return;
+                let test;
+                try {
+                    const re = new RegExp(pattern, 'i');
+                    test = value => re.test(value);
+                } catch (error) {
+                    invalid.add(column);
+                    const needle = pattern.toLowerCase();
+                    test = value => value.toLowerCase().includes(needle);
+                }
+                matchers.push({ column, test });
+            });
+            return { matchers, invalid };
+        }
+
+        function applyFindingsFilter() {
+            const bar = reportContainer.querySelector('.findings-filter');
+            if (!bar) return;
+            const { matchers, invalid } = compileFindingsFilter();
+            bar.querySelectorAll('input[data-filter-column]').forEach(input => {
+                input.classList.toggle('invalid', invalid.has(input.dataset.filterColumn));
+            });
+            let shown = 0, total = 0;
+            reportContainer.querySelectorAll('table[data-findings-table]').forEach(table => {
+                const headers = JSON.parse(table.dataset.headers || '[]');
+                Array.from(table.tBodies[0]?.rows || []).forEach(row => {
+                    total++;
+                    const visible = matchers.every(({ column, test }) => {
+                        const index = headers.indexOf(column);
+                        const field = index >= 0 ? row.cells[index]?.querySelector('textarea') : null;
+                        return test(field ? field.value : '');
+                    });
+                    row.hidden = !visible;
+                    if (visible) shown++;
+                });
+            });
+            const count = bar.querySelector('.filter-count');
+            if (count) count.textContent = matchers.length ? `${shown} von ${total} Zeilen` : `${total} Zeilen`;
+        }
+
         function findingsRows(category) {
             return getValueByPath(reportData, `${FINDINGS_PATH}.${CATEGORY_TABLES[category].key}.table.rows`);
         }
@@ -1228,6 +1350,7 @@
             });
 
             const references = rewriteFindingReferences(reportData.bsiAuditReport, oldId, newId, oldCategory, newCategory, normalizeFindingText(description));
+            markDirty();
             document.getElementById('edit-status').textContent = `${oldId} → ${newId} (${CATEGORY_TABLES[newCategory].label}); ${references} Verweise umgeschrieben. Export nicht vergessen.`;
 
             renderReport(reportData);
@@ -1250,6 +1373,7 @@
             const tableRows = getValueByPath(reportData, path);
             if (Array.isArray(tableRows)) {
                 tableRows.push(newRow);
+                markDirty();
                 renderReport(reportData);
             }
         }
@@ -1262,6 +1386,7 @@
             const tableRows = getValueByPath(reportData, path);
             if (Array.isArray(tableRows) && !isNaN(rowIndex)) {
                 tableRows.splice(rowIndex, 1);
+                markDirty();
                 renderReport(reportData);
             }
         }
@@ -1322,6 +1447,7 @@
 
                 // 2. Add new finding to the reportData structure
                 targetArray.push(newFinding);
+                markDirty();
                 
                 // 3. Update the textarea with the new ID and sync the data
                 textarea.value = newId;
@@ -1376,6 +1502,7 @@
             }
             const updatedData = JSON.parse(JSON.stringify(reportData)); 
             downloadObjectAsJson(updatedData, 'edited_report.json');
+            markClean();
         }
         
         function getValueByPath(obj, path) {
