@@ -1,4 +1,5 @@
 # file: src/audit/stages/stage_5_vor_ort_audit.py
+import hashlib
 import json
 import logging
 import re
@@ -20,7 +21,13 @@ from src.audit.stages.gs_extraction.anforderung_fields import (
 )
 from src.audit.stages.gs_extraction.zielobjekt_index import ZielobjektIndex, normalize_key
 from src.audit.stages.targeted_questions import finding_payload, list_requirement_ids, record_targeted_answer
-from src.constants import EXTRACTED_CHECK_DATA_PATH, PROMPT_CONFIG_PATH, STAGE_RESULTS_PATH
+from src.constants import (
+    EXTRACTED_CHECK_DATA_PATH,
+    EXTRACTION_THINKING_LEVEL,
+    PROMPT_CONFIG_PATH,
+    RISIKOANALYSE_MASSNAHMEN_BASE,
+    STAGE_RESULTS_PATH,
+)
 
 # The auditor's verdict column, derived from the customer's own Umsetzungsstatus in the A.4.
 BEWERTUNG_BY_STATUS = {
@@ -39,8 +46,9 @@ class Chapter5Runner:
     It deterministically prepares the control checklist for the manual audit,
     enriching it with data extracted in prior stages. Everything it produces is derived
     from the Chapter-4 plan, the official catalog and the extracted Grundschutz-Check;
-    the one model call (5.6.1, are the open additional measures in the A.6?) mirrors
-    3.6.1 and is skipped when nothing is open or no Realisierungsplan is delivered.
+    the two model calls of 5.6 read the additional measures out of the Risikoanalyse (cached
+    under a key over documents and prompt) and, as in 3.6.1, ask whether the open ones are in
+    the Realisierungsplan; both are skipped when the document is missing or nothing is open.
     """
     STAGE_NAME = "Chapter-5"
     MAX_LISTED_REQUIREMENTS = 50
@@ -263,12 +271,14 @@ class Chapter5Runner:
         return {name: {"einzelergebnisse": {"bausteinPruefungen": baustein_pruefungen_list}}}
         
     # ------------------------------------------------------------------ 5.6 Risikoanalyse
-    # The additional measures of the Risikoanalyse are consolidated into the Grundschutz-Check as
-    # requirements of the institution's own Bausteine (BSI-Standard 200-3, Kap. 8), which is the
-    # only way a requirement outside the official Kompendium gets into the A.4. So "zusätzliche
-    # Maßnahme" in the A.4 means: a requirement the catalog does not know.
+    # The additional measures are the measures the Risikoanalyse (A.5) defines for the treatment
+    # of its risks. Most are the institution's own, outside the Kompendium; some are Kompendium
+    # requirements, typically those for erhöhter Schutzbedarf (H). The model reads the list out
+    # of the document once; everything after that (status in the A.4, level, open items) is
+    # computed. Without a Risikoanalyse the A.4 requirements outside the Kompendium stand in,
+    # since that is where BSI-Standard 200-3 consolidates the measures.
 
-    def _zusaetzliche_massnahmen(self, extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _zusaetzliche_massnahmen_aus_a4(self, extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> List[Dict[str, Any]]:
         """The A.4 entries outside the official Kompendium, in requirement order."""
         return [
             item for (control_id, _kuerzel), item in sorted(extracted_data_map.items())
@@ -280,57 +290,141 @@ class Chapter5Runner:
         rows = chapter_4_data.get("auswahlMassnahmenAusRisikoanalyse", {}).get("rows", [])
         return [r for r in rows if isinstance(r, dict)]
 
-    @staticmethod
-    def _measure_label(item: Dict[str, Any]) -> str:
-        status = normalize_status(item.get("umsetzungsstatus")) or str(item.get("umsetzungsstatus") or "ohne Status")
-        return f"{item.get('id')} ({item.get('zielobjekt_kuerzel') or 'Zielobjekt unbekannt'}: {status})"
+    async def _risikoanalyse_massnahmen(self) -> Optional[List[Dict[str, Any]]]:
+        """The measures the Risikoanalyse defines, read by the model and validated in code.
 
-    def _match_measure_to_check(
-        self,
-        measure: Dict[str, Any],
-        extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]],
-        zusaetzliche: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        """The A.4 entry a chapter-4.1.5 measure refers to, or None.
-
-        Chapter 4 names the measure in free text. A requirement ID quoted in the row wins;
-        otherwise the measure's wording is compared with the titles of the additional
-        requirements (equal, or one containing the other). Several candidates are narrowed by
-        the row's Zielobjekt; what stays ambiguous is left unmatched, since the wrong entry
-        would show the auditor another measure's status.
+        Returns None when no Risikoanalyse is among the documents or the stage has no model
+        client (the caller then falls back to the A.4). The raw answer is stored under a key
+        over documents, prompt, schema, model and thinking level before it is parsed, so a
+        rerun on unchanged input costs no call and a parser bug no second one.
         """
-        measure_text = f"{measure.get('Maßnahme') or ''} {measure.get('Risikoanalyse') or ''}"
-        quoted_ids = set(_REQUIREMENT_ID_RE.findall(measure_text))
-        if quoted_ids:
-            candidates = [item for (control_id, _k), item in sorted(extracted_data_map.items()) if control_id in quoted_ids]
+        if not (self.ai_client and self.rag_client):
+            logging.warning("5.6: no model or document client; the Risikoanalyse is not read, the A.4 stands in.")
+            return None
+        definition = self.prompt_config["stages"]["Chapter-5"]["extract_massnahmen"]
+        uris = sorted(self.rag_client.get_gcs_uris_for_categories(definition["source_categories"]))
+        if not uris:
+            logging.warning("5.6: no Risikoanalyse among the documents; the additional measures are taken from the A.4 alone.")
+            return None
+        schema = load_asset_json(definition["schema_path"])
+        key_material = json.dumps(
+            {"prompt": definition["prompt"], "schema": schema, "uris": uris, "model": getattr(self.ai_client, "model", None),
+             "thinking": EXTRACTION_THINKING_LEVEL},
+            sort_keys=True, ensure_ascii=False,
+        )
+        key = hashlib.sha256(key_material.encode("utf-8")).hexdigest()[:16]
+        cache_path = f"{RISIKOANALYSE_MASSNAHMEN_BASE}/{key}/massnahmen.json"
+        try:
+            response = self.gcs_client.read_json(cache_path)
+            logging.info(f"5.6: measures of the Risikoanalyse already extracted at {cache_path}; no model call.")
+        except NotFound:
+            logging.info(f"5.6: reading the additional measures out of {len(uris)} Risikoanalyse document(s)...")
+            response = await self.ai_client.generate_checked_json_response(
+                definition["prompt"], schema, gcs_uris=uris,
+                request_context_log="5.6-Risikoanalyse-Massnahmen", thinking_level=EXTRACTION_THINKING_LEVEL,
+            )
+            self.gcs_client.write_json(response, cache_path)
+        return self._validated_massnahmen(response)
+
+    def _validated_massnahmen(self, response: Any) -> List[Dict[str, Any]]:
+        """Model output made comparable: trimmed strings, the requirement ID in canonical form
+        and, computed from the catalog, its level (B/S/H) or None for an ID it does not know."""
+        raw = response.get("massnahmen") if isinstance(response, dict) else None
+        measures = []
+        for item in raw or []:
+            if not isinstance(item, dict) or not str(item.get("bezeichnung") or "").strip():
+                continue
+            quoted = _REQUIREMENT_ID_RE.search(str(item.get("anforderung_id") or ""))
+            control_id = quoted.group(1) if quoted else ""
+            if str(item.get("anforderung_id") or "").strip() and not control_id:
+                logging.warning(f"5.6: '{item.get('anforderung_id')}' is not a requirement ID; measure '{item.get('bezeichnung')}' is matched by wording.")
+            level = self.control_catalog.get_control_level(control_id) if control_id else None
+            if control_id and not self.control_catalog.is_known_control(control_id):
+                logging.warning(f"5.6: requirement '{control_id}' of measure '{item.get('bezeichnung')}' is not in the Kompendium.")
+            measures.append({
+                "bezeichnung": str(item.get("bezeichnung")).strip(),
+                "zielobjekt": str(item.get("zielobjekt") or "").strip(),
+                "anforderung_id": control_id,
+                "level": level,
+                "fundstelle": str(item.get("fundstelle") or "").strip(),
+                "umsetzungsstatus_laut_dokument": str(item.get("umsetzungsstatus_laut_dokument") or "").strip(),
+            })
+        logging.info(f"5.6: {len(measures)} additional measures in the Risikoanalyse, {sum(1 for m in measures if m['level'] == 'H')} of them H requirements of the Kompendium.")
+        return measures
+
+    def _zielobjekt_keys(self, zielobjekt: Any) -> set:
+        """Comparison keys a document's Zielobjekt spelling may stand for in the A.4."""
+        keys = {normalize_key(zielobjekt)} - {""}
+        index = getattr(self, "_zielobjekt_index", None)
+        if index is not None:
+            keys |= {normalize_key(k) for k in index.resolve(zielobjekt)}
+        return keys
+
+    def _find_in_check(
+        self, measure: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """The A.4 entry of a measure, or None.
+
+        A requirement ID wins; otherwise the measure's wording is compared with the titles of
+        the A.4 entries (equal, or one containing the other). Several candidates are narrowed
+        by the measure's Zielobjekt; what stays ambiguous is left unmatched, since the wrong
+        entry would show the auditor another measure's status.
+        """
+        control_id = measure.get("anforderung_id") or ""
+        if control_id:
+            candidates = [item for (cid, _k), item in sorted(extracted_data_map.items()) if cid == control_id]
         else:
-            wording = normalize_key(measure.get("Maßnahme"))
+            wording = normalize_key(measure.get("bezeichnung"))
             candidates = []
             if len(wording) >= 6:
-                for item in zusaetzliche:
+                for (_cid, _k), item in sorted(extracted_data_map.items()):
                     title = normalize_key(item.get("titel"))
                     if len(title) >= 6 and (title == wording or title in wording or wording in title):
                         candidates.append(item)
         if len(candidates) > 1:
-            index = getattr(self, "_zielobjekt_index", None)
-            zielobjekt = measure.get("Zielobjekt") or ""
-            known = {normalize_key(zielobjekt)} | (index.resolve(zielobjekt) if index else set())
-            narrowed = [c for c in candidates if c.get("zielobjekt_kuerzel") in known or normalize_key(c.get("zielobjekt_kuerzel")) in known]
+            keys = self._zielobjekt_keys(measure.get("zielobjekt"))
+            narrowed = [c for c in candidates if normalize_key(c.get("zielobjekt_kuerzel")) in keys or normalize_key(c.get("zielobjekt_name")) in keys]
             if narrowed:
                 candidates = narrowed
         if len(candidates) == 1:
             return candidates[0]
         if candidates:
-            logging.warning(f"5.6.2: measure '{measure.get('Maßnahme')}' matches {len(candidates)} A.4 entries ({sorted({c.get('id') for c in candidates})}); none taken.")
+            logging.warning(f"5.6: measure '{measure.get('bezeichnung')}' matches {len(candidates)} A.4 entries ({sorted({c.get('id') for c in candidates})}); none taken.")
         return None
 
+    @staticmethod
+    def _measure_label(measure: Dict[str, Any], entry: Optional[Dict[str, Any]] = None) -> str:
+        """'Bezeichnung (Zielobjekt; A.4 ID: Status)' as a finding names a measure."""
+        parts = [measure.get("zielobjekt") or "Zielobjekt unbekannt"]
+        if entry:
+            status = normalize_status(entry.get("umsetzungsstatus")) or str(entry.get("umsetzungsstatus") or "ohne Status")
+            parts.append(f"A.4 {entry.get('id')}: {status}")
+        elif measure.get("anforderung_id"):
+            parts.append(measure["anforderung_id"])
+        return f"{measure.get('bezeichnung')} ({'; '.join(parts)})"
+
+    @staticmethod
+    def _a4_measure(item: Dict[str, Any]) -> Dict[str, Any]:
+        """An A.4 requirement outside the Kompendium in the shape of an extracted measure."""
+        return {
+            "bezeichnung": item.get("titel") or item.get("id"),
+            "zielobjekt": item.get("zielobjekt_kuerzel") or "",
+            "anforderung_id": item.get("id"),
+            "level": None,
+            "fundstelle": "IT-Grundschutz-Check (A.4)",
+            "umsetzungsstatus_laut_dokument": "",
+        }
+
     def _generate_risikoanalyse_checklist(
-        self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]
+        self,
+        chapter_4_data: Dict[str, Any],
+        extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]],
+        massnahmen: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
-        Generates the checklist for risk analysis measures (5.6.2) based on
-        the measures selected in Chapter 4.1.5, with the customer's Umsetzungsstatus
-        and Umsetzungserläuterung from the A.4 where the measure can be found there.
+        Generates the checklist for risk analysis measures (5.6.2) based on the measures
+        selected in Chapter 4.1.5, with the customer's Umsetzungsstatus and
+        Umsetzungserläuterung from the A.4 where the measure can be found there.
         """
         name = "risikoanalyseA5"
         logging.info(f"Deterministically generating checklist for {name} (5.6.2)...")
@@ -340,11 +434,11 @@ class Chapter5Runner:
             logging.warning("No measures from risk analysis found in Chapter 4 results. Checklist for 5.6.2 will be empty.")
             return {name: {"einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": []}}}
 
-        zusaetzliche = self._zusaetzliche_massnahmen(extracted_data_map)
         massnahmen_pruefungen_list = []
         matched = 0
-        for measure in selected_measures:
-            entry = self._match_measure_to_check(measure, extracted_data_map, zusaetzliche)
+        for row in selected_measures:
+            measure = self._planned_measure(row, massnahmen)
+            entry = self._find_in_check(measure, extracted_data_map)
             if entry:
                 matched += 1
                 status = normalize_status(entry.get("umsetzungsstatus"))
@@ -356,9 +450,11 @@ class Chapter5Runner:
             else:
                 bewertung = ""
                 doku = "Keine Angabe zu dieser Maßnahme im Grundschutz-Check (A.4) gefunden."
+                if measure.get("fundstelle"):
+                    doku = f"In der Risikoanalyse als Maßnahme enthalten ({measure['fundstelle']}). {doku}"
             massnahmen_pruefungen_list.append({
-                "massnahme": measure.get("Maßnahme", "N/A"),
-                "zielobjekt": measure.get("Zielobjekt", "N/A"),
+                "massnahme": row.get("Maßnahme", "N/A"),
+                "zielobjekt": row.get("Zielobjekt", "N/A"),
                 "bewertung": bewertung,
                 "dokuAntragsteller": doku,
                 "pruefmethode": { "D": False, "I": False, "C": False, "S": False, "A": False, "B": False },
@@ -369,40 +465,91 @@ class Chapter5Runner:
         logging.info(f"Generated checklist with {len(massnahmen_pruefungen_list)} risk analysis measures; {matched} found in the A.4.")
         return {name: {"einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": massnahmen_pruefungen_list}}}
 
+    def _planned_measure(self, row: Dict[str, Any], massnahmen: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """A chapter-4.1.5 row as a measure: a requirement ID quoted in the row, else the ID
+        of the Risikoanalyse measure with the same wording, else the wording alone."""
+        text = f"{row.get('Maßnahme') or ''} {row.get('Risikoanalyse') or ''}"
+        quoted = _REQUIREMENT_ID_RE.search(text)
+        measure = {"bezeichnung": str(row.get("Maßnahme") or "").strip(), "zielobjekt": str(row.get("Zielobjekt") or "").strip(),
+                   "anforderung_id": quoted.group(1) if quoted else "", "fundstelle": ""}
+        if measure["anforderung_id"]:
+            return measure
+        wording = normalize_key(measure["bezeichnung"])
+        same = [m for m in massnahmen if len(wording) >= 6 and (normalize_key(m["bezeichnung"]) == wording
+                or normalize_key(m["bezeichnung"]) in wording or wording in normalize_key(m["bezeichnung"]))]
+        if len(same) > 1:
+            keys = self._zielobjekt_keys(measure["zielobjekt"])
+            same = [m for m in same if normalize_key(m["zielobjekt"]) in keys] or same
+        if len(same) == 1:
+            measure["anforderung_id"] = same[0]["anforderung_id"]
+            measure["fundstelle"] = same[0]["fundstelle"]
+        return measure
+
     async def _generate_risikoanalyse_zusammenfassung(
-        self, chapter_4_data: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]
+        self,
+        chapter_4_data: Dict[str, Any],
+        extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]],
+        massnahmen: Optional[List[Dict[str, Any]]],
     ) -> Dict[str, Any]:
         """Answers of 5.6.1 'Zusammenfassung der Risikoanalyse', in the order of the Muster:
 
         1. Zielobjekte with Schutzbedarf 'hoch'/'sehr hoch'? Evidence, not judgment: a
            Risikoanalyse with additional measures exists only for such Zielobjekte, so measures
-           in the audit plan (4.1.5) or additional requirements in the A.4 answer it with yes.
-           Without either the question stays open for the auditor.
+           in the Risikoanalyse, in the audit plan (4.1.5) or additional requirements in the
+           A.4 answer it with yes. Without any of them the question stays open for the auditor.
         2. Does the stated status match reality? The on-site verdict; left to the auditor.
-        3. All additional measures marked as implemented? Computed from the A.4.
+        3. All additional measures marked as implemented? Every measure of the Risikoanalyse
+           is looked up in the A.4: one not found there was not consolidated into the
+           Grundschutz-Check, one found with another status than 'Ja' is open. Both are AG.
         4. Are the open ones in the A.6? A targeted model call over the Realisierungsplan,
            as in 3.6.1; no call without open measures or without the document.
+        Plus: a Risikoanalyse that draws no requirement for erhöhter Schutzbedarf (H) out of
+        the Kompendium has skipped the first step of the Risikobehandlung; that is an AG.
+        `massnahmen` is None when no Risikoanalyse could be read; the A.4 requirements outside
+        the Kompendium then stand in for the measures.
         """
         name = "zusammenfassungDerRisikoanalyse"
-        logging.info(f"Answering 5.6.1 '{name}' from the audit plan and the extracted Grundschutz-Check...")
+        logging.info(f"Answering 5.6.1 '{name}' from the Risikoanalyse, the audit plan and the extracted Grundschutz-Check...")
         selected_measures = self._selected_measures(chapter_4_data)
-        zusaetzliche = self._zusaetzliche_massnahmen(extracted_data_map)
+        aus_a4 = self._zusaetzliche_massnahmen_aus_a4(extracted_data_map)
         answers: List[Optional[bool]] = [None] * 4
         findings: List[Dict[str, Any]] = []
 
+        risikoanalyse_gelesen = massnahmen is not None
+        if not risikoanalyse_gelesen:
+            massnahmen = [self._a4_measure(item) for item in aus_a4]
+
         # Q1: Schutzbedarf hoch / sehr hoch vorhanden?
-        if selected_measures or zusaetzliche:
+        if massnahmen or selected_measures or aus_a4:
             answers[0] = True
         else:
-            logging.warning("5.6.1-Q1: neither measures in 4.1.5 nor additional requirements in the A.4; the Schutzbedarf question is left to the auditor.")
+            logging.warning("5.6.1-Q1: no measures in the Risikoanalyse, in 4.1.5 or outside the Kompendium in the A.4; the Schutzbedarf question is left to the auditor.")
 
         # Q3: alle zusätzlichen Maßnahmen umgesetzt?
-        if zusaetzliche:
-            not_implemented = [a for a in zusaetzliche if normalize_status(a.get("umsetzungsstatus")) != STATUS_JA]
-            answers[2] = not not_implemented
-            logging.info(f"5.6.1-Q3: {len(zusaetzliche)} additional requirements in the A.4, {len(not_implemented)} not 'Ja'; no model call.")
+        matched: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+        missing: List[Dict[str, Any]] = []
+        for measure in massnahmen:
+            entry = self._find_in_check(measure, extracted_data_map)
+            (matched.append((measure, entry)) if entry else missing.append(measure))
+        not_implemented = [(m, e) for m, e in matched if normalize_status(e.get("umsetzungsstatus")) != STATUS_JA]
+        if massnahmen:
+            answers[2] = not missing and not not_implemented
+            logging.info(
+                f"5.6.1-Q3: {len(massnahmen)} additional measures, {len(matched)} found in the A.4, "
+                f"{len(not_implemented)} not 'Ja', {len(missing)} not found; no model call."
+            )
+            if missing and risikoanalyse_gelesen:
+                shown = list_requirement_ids([self._measure_label(m) for m in missing], self.MAX_LISTED_REQUIREMENTS)
+                findings.append({
+                    "category": "AG",
+                    "description": (
+                        f"{len(missing)} zusätzliche Maßnahmen der Risikoanalyse sind im IT-Grundschutz-Check (A.4) nicht "
+                        f"auffindbar; die Maßnahmen wurden nicht in den Grundschutz-Check übernommen (BSI-Standard 200-3, "
+                        f"Konsolidierung des Sicherheitskonzepts) oder ihr Umsetzungsstatus ist dort nicht nachvollziehbar: {shown}."
+                    ),
+                })
             if not_implemented:
-                shown = list_requirement_ids([self._measure_label(a) for a in not_implemented], self.MAX_LISTED_REQUIREMENTS)
+                shown = list_requirement_ids([self._measure_label(m, e) for m, e in not_implemented], self.MAX_LISTED_REQUIREMENTS)
                 findings.append({
                     "category": "AG",
                     "description": (
@@ -415,16 +562,32 @@ class Chapter5Runner:
             findings.append({
                 "category": "AG",
                 "description": (
-                    f"Die Risikoanalyse legt zusätzliche Maßnahmen fest ({len(selected_measures)} davon im Prüfplan 4.1.5), "
-                    "der IT-Grundschutz-Check (A.4) enthält jedoch keine Anforderungen außerhalb des Kompendiums. "
-                    "Der Umsetzungsstatus der zusätzlichen Maßnahmen ist damit im A.4 nicht nachvollziehbar."
+                    f"Der Prüfplan (4.1.5) nennt {len(selected_measures)} zusätzliche Maßnahmen der Risikoanalyse, "
+                    "aber weder die Risikoanalyse noch der IT-Grundschutz-Check (A.4) weisen zusätzliche Maßnahmen aus. "
+                    "Der Umsetzungsstatus der zusätzlichen Maßnahmen ist damit nicht nachvollziehbar."
                 ),
             })
         else:
             logging.info("5.6.1-Q3: no additional measures known; nothing to assess.")
 
+        # Erhöhte Anforderungen herangezogen? Only assessable when the Risikoanalyse was read.
+        if risikoanalyse_gelesen and massnahmen and not any(m.get("level") == "H" for m in massnahmen):
+            findings.append({
+                "category": "AG",
+                "description": (
+                    f"Die Risikoanalyse legt {len(massnahmen)} zusätzliche Maßnahmen fest, zieht aber keine Anforderung bei "
+                    "erhöhtem Schutzbedarf (H) des IT-Grundschutz-Kompendiums heran. Nach BSI-Standard 200-3 sind bei der "
+                    "Risikobehandlung zunächst die Anforderungen bei erhöhtem Schutzbedarf der betroffenen Bausteine zu "
+                    "betrachten; eine Risikoanalyse ohne eine davon ist ein Hinweis, dass die Risikobehandlung nicht ausreicht."
+                ),
+            })
+
         # Q4: offene zusätzliche Maßnahmen im A.6?
-        unmet = [a for a in zusaetzliche if normalize_status(a.get("umsetzungsstatus")) in (STATUS_NEIN, STATUS_TEILWEISE)]
+        unmet = [
+            dict(m, umsetzungsstatus_laut_a4=normalize_status(e.get("umsetzungsstatus")), anforderung_id_a4=e.get("id"),
+                 umsetzungserlaeuterung_a4=e.get("umsetzungserlaeuterung") or "")
+            for m, e in matched if normalize_status(e.get("umsetzungsstatus")) in (STATUS_NEIN, STATUS_TEILWEISE)
+        ]
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"]) if self.rag_client else []
         if unmet and realisierungsplan_uris and self.ai_client:
             prompt = self.prompt_config["stages"]["Chapter-3"]["targeted_question"]["prompt"].format(
@@ -467,8 +630,9 @@ class Chapter5Runner:
         extracted_check_data_map = self._load_extracted_check_data()
 
         checklist_result = self._generate_control_checklist(chapter_4_data, extracted_check_data_map)
-        risiko_result = self._generate_risikoanalyse_checklist(chapter_4_data, extracted_check_data_map)
-        zusammenfassung = await self._generate_risikoanalyse_zusammenfassung(chapter_4_data, extracted_check_data_map)
+        massnahmen = await self._risikoanalyse_massnahmen()
+        risiko_result = self._generate_risikoanalyse_checklist(chapter_4_data, extracted_check_data_map, massnahmen or [])
+        zusammenfassung = await self._generate_risikoanalyse_zusammenfassung(chapter_4_data, extracted_check_data_map, massnahmen)
         risiko_result["risikoanalyseA5"].update(zusammenfassung)
 
         final_result = {**checklist_result, **risiko_result}

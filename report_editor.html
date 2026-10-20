@@ -176,13 +176,12 @@
         /* Unsaved edits: the export button turns orange until the JSON has been exported. */
         #controls button.dirty { background-color: #e08a00; box-shadow: 0 0 0 3px rgba(224, 138, 0, 0.3); font-weight: 600; }
         #controls button.dirty:hover { background-color: #c97a00; }
-        /* 7.2 filter: one bar for the three findings tables, regular expressions per column. */
-        .findings-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #f1f5fb; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin: 10px 0 15px 0; font-size: 0.9em; }
-        .findings-filter label { font-weight: 600; margin: 0; }
-        .findings-filter input { width: 170px; padding: 5px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; }
-        .findings-filter input.invalid { border-color: #c00; background: #fff0f0; }
-        .findings-filter .filter-count { color: #555; margin-left: auto; }
-        .findings-filter button { font-size: 0.85em; padding: 4px 8px; cursor: pointer; }
+        /* Chapter 7 tables: a filter row under the header, one regular expression per column. */
+        tr.column-filter th { background: #f1f5fb; padding: 4px; font-weight: normal; }
+        tr.column-filter input { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; font-size: 0.85em; }
+        tr.column-filter input.invalid { border-color: #c00; background: #fff0f0; }
+        tr.column-filter .filter-count { display: block; color: #555; font-size: 0.8em; margin-top: 3px; white-space: nowrap; }
+        tr.column-filter button { font-size: 0.8em; padding: 3px 6px; cursor: pointer; }
         
         .chapter {
             background-color: var(--card-bg);
@@ -577,7 +576,7 @@
                      reportContainer.appendChild(renderChapter(key, chapterData, `bsiAuditReport.${key}`));
                 }
             }
-            applyFindingsFilter();
+            reportContainer.querySelectorAll('table[data-filter-path]').forEach(applyColumnFilter);
             window.scrollTo(0, currentScroll);
         }
         
@@ -615,7 +614,6 @@
             const navId = `nav-${path.replace(/[.\[\]]/g, '-')}`;
             if (sectionData.title) sectionDiv.innerHTML += `<h3 id="${navId}">${sectionData.subchapterNumber || ''} ${sectionData.title}</h3>`;
             if (sectionData.description) sectionDiv.innerHTML += `<p class="description">${sectionData.description}</p>`;
-            if (path === FINDINGS_PATH) sectionDiv.appendChild(createFindingsFilterBar());
             
             const handledKeys = ['title', 'description', 'subchapterNumber'];
             
@@ -757,10 +755,7 @@
                 return tableContainer;
             }
             const table = document.createElement('table');
-            if (path.startsWith(FINDINGS_PATH)) {
-                table.dataset.findingsTable = 'true';
-                table.dataset.headers = JSON.stringify(tableData.headers);
-            }
+            if (path.startsWith(ANHANG_PATH)) table.dataset.filterPath = path;
             const thead = table.createTHead();
             const tbody = table.createTBody();
             const tfoot = table.createTFoot();
@@ -773,6 +768,7 @@
             if (isEditable) {
                 headerRow.insertCell().className = 'action-cell';
             }
+            if (table.dataset.filterPath) thead.appendChild(createColumnFilterRow(table, tableData.headers));
             if (Array.isArray(tableData.rows)) {
                 tableData.rows.forEach((rowData, rowIndex) => {
                     const row = tbody.insertRow();
@@ -1179,88 +1175,81 @@
             return select;
         }
 
-        // ------------------------------------------------------------ 7.2 filter
-        // One filter bar for the three findings tables. Each column takes a regular expression
-        // (case-insensitive); an invalid pattern is shown red and matched as plain text. The
-        // filter only hides rows in the view; the export still carries every row.
-        const FINDINGS_FILTER_COLUMNS = ['Quelle (Kapitel)', 'Behebungsfrist', 'Status'];
-        const findingsFilter = Object.fromEntries(FINDINGS_FILTER_COLUMNS.map(c => [c, '']));
+        // ------------------------------------------------------------ chapter 7 filter
+        // Every table in chapter 7 gets a filter row under its header: one regular expression per
+        // column (case-insensitive); an invalid pattern is shown red and matched as plain text.
+        // The filter only hides rows in the view; the export still carries every row. Patterns
+        // are kept per table path and column, so they survive a re-render.
+        const ANHANG_PATH = 'bsiAuditReport.anhang';
+        const columnFilters = {};   // table path -> { header: pattern }
 
-        function createFindingsFilterBar() {
-            const bar = document.createElement('div');
-            bar.className = 'findings-filter';
-            const label = document.createElement('label');
-            label.textContent = 'Filter (RegExp):';
-            bar.appendChild(label);
-            FINDINGS_FILTER_COLUMNS.forEach(column => {
+        function createColumnFilterRow(table, headers) {
+            const path = table.dataset.filterPath;
+            const patterns = columnFilters[path] || (columnFilters[path] = {});
+            const row = document.createElement('tr');
+            row.className = 'column-filter';
+            headers.forEach((header, index) => {
+                const th = document.createElement('th');
                 const input = document.createElement('input');
                 input.type = 'text';
-                input.placeholder = column;
-                input.title = `Regulärer Ausdruck für die Spalte "${column}", z. B. ^3\. oder Offen|Erneut`;
-                input.value = findingsFilter[column];
-                input.dataset.filterColumn = column;
-                input.addEventListener('input', () => { findingsFilter[column] = input.value; applyFindingsFilter(); });
-                bar.appendChild(input);
+                input.placeholder = 'Filter';
+                input.title = `Regulärer Ausdruck für die Spalte "${header}", z. B. ^3\. oder Offen|Erneut`;
+                input.value = patterns[header] || '';
+                input.dataset.filterIndex = index;
+                input.addEventListener('input', () => { patterns[header] = input.value; applyColumnFilter(table); });
+                th.appendChild(input);
+                row.appendChild(th);
             });
+            const actionTh = document.createElement('th');
+            actionTh.className = 'action-cell';
             const reset = document.createElement('button');
             reset.type = 'button';
             reset.textContent = 'Zurücksetzen';
             reset.addEventListener('click', () => {
-                FINDINGS_FILTER_COLUMNS.forEach(c => { findingsFilter[c] = ''; });
-                bar.querySelectorAll('input').forEach(i => { i.value = ''; });
-                applyFindingsFilter();
+                Object.keys(patterns).forEach(header => { patterns[header] = ''; });
+                row.querySelectorAll('input').forEach(input => { input.value = ''; });
+                applyColumnFilter(table);
             });
-            bar.appendChild(reset);
+            actionTh.appendChild(reset);
             const count = document.createElement('span');
             count.className = 'filter-count';
-            bar.appendChild(count);
-            return bar;
+            actionTh.appendChild(count);
+            row.appendChild(actionTh);
+            return row;
         }
 
-        function compileFindingsFilter() {
+        function applyColumnFilter(table) {
             // One matcher per filled column; a broken pattern falls back to a substring match.
             const matchers = [];
-            const invalid = new Set();
-            FINDINGS_FILTER_COLUMNS.forEach(column => {
-                const pattern = findingsFilter[column];
-                if (!pattern) return;
-                let test;
-                try {
-                    const re = new RegExp(pattern, 'i');
-                    test = value => re.test(value);
-                } catch (error) {
-                    invalid.add(column);
-                    const needle = pattern.toLowerCase();
-                    test = value => value.toLowerCase().includes(needle);
+            table.querySelectorAll('tr.column-filter input').forEach(input => {
+                const pattern = input.value;
+                let invalid = false;
+                if (pattern) {
+                    let test;
+                    try {
+                        const re = new RegExp(pattern, 'i');
+                        test = value => re.test(value);
+                    } catch (error) {
+                        invalid = true;
+                        const needle = pattern.toLowerCase();
+                        test = value => value.toLowerCase().includes(needle);
+                    }
+                    matchers.push({ index: Number(input.dataset.filterIndex), test });
                 }
-                matchers.push({ column, test });
-            });
-            return { matchers, invalid };
-        }
-
-        function applyFindingsFilter() {
-            const bar = reportContainer.querySelector('.findings-filter');
-            if (!bar) return;
-            const { matchers, invalid } = compileFindingsFilter();
-            bar.querySelectorAll('input[data-filter-column]').forEach(input => {
-                input.classList.toggle('invalid', invalid.has(input.dataset.filterColumn));
+                input.classList.toggle('invalid', invalid);
             });
             let shown = 0, total = 0;
-            reportContainer.querySelectorAll('table[data-findings-table]').forEach(table => {
-                const headers = JSON.parse(table.dataset.headers || '[]');
-                Array.from(table.tBodies[0]?.rows || []).forEach(row => {
-                    total++;
-                    const visible = matchers.every(({ column, test }) => {
-                        const index = headers.indexOf(column);
-                        const field = index >= 0 ? row.cells[index]?.querySelector('textarea') : null;
-                        return test(field ? field.value : '');
-                    });
-                    row.hidden = !visible;
-                    if (visible) shown++;
+            Array.from(table.tBodies[0]?.rows || []).forEach(row => {
+                total++;
+                const visible = matchers.every(({ index, test }) => {
+                    const field = row.cells[index]?.querySelector('textarea');
+                    return test(field ? field.value : '');
                 });
+                row.hidden = !visible;
+                if (visible) shown++;
             });
-            const count = bar.querySelector('.filter-count');
-            if (count) count.textContent = matchers.length ? `${shown} von ${total} Zeilen` : `${total} Zeilen`;
+            const count = table.querySelector('tr.column-filter .filter-count');
+            if (count) count.textContent = matchers.length ? `${shown} von ${total}` : `${total} Zeilen`;
         }
 
         function findingsRows(category) {

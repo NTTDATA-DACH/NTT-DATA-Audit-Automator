@@ -118,6 +118,10 @@ CHECKER_LOG_PATH = f"{INTERMEDIARY_BASE}/checker_log.json"
 # key over the findings and the prompt (a rerun on an unchanged report costs no call), and
 # one log per report records every merge decision, including those not applied.
 FINALIZER_BASE = f"{INTERMEDIARY_BASE}/report_finalizer"
+
+# Chapter 5.6: the additional measures the model reads out of the Risikoanalyse, stored under a
+# key over the documents and the prompt, so a rerun of Chapter-5 on unchanged input costs no call.
+RISIKOANALYSE_MASSNAHMEN_BASE = f"{INTERMEDIARY_BASE}/risikoanalyse"
 # A duplicate group is applied only when the model is at least this sure; groups below the
 # threshold are logged for the auditor and leave the report untouched.
 FINALIZER_CONFIDENCE_THRESHOLD = 0.9
