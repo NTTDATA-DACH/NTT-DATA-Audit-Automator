@@ -158,6 +158,9 @@
         .finalizer-note.fz-manual { background: #fff8ec; border-left-color: #e08a00; }
         .finalizer-note a { color: var(--secondary-color); text-decoration: none; }
         tr.fz-highlight > td { background: #fff3d6; }
+        /* Category switch: moves a finding between the three 7.2 tables and renumbers it. */
+        .category-switch { font-size: 0.8em; margin-top: 6px; padding: 2px 4px; border: 1px solid var(--border-color); border-radius: 4px; background: #fff; }
+        .edit-status { font-size: 0.85em; color: #2e8b57; }
         #controls button, #controls input[type="file"]::file-selector-button {
             background-color: var(--button-bg);
             color: white;
@@ -324,6 +327,7 @@
                 <input type="file" id="json-file-input" accept=".json" multiple>
                 <button id="export-json-button" disabled>Export to JSON</button>
                 <span id="finalize-status" class="finalize-status"></span>
+                <span id="edit-status" class="edit-status"></span>
             </div>
         </header>
 
@@ -360,6 +364,14 @@
             }
             if (event.target.classList.contains('delete-row-btn')) {
                 handleDeleteRow(event.target);
+            }
+        });
+
+        reportContainer.addEventListener('change', (event) => {
+            if (event.target.classList.contains('category-switch') && event.target.value) {
+                const newCategory = event.target.value;
+                event.target.value = '';
+                changeFindingCategory(event.target.dataset.nummer, newCategory);
             }
         });
 
@@ -588,6 +600,8 @@
                         itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
                         const note = finalizerNoteForChapterItem(itemPath);
                         if (note) itemDiv.appendChild(note);
+                        const numbered = String(item.findingText || '').match(/^\[((?:AS|AG|E)-\d+)\]/);
+                        if (numbered) itemDiv.appendChild(createCategorySwitch(numbered[1]));
                     } else if (item.type === 'prose') {
                         itemDiv.appendChild(createTextArea(item.label, item.text, `${itemPath}.text`));
                     }
@@ -748,6 +762,7 @@
                         deleteBtn.dataset.path = `${path}.rows`;
                         deleteBtn.dataset.rowIndex = rowIndex;
                         actionCell.appendChild(deleteBtn);
+                        if (nummer && /^(AS|AG|E)-\d+$/.test(nummer)) actionCell.appendChild(createCategorySwitch(nummer));
                     }
                 });
             }
@@ -1091,6 +1106,137 @@
                 return note;
             }
             return null;
+        }
+
+        // ------------------------------------------------------------ category switch
+        // An auditor re-grades a finding (an AS turns out to be an AG, an AG only an E). The row
+        // moves to the other 7.2 table under the next free number there, the description column
+        // follows the table's header, and every reference in the report (the "[AG-190]" prefix
+        // of the Feststellung, "Geschlossen, siehe AG-190" in other rows) is rewritten.
+        const CATEGORY_TABLES = {
+            AS: { key: 'schwerwiegendeAbweichungen', label: 'AS (schwerwiegend)', description: 'Beschreibung der Abweichung' },
+            AG: { key: 'geringfuegigeAbweichungen', label: 'AG (geringfügig)', description: 'Beschreibung der Abweichung' },
+            E: { key: 'empfehlungen', label: 'E (Empfehlung)', description: 'Beschreibung der Empfehlung' },
+        };
+        const FINDINGS_PATH = 'bsiAuditReport.anhang.abweichungenUndEmpfehlungen';
+
+        function createCategorySwitch(nummer) {
+            const current = nummer.split('-')[0];
+            const select = document.createElement('select');
+            select.className = 'category-switch';
+            select.dataset.nummer = nummer;
+            select.title = `Kategorie von ${nummer} ändern: verschiebt die Zeile in die andere 7.2-Tabelle, vergibt die nächste freie Nummer und schreibt alle Verweise um.`;
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Kategorie ändern …';
+            select.appendChild(placeholder);
+            Object.entries(CATEGORY_TABLES).forEach(([category, spec]) => {
+                if (category === current) return;
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = `→ ${spec.label}`;
+                select.appendChild(option);
+            });
+            return select;
+        }
+
+        function findingsRows(category) {
+            return getValueByPath(reportData, `${FINDINGS_PATH}.${CATEGORY_TABLES[category].key}.table.rows`);
+        }
+
+        function nextFindingNumber(category) {
+            const rows = findingsRows(category) || [];
+            let highest = 0;
+            rows.forEach(row => {
+                const match = String(row['Nummer'] || '').match(new RegExp(`^${category}-0*(\\d+)$`));
+                if (match) highest = Math.max(highest, parseInt(match[1], 10));
+            });
+            return `${category}-${String(highest + 1).padStart(2, '0')}`;
+        }
+
+        function normalizeFindingText(text) {
+            return String(text || '').toLowerCase().replace(/^\[?(ag|as|e)(-\d+)?\]?\s*\.?\s*:?\s*/, '')
+                .replace(/[^0-9a-zäöüß]+/g, ' ').trim();
+        }
+
+        function rewriteFindingReferences(node, oldId, newId, oldCategory, newCategory, descriptionNorm) {
+            // Returns the number of strings changed. The id must not be part of a longer id
+            // ("AG-19" inside "AG-190"), hence the boundaries.
+            const idPattern = new RegExp(`(^|[^A-Za-z0-9-])${oldId}(?![0-9])`, 'g');
+            let changed = 0;
+            const visit = (obj) => {
+                if (Array.isArray(obj)) {
+                    obj.forEach((value, index) => {
+                        if (typeof value === 'string') { const r = rewrite(value); if (r !== value) { obj[index] = r; changed++; } }
+                        else visit(value);
+                    });
+                } else if (obj && typeof obj === 'object') {
+                    Object.keys(obj).forEach(key => {
+                        const value = obj[key];
+                        if (typeof value === 'string') { const r = rewrite(value); if (r !== value) { obj[key] = r; changed++; } }
+                        else visit(value);
+                    });
+                }
+            };
+            const rewrite = (text) => {
+                let result = text.replace(idPattern, `$1${newId}`);
+                // A not yet numbered Feststellung ("[AG] text", before the final stage) is
+                // recognised by its text and gets the new category.
+                const unnumbered = result.match(/^\[(AS|AG|E)\]\s*(.*)$/s);
+                if (unnumbered && unnumbered[1] === oldCategory && normalizeFindingText(unnumbered[2]) === descriptionNorm) {
+                    result = `[${newCategory}] ${unnumbered[2]}`;
+                }
+                return result;
+            };
+            visit(node);
+            return changed;
+        }
+
+        function changeFindingCategory(oldId, newCategory) {
+            if (!reportData || !CATEGORY_TABLES[newCategory]) return;
+            const oldCategory = oldId.split('-')[0];
+            if (!CATEGORY_TABLES[oldCategory] || oldCategory === newCategory) return;
+            syncUiToData();
+
+            const sourceRows = findingsRows(oldCategory);
+            const sourceIndex = Array.isArray(sourceRows) ? sourceRows.findIndex(row => String(row['Nummer'] || '').trim() === oldId) : -1;
+            if (sourceIndex < 0) {
+                alert(`${oldId} steht in keiner 7.2-Tabelle; die Kategorie kann nur über eine Zeile dort geändert werden.`);
+                return;
+            }
+            const targetRows = findingsRows(newCategory);
+            if (!Array.isArray(targetRows)) {
+                alert(`Die Tabelle für ${newCategory} fehlt im Report.`);
+                return;
+            }
+            if (!confirm(`${oldId} nach ${CATEGORY_TABLES[newCategory].label} verschieben? Die Zeile erhält die nächste freie Nummer, alle Verweise werden umgeschrieben.`)) return;
+
+            const [row] = sourceRows.splice(sourceIndex, 1);
+            const newId = nextFindingNumber(newCategory);
+            const oldDescriptionKey = CATEGORY_TABLES[oldCategory].description;
+            const newDescriptionKey = CATEGORY_TABLES[newCategory].description;
+            const description = row[oldDescriptionKey] ?? row[newDescriptionKey] ?? '';
+            const moved = { 'Nummer': newId, [newDescriptionKey]: description };
+            Object.entries(row).forEach(([key, value]) => {
+                if (key !== 'Nummer' && key !== oldDescriptionKey && key !== newDescriptionKey) moved[key] = value;
+            });
+            targetRows.push(moved);
+            targetRows.sort((a, b) => {
+                const num = (r) => { const m = String(r['Nummer'] || '').match(/-0*(\d+)$/); return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER; };
+                return num(a) - num(b);
+            });
+
+            const references = rewriteFindingReferences(reportData.bsiAuditReport, oldId, newId, oldCategory, newCategory, normalizeFindingText(description));
+            document.getElementById('edit-status').textContent = `${oldId} → ${newId} (${CATEGORY_TABLES[newCategory].label}); ${references} Verweise umgeschrieben. Export nicht vergessen.`;
+
+            renderReport(reportData);
+            createSidebarNav(reportData);
+            const target = document.getElementById(`finding-${newId}`);
+            if (target) {
+                document.querySelectorAll('tr.fz-highlight').forEach(tr => tr.classList.remove('fz-highlight'));
+                target.classList.add('fz-highlight');
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
 
         function handleAddRow(button) {
