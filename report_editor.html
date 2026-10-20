@@ -749,7 +749,8 @@
                         input.dataset.path = cellPath;
                         input.value = getValueByPath(reportData, cellPath) || '';
                         cell.appendChild(input);
-                        if (header === 'Nummer' && nummer && finalizeLog) {
+                        // The finalizer's notes sit under the description, the wide column.
+                        if (header.startsWith('Beschreibung der') && nummer && finalizeLog) {
                             finalizerNotesForRow(nummer).forEach(note => cell.appendChild(note));
                         }
                     });
