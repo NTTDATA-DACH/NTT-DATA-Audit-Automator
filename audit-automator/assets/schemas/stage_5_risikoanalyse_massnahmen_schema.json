@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Schema for the additional measures of the Risikoanalyse (A.5)",
+  "type": "object",
+  "properties": {
+    "massnahmen": {
+      "type": "array",
+      "description": "Every additional security measure the Risikoanalyse defines for the treatment of a risk. Empty when the document defines none.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bezeichnung": { "type": "string", "description": "The measure as the document names it." },
+          "zielobjekt": { "type": "string", "description": "Kürzel or name of the Zielobjekt the measure applies to, as written in the document." },
+          "anforderung_id": { "type": "string", "description": "The IT-Grundschutz-Kompendium requirement ID (e.g. 'SYS.1.1.A30') when the measure is a Kompendium requirement, typically one for erhöhter Schutzbedarf; empty string otherwise." },
+          "fundstelle": { "type": "string", "description": "Where the measure is stated: section, table or page of the Risikoanalyse." },
+          "umsetzungsstatus_laut_dokument": { "type": "string", "description": "The implementation status the Risikoanalyse itself states for the measure, verbatim; empty string when it states none." }
+        },
+        "required": ["bezeichnung", "zielobjekt", "anforderung_id", "fundstelle", "umsetzungsstatus_laut_dokument"]
+      }
+    }
+  },
+  "required": ["massnahmen"]
+}

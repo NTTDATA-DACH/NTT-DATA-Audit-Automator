@@ -212,8 +212,13 @@
       }
     },
     "Chapter-5": {
+      "extract_massnahmen": {
+        "prompt": "Extrahiere aus der beigefügten Risikoanalyse (Referenzdokument A.5) alle zusätzlichen Sicherheitsmaßnahmen, die zur Behandlung der Risiken festgelegt wurden. Zusätzliche Maßnahmen sind die Maßnahmen, die die Risikoanalyse selbst definiert: meist eigene Maßnahmen außerhalb des IT-Grundschutz-Kompendiums, oft aber auch Anforderungen des Kompendiums, insbesondere Anforderungen bei erhöhtem Schutzbedarf (H). Nenne für jede Maßnahme das Zielobjekt (Kürzel oder Name wie im Dokument), die Anforderungs-ID des Kompendiums, wenn die Maßnahme eine Kompendium-Anforderung ist (z. B. 'SYS.1.1.A30'), sonst eine leere Zeichenkette, die Fundstelle (Abschnitt, Tabelle oder Seite) und den im Dokument genannten Umsetzungsstatus, sonst eine leere Zeichenkette. Nimm nur Maßnahmen auf, keine Gefährdungen, keine Risikobewertungen und keine Basis- oder Standard-Anforderungen, die lediglich aus dem Grundschutz-Check zitiert werden. Erfinde nichts: Jede Maßnahme muss im Dokument stehen. Definiert die Risikoanalyse keine zusätzlichen Maßnahmen, ist die leere Liste die richtige Antwort.",
+        "schema_path": "assets/schemas/stage_5_risikoanalyse_massnahmen_schema.json",
+        "source_categories": ["Risikoanalyse"]
+      },
       "questions": {
-        "zusaetzliche_massnahmen_nicht_umgesetzt": "Sind diese nicht oder teilweise umgesetzten zusätzlichen Maßnahmen aus der Risikoanalyse im angehängten Realisierungsplan (A.6) dokumentiert? Die Daten sind die Anforderungen des IT-Grundschutz-Checks, die nicht aus dem IT-Grundschutz-Kompendium stammen, also die in den Grundschutz-Check übernommenen Maßnahmen der Risikoanalyse. Füge eine kurze Auswahl der im A.6 enthaltenen und der dort fehlenden Maßnahmen der Feststellung hinzu!"
+        "zusaetzliche_massnahmen_nicht_umgesetzt": "Sind diese nicht oder teilweise umgesetzten zusätzlichen Maßnahmen aus der Risikoanalyse im angehängten Realisierungsplan (A.6) dokumentiert? Die Daten sind die Maßnahmen der Risikoanalyse mit ihrem Umsetzungsstatus laut IT-Grundschutz-Check. Füge eine kurze Auswahl der im A.6 enthaltenen und der dort fehlenden Maßnahmen der Feststellung hinzu!"
       }
     },
     "Scan-Report": {
