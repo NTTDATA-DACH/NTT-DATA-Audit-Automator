@@ -136,3 +136,21 @@ def test_a_section_without_a_finding_slot_gets_no_item():
     content = [{"type": "question", "questionText": "?", "answer": None}, {"type": "prose", "text": ""}]
     ReportGenerator._write_finding_items(content, ["[AG] x"])
     assert [item["type"] for item in content] == ["question", "prose"]
+
+
+# --- Chapter 5.6.1: answers and Feststellungen computed by the Chapter-5 stage ---
+def test_chapter_5_writes_the_risikoanalyse_answers_and_findings():
+    report = _load_template()
+    _generator("Zertifizierungsaudit")._populate_chapter_5(report, {"risikoanalyseA5": {
+        "einzelergebnisseDerRisikoanalyse": {"massnahmenPruefungen": [{"massnahme": "M", "zielobjekt": "Z", "bewertung": "Umgesetzt"}]},
+        "zusammenfassungDerRisikoanalyse": {
+            "answers": [True, None, False, True],
+            "findings": [{"category": "AG", "description": "RA.1.A2 ist nur teilweise umgesetzt."}],
+        },
+    }})
+    section = report["bsiAuditReport"]["vorOrtAudit"]["risikoanalyseA5"]
+    content = section["zusammenfassungDerRisikoanalyse"]["content"]
+    assert [item["answer"] for item in content if item["type"] == "question"] == [True, None, False, True]
+    assert [item["findingText"] for item in content if item["type"] == "finding"] == ["[AG] RA.1.A2 ist nur teilweise umgesetzt."]
+    assert section["einzelergebnisseDerRisikoanalyse"]["massnahmenPruefungen"][0]["bewertung"] == "Umgesetzt"
+    assert schema_validate(report) is True

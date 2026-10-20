@@ -211,6 +211,11 @@
         "source_categories": ["Risikoanalyse"]
       }
     },
+    "Chapter-5": {
+      "questions": {
+        "zusaetzliche_massnahmen_nicht_umgesetzt": "Sind diese nicht oder teilweise umgesetzten zusätzlichen Maßnahmen aus der Risikoanalyse im angehängten Realisierungsplan (A.6) dokumentiert? Die Daten sind die Anforderungen des IT-Grundschutz-Checks, die nicht aus dem IT-Grundschutz-Kompendium stammen, also die in den Grundschutz-Check übernommenen Maßnahmen der Risikoanalyse. Füge eine kurze Auswahl der im A.6 enthaltenen und der dort fehlenden Maßnahmen der Feststellung hinzu!"
+      }
+    },
     "Scan-Report": {
       "extract_chapter_1": {
         "prompt": "You are an expert data extraction system. From the attached previous audit report, extract the complete content of the tables in subchapters 1.1 (Versionshistorie), 1.2 (Kontaktinformationen des Antragstellers AND Ansprechpartner), and 1.3 (Auditteam). The auditteam has multiple sub-tables; capture all of them.",
