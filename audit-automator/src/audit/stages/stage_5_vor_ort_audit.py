@@ -360,15 +360,18 @@ class Chapter5Runner:
             keys |= {normalize_key(k) for k in index.resolve(zielobjekt)}
         return keys
 
-    def _find_in_check(
+    def _entries_for_measure(
         self, measure: Dict[str, Any], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """The A.4 entry of a measure, or None.
+    ) -> List[Dict[str, Any]]:
+        """The A.4 entries a measure refers to: one per Zielobjekt that carries the requirement.
 
-        A requirement ID wins; otherwise the measure's wording is compared with the titles of
-        the A.4 entries (equal, or one containing the other). Several candidates are narrowed
-        by the measure's Zielobjekt; what stays ambiguous is left unmatched, since the wrong
-        entry would show the auditor another measure's status.
+        A requirement ID names the entries of every Zielobjekt that has it. The measure's
+        Zielobjekt narrows them when it names an object the A.4 knows; a Risikoanalyse written
+        for the whole Informationsverbund names none, so every Zielobjekt stays, since the
+        measure then applies to each of them. Without an ID the wording is compared with the
+        titles (equal, or one containing the other); candidates of one requirement are that
+        requirement on several Zielobjekte, candidates of different requirements are
+        ambiguous and left unmatched, since the wrong entry would show another measure's status.
         """
         control_id = measure.get("anforderung_id") or ""
         if control_id:
@@ -386,22 +389,25 @@ class Chapter5Runner:
             narrowed = [c for c in candidates if normalize_key(c.get("zielobjekt_kuerzel")) in keys or normalize_key(c.get("zielobjekt_name")) in keys]
             if narrowed:
                 candidates = narrowed
-        if len(candidates) == 1:
-            return candidates[0]
-        if candidates:
-            logging.warning(f"5.6: measure '{measure.get('bezeichnung')}' matches {len(candidates)} A.4 entries ({sorted({c.get('id') for c in candidates})}); none taken.")
-        return None
+        if len({c.get("id") for c in candidates}) > 1:
+            logging.warning(f"5.6: measure '{measure.get('bezeichnung')}' matches {len(candidates)} A.4 entries of different requirements ({sorted({c.get('id') for c in candidates})}); none taken.")
+            return []
+        return candidates
 
     @staticmethod
-    def _measure_label(measure: Dict[str, Any], entry: Optional[Dict[str, Any]] = None) -> str:
-        """'Bezeichnung (Zielobjekt; A.4 ID: Status)' as a finding names a measure."""
-        parts = [measure.get("zielobjekt") or "Zielobjekt unbekannt"]
-        if entry:
-            status = normalize_status(entry.get("umsetzungsstatus")) or str(entry.get("umsetzungsstatus") or "ohne Status")
-            parts.append(f"A.4 {entry.get('id')}: {status}")
-        elif measure.get("anforderung_id"):
-            parts.append(measure["anforderung_id"])
-        return f"{measure.get('bezeichnung')} ({'; '.join(parts)})"
+    def _status_of(entry: Dict[str, Any]) -> str:
+        return normalize_status(entry.get("umsetzungsstatus")) or str(entry.get("umsetzungsstatus") or "ohne Status")
+
+    @staticmethod
+    def _measure_label(measure: Dict[str, Any], entries: Optional[List[Dict[str, Any]]] = None) -> str:
+        """'Bezeichnung (Zielobjekt: Status, Zielobjekt: Status)' as a finding names a measure."""
+        if entries:
+            detail = ", ".join(f"{e.get('zielobjekt_kuerzel') or 'Zielobjekt unbekannt'}: {Chapter5Runner._status_of(e)}" for e in entries)
+        else:
+            detail = measure.get("zielobjekt") or "Zielobjekt unbekannt"
+            if measure.get("anforderung_id") and not str(measure.get("bezeichnung", "")).startswith(measure["anforderung_id"]):
+                detail = f"{measure['anforderung_id']}; {detail}"
+        return f"{measure.get('bezeichnung')} ({detail})"
 
     @staticmethod
     def _a4_measure(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -414,6 +420,30 @@ class Chapter5Runner:
             "fundstelle": "IT-Grundschutz-Check (A.4)",
             "umsetzungsstatus_laut_dokument": "",
         }
+
+    @staticmethod
+    def _aggregate_bewertung(entries: List[Dict[str, Any]]) -> str:
+        """The verdict column over several Zielobjekte: one word when they agree, else 'Teilweise umgesetzt'."""
+        statuses = {normalize_status(e.get("umsetzungsstatus")) for e in entries}
+        if len(statuses) == 1:
+            return BEWERTUNG_BY_STATUS.get(next(iter(statuses)), "N/A")
+        return BEWERTUNG_BY_STATUS[STATUS_TEILWEISE]
+
+    def _customer_documentation_for(self, entries: List[Dict[str, Any]]) -> str:
+        """The A.4 side of a measure for the checklist: one entry as in 5.5.2, several entries as
+        one block per Zielobjekt, so the auditor sees where the measure is open."""
+        if len(entries) == 1:
+            entry = entries[0]
+            return (
+                f"Anforderung {entry.get('id')} im Grundschutz-Check (Zielobjekt {entry.get('zielobjekt_kuerzel') or 'unbekannt'}): "
+                f"{entry.get('titel') or ''}\n{self._customer_documentation(entry, normalize_status(entry.get('umsetzungsstatus')))}"
+            )
+        lines = [f"Anforderung {entries[0].get('id')} im Grundschutz-Check für {len(entries)} Zielobjekte: {entries[0].get('titel') or ''}"]
+        for entry in entries:
+            explanation = str(entry.get("umsetzungserlaeuterung") or "").strip() or "(keine Umsetzungserläuterung im A.4)"
+            name = f" ({entry.get('zielobjekt_name')})" if entry.get("zielobjekt_name") and entry.get("zielobjekt_name") != entry.get("zielobjekt_kuerzel") else ""
+            lines.append(f"- {entry.get('zielobjekt_kuerzel') or 'Zielobjekt unbekannt'}{name}: {self._status_of(entry)}. {explanation}")
+        return "\n".join(lines)
 
     def _generate_risikoanalyse_checklist(
         self,
@@ -438,15 +468,11 @@ class Chapter5Runner:
         matched = 0
         for row in selected_measures:
             measure = self._planned_measure(row, massnahmen)
-            entry = self._find_in_check(measure, extracted_data_map)
-            if entry:
+            entries = self._entries_for_measure(measure, extracted_data_map)
+            if entries:
                 matched += 1
-                status = normalize_status(entry.get("umsetzungsstatus"))
-                bewertung = BEWERTUNG_BY_STATUS.get(status, "N/A")
-                doku = (
-                    f"Anforderung {entry.get('id')} im Grundschutz-Check (Zielobjekt {entry.get('zielobjekt_kuerzel') or 'unbekannt'}): "
-                    f"{entry.get('titel') or ''}\n{self._customer_documentation(entry, status)}"
-                )
+                bewertung = self._aggregate_bewertung(entries)
+                doku = self._customer_documentation_for(entries)
             else:
                 bewertung = ""
                 doku = "Keine Angabe zu dieser Maßnahme im Grundschutz-Check (A.4) gefunden."
@@ -499,8 +525,10 @@ class Chapter5Runner:
            A.4 answer it with yes. Without any of them the question stays open for the auditor.
         2. Does the stated status match reality? The on-site verdict; left to the auditor.
         3. All additional measures marked as implemented? Every measure of the Risikoanalyse
-           is looked up in the A.4: one not found there was not consolidated into the
-           Grundschutz-Check, one found with another status than 'Ja' is open. Both are AG.
+           is looked up in the A.4, on every Zielobjekt that carries it. Not found at all: the
+           measure was not consolidated into the Grundschutz-Check. Found with 'Nein',
+           'teilweise' or no status: open. Found as 'entbehrlich': the A.4 declares dispensable
+           what the Risikoanalyse requires. Each of the three is its own AG.
         4. Are the open ones in the A.6? A targeted model call over the Realisierungsplan,
            as in 3.6.1; no call without open measures or without the document.
         Plus: a Risikoanalyse that draws no requirement for erhöhter Schutzbedarf (H) out of
@@ -526,17 +554,27 @@ class Chapter5Runner:
             logging.warning("5.6.1-Q1: no measures in the Risikoanalyse, in 4.1.5 or outside the Kompendium in the A.4; the Schutzbedarf question is left to the auditor.")
 
         # Q3: alle zusätzlichen Maßnahmen umgesetzt?
-        matched: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
         missing: List[Dict[str, Any]] = []
+        open_items: List[Tuple[Dict[str, Any], List[Dict[str, Any]]]] = []
+        dispensable: List[Tuple[Dict[str, Any], List[Dict[str, Any]]]] = []
+        entries_found = 0
         for measure in massnahmen:
-            entry = self._find_in_check(measure, extracted_data_map)
-            (matched.append((measure, entry)) if entry else missing.append(measure))
-        not_implemented = [(m, e) for m, e in matched if normalize_status(e.get("umsetzungsstatus")) != STATUS_JA]
+            entries = self._entries_for_measure(measure, extracted_data_map)
+            if not entries:
+                missing.append(measure)
+                continue
+            entries_found += len(entries)
+            open_entries = [e for e in entries if normalize_status(e.get("umsetzungsstatus")) not in (STATUS_JA, STATUS_ENTBEHRLICH)]
+            dispensable_entries = [e for e in entries if normalize_status(e.get("umsetzungsstatus")) == STATUS_ENTBEHRLICH]
+            if open_entries:
+                open_items.append((measure, open_entries))
+            if dispensable_entries:
+                dispensable.append((measure, dispensable_entries))
         if massnahmen:
-            answers[2] = not missing and not not_implemented
+            answers[2] = not missing and not open_items and not dispensable
             logging.info(
-                f"5.6.1-Q3: {len(massnahmen)} additional measures, {len(matched)} found in the A.4, "
-                f"{len(not_implemented)} not 'Ja', {len(missing)} not found; no model call."
+                f"5.6.1-Q3: {len(massnahmen)} additional measures on {entries_found} A.4 entries; "
+                f"{len(open_items)} measures open, {len(dispensable)} marked entbehrlich, {len(missing)} not found; no model call."
             )
             if missing and risikoanalyse_gelesen:
                 shown = list_requirement_ids([self._measure_label(m) for m in missing], self.MAX_LISTED_REQUIREMENTS)
@@ -548,13 +586,24 @@ class Chapter5Runner:
                         f"Konsolidierung des Sicherheitskonzepts) oder ihr Umsetzungsstatus ist dort nicht nachvollziehbar: {shown}."
                     ),
                 })
-            if not_implemented:
-                shown = list_requirement_ids([self._measure_label(m, e) for m, e in not_implemented], self.MAX_LISTED_REQUIREMENTS)
+            if open_items:
+                shown = list_requirement_ids([self._measure_label(m, e) for m, e in open_items], self.MAX_LISTED_REQUIREMENTS)
                 findings.append({
                     "category": "AG",
                     "description": (
-                        f"{len(not_implemented)} zusätzliche Maßnahmen aus der Risikoanalyse sind im IT-Grundschutz-Check "
+                        f"{len(open_items)} zusätzliche Maßnahmen aus der Risikoanalyse sind im IT-Grundschutz-Check "
                         f"nicht als umgesetzt gekennzeichnet: {shown}."
+                    ),
+                })
+            if dispensable:
+                shown = list_requirement_ids([self._measure_label(m, e) for m, e in dispensable], self.MAX_LISTED_REQUIREMENTS)
+                findings.append({
+                    "category": "AG",
+                    "description": (
+                        f"{len(dispensable)} zusätzliche Maßnahmen aus der Risikoanalyse sind im IT-Grundschutz-Check für "
+                        f"einzelne Zielobjekte als 'entbehrlich' gekennzeichnet, obwohl die Risikoanalyse sie als Maßnahme "
+                        f"festlegt; Risikoanalyse (A.5) und Grundschutz-Check (A.4) widersprechen sich hier, die Begründungen "
+                        f"sind zu prüfen: {shown}."
                     ),
                 })
         elif selected_measures:
@@ -582,11 +631,14 @@ class Chapter5Runner:
                 ),
             })
 
-        # Q4: offene zusätzliche Maßnahmen im A.6?
+        # Q4: offene zusätzliche Maßnahmen im A.6? One item per open A.4 entry.
         unmet = [
-            dict(m, umsetzungsstatus_laut_a4=normalize_status(e.get("umsetzungsstatus")), anforderung_id_a4=e.get("id"),
-                 umsetzungserlaeuterung_a4=e.get("umsetzungserlaeuterung") or "")
-            for m, e in matched if normalize_status(e.get("umsetzungsstatus")) in (STATUS_NEIN, STATUS_TEILWEISE)
+            {
+                "anforderung_id": e.get("id"), "massnahme": m.get("bezeichnung"), "fundstelle_risikoanalyse": m.get("fundstelle"),
+                "zielobjekt_kuerzel": e.get("zielobjekt_kuerzel"), "zielobjekt_name": e.get("zielobjekt_name"),
+                "umsetzungsstatus_laut_a4": self._status_of(e), "umsetzungserlaeuterung_a4": e.get("umsetzungserlaeuterung") or "",
+            }
+            for m, entries in open_items for e in entries
         ]
         realisierungsplan_uris = self.rag_client.get_gcs_uris_for_categories(["Realisierungsplan"]) if self.rag_client else []
         if unmet and realisierungsplan_uris and self.ai_client:

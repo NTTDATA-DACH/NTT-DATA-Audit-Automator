@@ -180,9 +180,12 @@ def test_open_and_missing_measures_are_findings_and_the_open_ones_go_to_the_a6_c
     missing = next(t for t in texts if "nicht auffindbar" in t)
     assert "DDoS-Abwehr (WEB-01)" in missing and "1 zusätzliche" in missing
     open_ = next(t for t in texts if "nicht als umgesetzt gekennzeichnet" in t)
-    assert "Datenbankverschlüsselung (SVR-01; A.4 SYS.1.1.A30: teilweise)" in open_
-    assert "Zusätzliche Härtung (SVR-01; A.4 RA.1.A1: Nein)" in open_
-    assert "Sandbox (MAIL-01; A.4 RA.1.A4: entbehrlich)" in open_
+    assert "Datenbankverschlüsselung (SVR-01: teilweise)" in open_
+    assert "Zusätzliche Härtung (SVR-01: Nein)" in open_
+    assert "Sandbox" not in open_
+    # 'entbehrlich' contradicts the Risikoanalyse and is its own Feststellung.
+    dispensable = next(t for t in texts if "als 'entbehrlich' gekennzeichnet" in t)
+    assert "Sandbox (MAIL-01: entbehrlich)" in dispensable
     assert all(f["category"] == "AG" for f in _findings(block))
     # Only Nein/teilweise go to the Realisierungsplan; entbehrlich is not open.
     q4 = [r for r in ai.requests if r["log"] == "5.6.1-Q4"]
@@ -225,7 +228,7 @@ def test_without_a_risikoanalyse_the_a4_requirements_outside_the_kompendium_stan
 
     assert block["answers"] == [True, None, False, False]
     texts = [f["description"] for f in _findings(block)]
-    assert any("Zusätzliche Härtung (SVR-01; A.4 RA.1.A1: Nein)" in t for t in texts)
+    assert any("Zusätzliche Härtung (SVR-01: Nein)" in t for t in texts)
     assert not any("nicht auffindbar" in t or "erhöhtem Schutzbedarf (H)" in t for t in texts)
 
 
@@ -288,5 +291,57 @@ def test_a_quoted_requirement_id_wins_and_the_zielobjekt_breaks_ties(catalog):
     _, rows = _run(runner, plan, extracted)
 
     # Row 1: ID quoted, Zielobjekt named by its name; row 2: title match narrowed by Kürzel;
-    # row 3: two candidates, the Zielobjekt resolves none of them → no entry taken.
-    assert [r["bewertung"] for r in rows] == ["Umgesetzt", "Nicht umgesetzt", ""]
+    # row 3: the Zielobjekt resolves neither, so the one requirement is shown on both objects.
+    assert [r["bewertung"] for r in rows] == ["Umgesetzt", "Nicht umgesetzt", "Teilweise umgesetzt"]
+    assert "für 2 Zielobjekte" in rows[2]["dokuAntragsteller"]
+
+
+# ---------------------------------------------------------------- Verbund-level Risikoanalyse
+def test_a_measure_for_the_whole_verbund_is_checked_on_every_zielobjekt_that_carries_it(catalog):
+    """The real Risikoanalyse names the Informationsverbund for every measure. SYS.1.1.A30 then
+    applies to each server with that Baustein; the A.4 holds one status per server."""
+    ai = _FakeAiClient([_measure("SYS.1.1.A30 Einsatz von Verschlüsselung", zielobjekt="Hauptsitz", anforderung_id="SYS.1.1.A30")])
+    runner = _runner(catalog, _FakeRagClient(RA_DOCS), ai)
+    extracted = dict([
+        _entry("SYS.1.1.A30", "SVR-01", "Ja", titel="Einsatz von Verschlüsselung"),
+        _entry("SYS.1.1.A30", "SVR-02", "teilweise", titel="Einsatz von Verschlüsselung", erlaeuterung="Nur Backups."),
+        _entry("SYS.1.1.A30", "SVR-03", "Ja", titel="Einsatz von Verschlüsselung"),
+    ])
+
+    block, rows = _run(runner, _chapter_4(("SYS.1.1.A30 Einsatz von Verschlüsselung", "Hauptsitz")), extracted)
+
+    assert block["answers"][2] is False
+    texts = [f["description"] for f in _findings(block)]
+    assert not any("nicht auffindbar" in t for t in texts)
+    open_ = next(t for t in texts if "nicht als umgesetzt gekennzeichnet" in t)
+    assert "1 zusätzliche" in open_ and "(SVR-02: teilweise)" in open_ and "SVR-01" not in open_
+    # Only the open server goes to the A.6 check, with its Zielobjekt.
+    q4 = [r for r in ai.requests if r["log"] == "5.6.1-Q4"]
+    assert len(q4) == 1 and "SVR-02" in q4[0]["prompt"] and "SVR-01" not in q4[0]["prompt"]
+    # 5.6.2 shows one block per Zielobjekt and the aggregated verdict.
+    assert rows[0]["bewertung"] == "Teilweise umgesetzt"
+    assert rows[0]["dokuAntragsteller"].startswith("Anforderung SYS.1.1.A30 im Grundschutz-Check für 3 Zielobjekte: Einsatz von Verschlüsselung\n")
+    assert "- SVR-02: teilweise. Nur Backups." in rows[0]["dokuAntragsteller"]
+    assert "- SVR-01: Ja." in rows[0]["dokuAntragsteller"]
+
+
+def test_a_measure_implemented_on_every_zielobjekt_is_fine(catalog):
+    ai = _FakeAiClient([_measure("SYS.1.1.A30 Einsatz von Verschlüsselung", zielobjekt="Hauptsitz", anforderung_id="SYS.1.1.A30")])
+    runner = _runner(catalog, _FakeRagClient(RA_DOCS), ai)
+    extracted = dict([_entry("SYS.1.1.A30", "SVR-01", "Ja"), _entry("SYS.1.1.A30", "SVR-02", "Ja")])
+
+    block, rows = _run(runner, _chapter_4(("SYS.1.1.A30 Einsatz von Verschlüsselung", "Hauptsitz")), extracted)
+
+    assert block["answers"] == [True, None, True, True]
+    assert _findings(block)[0]["category"] == "OK"
+    assert rows[0]["bewertung"] == "Umgesetzt"
+
+
+def test_wording_matches_on_different_requirements_stay_unmatched(catalog):
+    runner = _runner(catalog)
+    extracted = dict([
+        _entry("RA.1.A1", "SVR-01", "Ja", titel="Verschlüsselung"),
+        _entry("RA.2.A1", "SVR-02", "Nein", titel="Verschlüsselung"),
+    ])
+    _, rows = _run(runner, _chapter_4(("Verschlüsselung", "Mail-Gateway")), extracted)
+    assert rows[0]["bewertung"] == ""
