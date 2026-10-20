@@ -29,7 +29,8 @@ bsi-audit-automator/
 │   │       ├── stage_3_dokumentenpruefung.py
 │   │       ├── stage_4_pruefplan.py
 │   │       ├── stage_5_vor_ort_audit.py
-│   │       └── stage_7_anhang.py
+│   │       ├── stage_7_anhang.py
+│   │       └── targeted_questions.py # Shared by stages 3 and 5: records a targeted model answer, packs the Feststellungen of a question block.
 │   │   └── async_utils.py      # gather_resilient: concurrency that drops failures instead of the run.
 │   │
 │   ├── tools/                  # Build-time only, never imported at runtime.

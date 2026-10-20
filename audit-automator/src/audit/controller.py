@@ -49,7 +49,7 @@ class AuditController:
             "Chapter-1": (self.config, self.ai_client, self.rag_client),
             "Chapter-3": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-4": (self.config, self.gcs_client, self.ai_client, self.rag_client),
-            "Chapter-5": (self.config, self.gcs_client),
+            "Chapter-5": (self.config, self.gcs_client, self.ai_client, self.rag_client),
             "Chapter-7": (self.config, self.gcs_client),
         }
         logging.info("Audit Controller initialized with lazy stage loading and findings collector.")

@@ -242,26 +242,7 @@ class ReportGenerator:
             target_path = key_to_path_map.get(subchapter_key)
             if not target_path: continue
 
-            texts = []
-            if isinstance(result.get('finding'), dict):
-                texts.append(self._finding_text(result['finding']))
-            texts.extend(self._finding_text(f) for f in result.get('findings') or [] if isinstance(f, dict))
-            if texts:
-                # No padding: a section without a Feststellung slot (3.4.7 in the Muster) must not
-                # grow an empty prose item; its finding still reaches chapter 7.2.
-                finding_list = self._ensure_list_path_exists(report, f"{target_path}.content", min_length=0)
-                if finding_list:
-                    self._write_finding_items(finding_list, texts)
-            
-            if "answers" in result:
-                answers = result.get("answers", [])
-                content_list = self._ensure_list_path_exists(report, f"{target_path}.content", len(answers))
-                if content_list:
-                    answer_idx = 0
-                    for item in content_list:
-                        if item.get("type") == "question":
-                            if answer_idx < len(answers):
-                                item["answer"] = answers[answer_idx]; answer_idx += 1
+            self._apply_findings_and_answers(report, target_path, result)
 
             if "votum" in result:
                 content_list = self._ensure_list_path_exists(report, f"{target_path}.content")
@@ -271,6 +252,33 @@ class ReportGenerator:
             
             if "table" in result and isinstance(result.get("table"), dict):
                 self._set_value_by_path(report, f"{target_path}.table.rows", result['table'].get('rows', []))
+
+    def _apply_findings_and_answers(self, report: dict, target_path: str, result: Dict[str, Any]) -> None:
+        """Writes a stage's Feststellungen and Ja/Nein answers into a section's `content` list.
+
+        Chapters 3 and 5 answer question blocks the same way (a list of answers in the order
+        of the Muster's questions, plus `finding` or `findings`), so one writer serves both.
+        """
+        texts = []
+        if isinstance(result.get('finding'), dict):
+            texts.append(self._finding_text(result['finding']))
+        texts.extend(self._finding_text(f) for f in result.get('findings') or [] if isinstance(f, dict))
+        if texts:
+            # No padding: a section without a Feststellung slot (3.4.7 in the Muster) must not
+            # grow an empty prose item; its finding still reaches chapter 7.2.
+            finding_list = self._ensure_list_path_exists(report, f"{target_path}.content", min_length=0)
+            if finding_list:
+                self._write_finding_items(finding_list, texts)
+
+        if "answers" in result:
+            answers = result.get("answers", [])
+            content_list = self._ensure_list_path_exists(report, f"{target_path}.content", len(answers))
+            if content_list:
+                answer_idx = 0
+                for item in content_list:
+                    if item.get("type") == "question":
+                        if answer_idx < len(answers):
+                            item["answer"] = answers[answer_idx]; answer_idx += 1
 
     @staticmethod
     def _finding_text(finding: Dict[str, Any]) -> str:
@@ -399,6 +407,12 @@ class ReportGenerator:
             data = stage_data["risikoanalyseA5"]
             path = "bsiAuditReport.vorOrtAudit.risikoanalyseA5.einzelergebnisseDerRisikoanalyse.massnahmenPruefungen"
             self._set_value_by_path(report, path, data.get("einzelergebnisseDerRisikoanalyse", {}).get("massnahmenPruefungen", []))
+            # 5.6.1: the answers computed from the A.4 and their Feststellungen.
+            if isinstance(data.get("zusammenfassungDerRisikoanalyse"), dict):
+                self._apply_findings_and_answers(
+                    report, "bsiAuditReport.vorOrtAudit.risikoanalyseA5.zusammenfassungDerRisikoanalyse",
+                    data["zusammenfassungDerRisikoanalyse"],
+                )
 
     def _populate_chapter_7(self, report: dict, stage_data: dict) -> None:
         """Populates Chapter 7 (Anhang) content into the report."""
