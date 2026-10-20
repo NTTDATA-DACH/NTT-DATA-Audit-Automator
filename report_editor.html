@@ -139,6 +139,25 @@
             font-size: 1.8em;
         }
         #controls { display: flex; align-items: center; gap: 15px; }
+        .finalize-status { font-size: 0.85em; color: #555; }
+        /* Finalizer protocol: the stage's decisions next to the rows and items they concern. */
+        .finalizer-panel { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 5px solid var(--secondary-color); border-radius: 8px; padding: 15px 20px; margin-bottom: 25px; }
+        .finalizer-panel h2 { margin-top: 0; color: var(--primary-color); font-size: 1.3em; }
+        .finalizer-panel summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+        .finalizer-decision { border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 0.9em; }
+        .finalizer-decision.fz-manual { border-left: 4px solid #e08a00; background: #fff8ec; }
+        .finalizer-decision.fz-applied { border-left: 4px solid #2e8b57; }
+        .finalizer-decision.fz-other { border-left: 4px solid #999; color: #555; }
+        .finalizer-decision .fz-ids a { font-weight: 600; margin-right: 6px; color: var(--secondary-color); text-decoration: none; }
+        .finalizer-decision .fz-ids a:hover { text-decoration: underline; }
+        .finalizer-decision ul { margin: 4px 0 0 0; padding-left: 18px; }
+        .fz-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 0.8em; font-weight: 600; margin-right: 6px; color: #fff; background: #999; }
+        .fz-badge.fz-manual { background: #e08a00; }
+        .fz-badge.fz-applied { background: #2e8b57; }
+        .finalizer-note { font-size: 0.8em; color: #444; background: #f1f5fb; border-left: 3px solid var(--secondary-color); padding: 4px 6px; margin-top: 4px; white-space: normal; }
+        .finalizer-note.fz-manual { background: #fff8ec; border-left-color: #e08a00; }
+        .finalizer-note a { color: var(--secondary-color); text-decoration: none; }
+        tr.fz-highlight > td { background: #fff3d6; }
         #controls button, #controls input[type="file"]::file-selector-button {
             background-color: var(--button-bg);
             color: white;
@@ -302,14 +321,15 @@
         <header>
             <h1>BSI Audit Report Editor</h1>
             <div id="controls">
-                <input type="file" id="json-file-input" accept=".json">
+                <input type="file" id="json-file-input" accept=".json" multiple>
                 <button id="export-json-button" disabled>Export to JSON</button>
+                <span id="finalize-status" class="finalize-status"></span>
             </div>
         </header>
 
         <div class="container">
             <div id="report-container">
-                <p id="initial-message">Load your <code>final_audit_report.json</code> or <code>master_report_template.json</code> to begin.</p>
+                <p id="initial-message">Load your <code>report_YYMMDD.json</code> (or <code>_final.json</code>) to begin. Add the matching <code>report_YYMMDD_finalize_log.json</code> (same or second pick) to see what the final stage merged, closed and left for you to judge.</p>
             </div>
         </div>
     </main>
@@ -324,6 +344,7 @@
         const initialMessage = document.getElementById('initial-message');
 
         let reportData = null;
+        let finalizeLog = null;   // the final stage's decision log, loaded next to the report
         let findingInputTimeout = null;
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -355,24 +376,52 @@
         });
 
         function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    reportData = JSON.parse(e.target.result);
-                    initialMessage.style.display = 'none';
-                    renderReport(reportData);
-                    createSidebarNav(reportData);
-                    exportButton.disabled = false;
-                } catch (error) {
-                    alert('Error parsing JSON file: ' + error.message);
-                }
-            };
-            reader.readAsText(file);
+            const files = Array.from(event.target.files || []);
+            if (!files.length) return;
+            // Either file may come first, alone or together: the content decides what it is.
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    let data;
+                    try {
+                        data = JSON.parse(e.target.result);
+                    } catch (error) {
+                        alert(`Error parsing ${file.name}: ${error.message}`);
+                        return;
+                    }
+                    if (data && data.bsiAuditReport) {
+                        reportData = data;
+                    } else if (data && data.stage === 'Finalize-Report' && Array.isArray(data.decisions)) {
+                        finalizeLog = data;
+                        finalizeLog._fileName = file.name;
+                    } else {
+                        alert(`${file.name} is neither an audit report (bsiAuditReport) nor a finalize log (stage "Finalize-Report").`);
+                        return;
+                    }
+                    refreshView();
+                };
+                reader.readAsText(file);
+            });
+            event.target.value = '';
         }
-        
+
+        function refreshView() {
+            const status = document.getElementById('finalize-status');
+            if (finalizeLog) {
+                const c = finalizeLog.counts || {};
+                const manual = (c.groups_below_threshold || 0) + (c.groups_guarded || 0);
+                status.textContent = `Finalize-Log ${finalizeLog._fileName || ''}: ${c.groups_applied || 0} Gruppen angewendet, ${manual} manuell zu prüfen, ${c.previous_closed_not_refound || 0} alte Feststellungen geschlossen`;
+            } else {
+                status.textContent = '';
+            }
+            if (!reportData) return;
+            syncUiToData();  // keep edits made before a second file arrived
+            initialMessage.style.display = 'none';
+            renderReport(reportData);
+            createSidebarNav(reportData);
+            exportButton.disabled = false;
+        }
+
         function syncUiToData() {
             if (!reportData) return;
             const inputs = reportContainer.querySelectorAll('[data-path]');
@@ -477,6 +526,7 @@
             const report = data.bsiAuditReport;
             if (!report) return;
 
+            if (finalizeLog) reportContainer.appendChild(renderFinalizerPanel());
             for (const key in report) {
                 const chapterData = report[key];
                 if (typeof chapterData === 'object' && chapterData !== null) {
@@ -536,6 +586,8 @@
                         itemDiv.appendChild(createSelect(item.questionText, item.answer, `${itemPath}.answer`));
                     } else if (item.type === 'finding') {
                         itemDiv.appendChild(createTextArea(item.label, item.findingText, `${itemPath}.findingText`));
+                        const note = finalizerNoteForChapterItem(itemPath);
+                        if (note) itemDiv.appendChild(note);
                     } else if (item.type === 'prose') {
                         itemDiv.appendChild(createTextArea(item.label, item.text, `${itemPath}.text`));
                     }
@@ -673,6 +725,9 @@
                 tableData.rows.forEach((rowData, rowIndex) => {
                     const row = tbody.insertRow();
                     const rowPath = `${path}.rows[${rowIndex}]`;
+                    const isFindingsTable = path.includes('abweichungenUndEmpfehlungen');
+                    const nummer = isFindingsTable ? String(rowData['Nummer'] || '').trim() : '';
+                    if (nummer) row.id = `finding-${nummer}`;
                     tableData.headers.forEach(header => {
                         const cell = row.insertCell();
                         const cellPath = `${rowPath}.${header}`;
@@ -680,6 +735,9 @@
                         input.dataset.path = cellPath;
                         input.value = getValueByPath(reportData, cellPath) || '';
                         cell.appendChild(input);
+                        if (header === 'Nummer' && nummer && finalizeLog) {
+                            finalizerNotesForRow(nummer).forEach(note => cell.appendChild(note));
+                        }
                     });
                     if (isEditable) {
                         const actionCell = row.insertCell();
@@ -860,6 +918,180 @@
             return container;
         }
 
+
+        // ------------------------------------------------------------ finalizer protocol
+        // The final stage logs every duplicate group (applied, left for manual review, rejected),
+        // the previous findings it closed and where it wrote the final numbers into the chapters.
+        // Decisions name the findings by the Nummer they had before renumbering; `renumbering`
+        // maps those keys to the Nummer the final report shows.
+        function finalIdOf(key) {
+            const raw = String(key || '');
+            if (finalizeLog && finalizeLog.renumbering && finalizeLog.renumbering[raw]) return finalizeLog.renumbering[raw];
+            return raw.split('#')[0];
+        }
+
+        function decisionClass(decision) {
+            const status = String(decision.status || '');
+            if (status.startsWith('manuell')) return 'fz-manual';
+            if (status.startsWith('angewendet')) return 'fz-applied';
+            return 'fz-other';
+        }
+
+        function decisionsForNummer(nummer) {
+            return (finalizeLog.decisions || []).filter(d => (d.ids || []).some(id => finalIdOf(id) === nummer));
+        }
+
+        function idLinks(ids, highlight) {
+            const span = document.createElement('span');
+            span.className = 'fz-ids';
+            (ids || []).forEach(id => {
+                const finalId = finalIdOf(id);
+                const a = document.createElement('a');
+                a.href = `#finding-${finalId}`;
+                a.textContent = finalId === id ? id : `${id} → ${finalId}`;
+                if (highlight && finalIdOf(highlight) === finalId) a.textContent += ' (behalten)';
+                a.addEventListener('click', () => {
+                    document.querySelectorAll('tr.fz-highlight').forEach(tr => tr.classList.remove('fz-highlight'));
+                    const target = document.getElementById(`finding-${finalId}`);
+                    if (target) target.classList.add('fz-highlight');
+                });
+                span.appendChild(a);
+            });
+            return span;
+        }
+
+        function renderDecision(decision) {
+            const div = document.createElement('div');
+            div.className = `finalizer-decision ${decisionClass(decision)}`;
+            const head = document.createElement('div');
+            const badge = document.createElement('span');
+            badge.className = `fz-badge ${decisionClass(decision)}`;
+            badge.textContent = decision.status || '';
+            head.appendChild(badge);
+            head.appendChild(idLinks(decision.ids, decision.behalten));
+            const meta = document.createElement('span');
+            const konfidenz = typeof decision.konfidenz === 'number' ? ` · Konfidenz ${decision.konfidenz.toFixed(2)}` : '';
+            meta.textContent = ` · ${decision.quelle || ''}${konfidenz}`;
+            head.appendChild(meta);
+            div.appendChild(head);
+            if (decision.begruendung) {
+                const p = document.createElement('div');
+                p.textContent = decision.begruendung;
+                div.appendChild(p);
+            }
+            if (Array.isArray(decision.wirkung) && decision.wirkung.length) {
+                const ul = document.createElement('ul');
+                decision.wirkung.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); });
+                div.appendChild(ul);
+            }
+            return div;
+        }
+
+        function renderDecisionGroup(title, decisions, open) {
+            const details = document.createElement('details');
+            details.open = open;
+            const summary = document.createElement('summary');
+            summary.textContent = `${title} (${decisions.length})`;
+            details.appendChild(summary);
+            if (!decisions.length) {
+                const p = document.createElement('p');
+                p.className = 'description';
+                p.textContent = 'keine';
+                details.appendChild(p);
+            }
+            decisions.forEach(d => details.appendChild(renderDecision(d)));
+            return details;
+        }
+
+        function renderFinalizerPanel() {
+            const panel = document.createElement('div');
+            panel.className = 'finalizer-panel';
+            const c = finalizeLog.counts || {};
+            const h2 = document.createElement('h2');
+            h2.textContent = 'Finalize-Protokoll';
+            panel.appendChild(h2);
+            const intro = document.createElement('p');
+            intro.className = 'description';
+            intro.textContent = `${finalizeLog.input || ''} → ${finalizeLog.output || ''}: ${c.findings || 0} Feststellungen (${c.previous || 0} aus dem vorherigen Audit, ${c.new || 0} neu), `
+                + `Konfidenzschwelle ${finalizeLog.confidence_threshold}, höchstens ${finalizeLog.max_new_per_group || '–'} neue Feststellungen je Gruppe, Gruppen aus ${finalizeLog.groups_source || ''}.`;
+            panel.appendChild(intro);
+
+            const decisions = finalizeLog.decisions || [];
+            const manual = decisions.filter(d => decisionClass(d) === 'fz-manual');
+            const applied = decisions.filter(d => decisionClass(d) === 'fz-applied');
+            const other = decisions.filter(d => decisionClass(d) === 'fz-other');
+            panel.appendChild(renderDecisionGroup('Manuell zu prüfen: Gruppen, die der Finalizer nicht angewendet hat', manual, true));
+            panel.appendChild(renderDecisionGroup('Angewendete Gruppen', applied, manual.length === 0));
+            panel.appendChild(renderDecisionGroup('Verworfene und übersprungene Gruppen', other, false));
+
+            const closed = finalizeLog.closed_not_refound || [];
+            const closedDetails = document.createElement('details');
+            const closedSummary = document.createElement('summary');
+            closedSummary.textContent = `Geschlossen, weil die Dokumentenprüfung sie nicht erneut festgestellt hat (${closed.length})`;
+            closedDetails.appendChild(closedSummary);
+            const closedDiv = document.createElement('div');
+            closedDiv.className = 'finalizer-decision fz-other';
+            closedDiv.appendChild(idLinks(closed));
+            closedDetails.appendChild(closedDiv);
+            panel.appendChild(closedDetails);
+
+            const unmatched = finalizeLog.chapter_unmatched || [];
+            if (unmatched.length) {
+                const div = document.createElement('div');
+                div.className = 'finalizer-decision fz-manual';
+                div.textContent = `Feststellungen in den Kapiteln ohne Zeile in 7.2 (Nummer offen): ${unmatched.join(', ')}`;
+                panel.appendChild(div);
+            }
+            return panel;
+        }
+
+        function finalizerNotesForRow(nummer) {
+            const notes = [];
+            decisionsForNummer(nummer).forEach(d => {
+                const note = document.createElement('div');
+                note.className = `finalizer-note ${decisionClass(d)}`;
+                const others = (d.ids || []).filter(id => finalIdOf(id) !== nummer);
+                note.textContent = `Finalizer: ${d.status} · Gruppe mit `;
+                note.appendChild(idLinks(others));
+                if (d.behalten && finalIdOf(d.behalten) !== nummer) {
+                    const kept = document.createElement('span');
+                    kept.textContent = ` · behalten: ${finalIdOf(d.behalten)}`;
+                    note.appendChild(kept);
+                }
+                if (d.begruendung) {
+                    const why = document.createElement('div');
+                    why.textContent = d.begruendung;
+                    note.appendChild(why);
+                }
+                notes.push(note);
+            });
+            if ((finalizeLog.closed_not_refound || []).some(key => finalIdOf(key) === nummer)) {
+                const note = document.createElement('div');
+                note.className = 'finalizer-note';
+                note.textContent = 'Finalizer: geschlossen, die Dokumentenprüfung hat diese Feststellung nicht erneut getroffen.';
+                notes.push(note);
+            }
+            return notes;
+        }
+
+        function finalizerNoteForChapterItem(itemPath) {
+            if (!finalizeLog) return null;
+            const ref = (finalizeLog.chapter_references || []).find(r => r.path === itemPath);
+            if (ref) {
+                const note = document.createElement('div');
+                note.className = 'finalizer-note';
+                note.textContent = `Finalizer: Nummer ${ref.final_id} vergeben (Zuordnung ${ref.match}${ref.finding !== ref.final_id ? `, vorher ${ref.finding}` : ''}) `;
+                note.appendChild(idLinks([ref.final_id]));
+                return note;
+            }
+            if ((finalizeLog.chapter_unmatched || []).includes(itemPath)) {
+                const note = document.createElement('div');
+                note.className = 'finalizer-note fz-manual';
+                note.textContent = 'Finalizer: keine Zeile in 7.2 passt zu dieser Feststellung; die Nummer ist offen.';
+                return note;
+            }
+            return null;
+        }
 
         function handleAddRow(button) {
             syncUiToData();
