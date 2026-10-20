@@ -15,6 +15,7 @@ pytest.importorskip("google.genai")
 pytest.importorskip("fitz")
 openpyxl = pytest.importorskip("openpyxl")
 
+from src.audit.stages.gs_extraction.sheet_parser import SHEET_PARSER_VERSION
 from src.audit.stages.stage_gs_check_extraction import GrundschutzCheckExtractionRunner
 from src.constants import EXTRACTED_CHECK_DATA_PATH
 
@@ -38,6 +39,9 @@ class FakeGcs:
 
     def blob_exists(self, name):
         return name in self.uploads
+
+    def read_json(self, name):
+        return json.loads(self.uploads[name])
 
     def download_blob_as_bytes(self, blob):
         return self.files[blob]
@@ -95,6 +99,11 @@ def test_spreadsheet_replaces_the_pdf_path():
     assert entry["zielobjekt_kuerzel"] == "S001"  # "Fileserver" matched the system map by name
     assert entry["umsetzungsstatus"] == "Ja"
     assert entry["datumLetztePruefung"] == "2026-10-07"
+    # The Zielobjekt registry with the sheet's spellings as aliases, and the parser version.
+    [zielobjekt] = written["zielobjekte"]
+    assert zielobjekt["kuerzel"] == "S001" and set(zielobjekt["aliases"]) == {"Fileserver", "S001"}
+    assert written["kuerzel_kollisionen"] == {}
+    assert written["quelle"]["parser_version"] == SHEET_PARSER_VERSION
 
 
 def test_without_a_spreadsheet_the_pdf_path_runs():
@@ -112,3 +121,55 @@ def test_unparseable_spreadsheet_fails_the_stage_instead_of_passing_empty_data()
     with pytest.raises(ValueError, match="yielded no requirements"):
         asyncio.run(runner.run(force_overwrite=True))
     assert EXTRACTED_CHECK_DATA_PATH not in gcs.uploads
+
+
+SHEET_ROWS = [["Datum:", "07.10.2026"], ["Fileserver"], [None, "SYS.1.1", "Allgemeiner Server"],
+              [None, "SYS.1.1.A1", "Geeignete Aufstellung"], [None, "Umsetzungsstatus:", "Ja"]]
+
+
+def test_a_result_written_by_an_older_parser_version_is_reparsed_without_force():
+    gcs = FakeGcs({"source_documents/A.4.xlsx": _xlsx_bytes(SHEET_ROWS)})
+    gcs.uploads[EXTRACTED_CHECK_DATA_PATH] = json.dumps(
+        {"anforderungen": [], "quelle": {"verfahren": "spreadsheet-parser", "parser_version": SHEET_PARSER_VERSION - 1}}
+    )
+    runner, _ = _runner(gcs, FakeRag(["source_documents/A.4.xlsx"]))
+    asyncio.run(runner.run(force_overwrite=False))
+    written = json.loads(gcs.uploads[EXTRACTED_CHECK_DATA_PATH])
+    assert written["quelle"]["parser_version"] == SHEET_PARSER_VERSION
+    assert [a["id"] for a in written["anforderungen"]] == ["SYS.1.1.A1"]
+
+
+def test_a_result_of_the_current_parser_version_is_reused_without_force():
+    gcs = FakeGcs({"source_documents/A.4.xlsx": _xlsx_bytes(SHEET_ROWS)})
+    stored = json.dumps({"anforderungen": [{"id": "ALT"}], "quelle": {"verfahren": "spreadsheet-parser", "parser_version": SHEET_PARSER_VERSION}})
+    gcs.uploads[EXTRACTED_CHECK_DATA_PATH] = stored
+    runner, _ = _runner(gcs, FakeRag(["source_documents/A.4.xlsx"]))
+    asyncio.run(runner.run(force_overwrite=False))
+    assert gcs.uploads[EXTRACTED_CHECK_DATA_PATH] == stored
+
+
+def test_requirements_lost_in_deduplication_are_reported(monkeypatch, caplog):
+    import logging
+    from src.audit.stages import stage_gs_check_extraction as module
+
+    rows = SHEET_ROWS + [[None, "SYS.1.1.A2", "Zutritt"], [None, "Umsetzungsstatus:", "Ja"]]
+    gcs = FakeGcs({"source_documents/A.4.xlsx": _xlsx_bytes(rows)})
+    runner, _ = _runner(gcs, FakeRag(["source_documents/A.4.xlsx"]))
+    # A sheet yields one row per (requirement, Zielobjekt); anything the dedup removes means
+    # two Zielobjekte collapsed. Simulate that collapse to pin the warning.
+    monkeypatch.setattr(module.DataProcessor, "deduplicate_requirements", staticmethod(lambda items: items[:-1]))
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(runner.run(force_overwrite=True))
+    assert "Deduplication removed 1 of 2" in caplog.text
+
+
+def test_controller_skip_check_knows_about_the_parser_version():
+    gcs = FakeGcs({})
+    assert GrundschutzCheckExtractionRunner.is_extraction_current(gcs) is False  # nothing stored yet
+    gcs.uploads["output/intermediate/gs_extraction/system_structure_map.json"] = "{}"
+    gcs.uploads[EXTRACTED_CHECK_DATA_PATH] = json.dumps({"quelle": {"verfahren": "spreadsheet-parser"}})  # pre-versioned
+    assert GrundschutzCheckExtractionRunner.is_extraction_current(gcs) is False
+    gcs.uploads[EXTRACTED_CHECK_DATA_PATH] = json.dumps({"quelle": {"verfahren": "spreadsheet-parser", "parser_version": SHEET_PARSER_VERSION}})
+    assert GrundschutzCheckExtractionRunner.is_extraction_current(gcs) is True
+    gcs.uploads[EXTRACTED_CHECK_DATA_PATH] = json.dumps({"quelle": {"verfahren": "document-ai"}})  # the PDF path has no version
+    assert GrundschutzCheckExtractionRunner.is_extraction_current(gcs) is True

@@ -16,11 +16,13 @@ bsi-audit-automator/
 │   │   ├── controller.py       # Orchestrates all audit stages, manages state, and collects findings.
 │   │   ├── report_generator.py # Assembles the final report from stage outputs and collected findings.
 │   │   ├── report_finalizer.py # Final stage over the (edited) report: duplicate findings, final numbers, chapter references.
+│   │   ├── staleness.py        # Warns when a reused stage result is older than the intermediate files it was computed from.
 │   │   └── stages/             # Contains the specific business logic for each audit stage/chapter.
 │   │       ├── control_catalog.py # Query layer over the official BSI Kompendium catalog.
 │   │       ├── stage_gs_check_extraction.py # Dedicated stage for Grundschutz-Check processing.
 │   │       ├── gs_extraction/  # Sub-pipeline of that stage (ground truth, Document AI, grouping, refiner,
 │   │       │                   # sheet_parser.py: the deterministic path for an A.4 delivered as spreadsheet,
+│   │       │                   # zielobjekt_index.py: resolves Kürzel, names and aliases of Zielobjekte to one canonical Kürzel,
 │   │       │                   # anforderung_fields.py: normalised Umsetzungsstatus and Prüfdatum for stages 3 and 5).
 │   │       ├── stage_previous_report_scan.py
 │   │       ├── stage_1_general.py
@@ -57,7 +59,7 @@ bsi-audit-automator/
     *   **`spreadsheet.py`**: Row reader for XLSX/XLSM/CSV (German Excel CSV defaults included) and the `render_sheet_text` used by `ai_client.py` to attach a spreadsheet as a text part.
 *   **`src/audit/controller.py`**: The main orchestrator of the audit. It defines the sequence of stages to run (starting with the extraction stage), manages resumability, and acts as the **central collector for all audit findings**.
 *   **`src/audit/stages/`**: Each module in this directory contains the business logic for a specific part of the audit.
-    *   `stage_gs_check_extraction.py`: A dedicated pre-processing stage. It implements the "Ground-Truth-Driven Semantic Chunking" strategy to create authoritative intermediate files (`system_structure_map.json` and `extracted_grundschutz_check_merged.json`) that are consumed by other stages.
+    *   `stage_gs_check_extraction.py`: A dedicated pre-processing stage. It implements the "Ground-Truth-Driven Semantic Chunking" strategy to create authoritative intermediate files (`system_structure_map.json` and `extracted_grundschutz_check_merged.json`) that are consumed by other stages. The spreadsheet path writes a `zielobjekte` registry into the extraction: Zielobjekte sharing a document Kürzel get the canonical Kürzel `<Kürzel> <Name>`, and `gs_extraction/zielobjekt_index.py` resolves any spelling (Kürzel, name, alias) to it for the coverage check in 3.6.1 and the lookups in 5.5.2.
     *   `control_catalog.py`: The query layer over `assets/json/bsi_kompendium_ed2023.json` — the official BSI IT-Grundschutz-Kompendium, Edition 2023, generated from the sha256-pinned BSI XML by `src/tools/build_bsi_catalog.py`. It answers "which requirements does this Baustein have", "what level (B/S/H) is this requirement" and "which are the Basis-Anforderungen (MUSS)". Requirements marked ENTFALLEN are never handed out, and Bausteine the institution defined itself are not in the catalog.
     *   The other `stage_X_...py` modules define the AI prompts, select appropriate schemas, call the `ai_client`, and return structured results. They rely on the `rag_client` for document context and, where applicable, the outputs from the extraction stage.
 *   **`src/audit/report_generator.py`**: This module is responsible for the final, deterministic assembly of the report. It populates the `master_report_template.json` by merging in the JSON results from each stage file and, critically, by reading the `all_findings.json` file to populate the categorized tables in Chapter 7.2.

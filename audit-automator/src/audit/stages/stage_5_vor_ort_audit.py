@@ -14,6 +14,7 @@ from src.audit.stages.gs_extraction.anforderung_fields import (
     STATUS_TEILWEISE,
     normalize_status,
 )
+from src.audit.stages.gs_extraction.zielobjekt_index import ZielobjektIndex
 from src.constants import EXTRACTED_CHECK_DATA_PATH, STAGE_RESULTS_PATH
 
 class Chapter5Runner:
@@ -47,6 +48,10 @@ class Chapter5Runner:
                 (item['id'], item['zielobjekt_kuerzel']): item 
                 for item in anforderungen_list if 'id' in item and 'zielobjekt_kuerzel' in item
             }
+            # The plan names Zielobjekte in the system map's spelling; the check may address the
+            # same object under its canonical Kürzel ("Firewall FW-01" for the map's "FW-01").
+            registry = data.get("zielobjekte")
+            self._zielobjekt_index = ZielobjektIndex(registry) if registry else ZielobjektIndex.from_anforderungen(anforderungen_list)
             logging.info(f"Successfully loaded and mapped {len(lookup_map)} unique requirement-object pairs for Chapter 5.")
             return lookup_map
         except NotFound:
@@ -88,6 +93,28 @@ class Chapter5Runner:
         ]
 
     NO_CHECK_ENTRY = "Keine spezifische Angabe für dieses Zielobjekt im Grundschutz-Check gefunden."
+
+    def _resolve_plan_kuerzel(self, kuerzel: Optional[str], extracted_data_map: Dict[Tuple[str, str], Dict[str, Any]]) -> Optional[str]:
+        """The Kürzel under which the extracted check knows the plan's Zielobjekt.
+
+        A Kürzel the check uses as is stays. Otherwise the plan's spelling (a map Kürzel, a
+        name, an alias) is resolved through the Zielobjekt index; one candidate is taken, several
+        are left alone with a warning, since guessing would show another object's answers.
+        """
+        index = getattr(self, "_zielobjekt_index", None)
+        if not kuerzel or index is None:
+            return kuerzel
+        known = {k for _, k in extracted_data_map}
+        if kuerzel in known:
+            return kuerzel
+        candidates = index.resolve(kuerzel) & known
+        if len(candidates) == 1:
+            resolved = next(iter(candidates))
+            logging.info(f"Audit plan Zielobjekt '{kuerzel}' is '{resolved}' in the Grundschutz-Check.")
+            return resolved
+        if candidates:
+            logging.warning(f"Audit plan Zielobjekt '{kuerzel}' is ambiguous in the Grundschutz-Check ({sorted(candidates)}); no entry taken.")
+        return kuerzel
 
     @staticmethod
     def _customer_documentation(extracted_details: Dict[str, Any], status: Optional[str]) -> str:
@@ -134,7 +161,7 @@ class Chapter5Runner:
             # --- ROBUSTNESS FIX (Task H) ---
             # Directly get the name and Kürzel from the plan. No more fragile name-based lookups.
             zielobjekt_name_from_plan = baustein_plan_item.get("Zielobjekt-Name")
-            planned_zielobjekt_kuerzel = baustein_plan_item.get("Zielobjekt-Kürzel")
+            planned_zielobjekt_kuerzel = self._resolve_plan_kuerzel(baustein_plan_item.get("Zielobjekt-Kürzel"), extracted_data_map)
 
             if not planned_zielobjekt_kuerzel:
                 logging.warning(f"Could not find 'Zielobjekt-Kürzel' in audit plan for Baustein '{baustein_id}'. Specific details for its controls will be missing.")

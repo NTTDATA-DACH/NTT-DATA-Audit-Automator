@@ -243,3 +243,54 @@ def test_a_failing_stage_reraises_its_own_error_even_if_saving_fails():
 
     with pytest.raises(ValueError, match="the real stage error"):
         asyncio.run(controller.run_single_stage("Chapter-1", force_overwrite=True))
+
+
+def test_a_findings_list_yields_one_row_per_finding():
+    """A section with several deficiencies lists them; each becomes its own numbered entry."""
+    gcs = _FakeGcsClient()
+    controller = _controller(gcs)
+    _install_stage(controller, "Chapter-3", {"detailsZumItGrundschutzCheck": {
+        "answers": [True],
+        "findings": [{"category": "AG", "description": "Zielobjekte fehlen"},
+                     {"category": "E", "description": "Kürzel nicht eindeutig"},
+                     {"category": "OK", "description": "nichts"}],
+    }})
+
+    asyncio.run(controller.run_single_stage("Chapter-3", force_overwrite=True))
+
+    stored = _stored_findings(gcs)
+    assert [(f["id"], f["description"], f["source_chapter"]) for f in stored] == [
+        ("AG-1", "Zielobjekte fehlen", "3"), ("E-1", "Kürzel nicht eindeutig", "3"),
+    ]
+
+
+def test_a_reused_stage_result_older_than_its_input_is_flagged(caplog):
+    import logging
+    from datetime import datetime, timezone
+
+    from src.constants import EXTRACTED_CHECK_DATA_PATH
+
+    result_path = STAGE_RESULTS_PATH.format(stage_name="Chapter-3")
+
+    class _GcsWithTimes(_FakeGcsClient):
+        def __init__(self, stored, updated):
+            super().__init__(stored)
+            self.updated = updated
+
+        def blob_updated(self, path):
+            return self.updated.get(path)
+
+    gcs = _GcsWithTimes({result_path: json.dumps({})}, {
+        result_path: datetime(2026, 10, 16, tzinfo=timezone.utc),
+        EXTRACTED_CHECK_DATA_PATH: datetime(2026, 10, 19, tzinfo=timezone.utc),
+    })
+    controller = _controller(gcs)
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(controller.run_single_stage("Chapter-3", force_overwrite=False))
+    assert "older than its input" in caplog.text and EXTRACTED_CHECK_DATA_PATH in caplog.text
+
+    caplog.clear()
+    gcs.updated[EXTRACTED_CHECK_DATA_PATH] = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(controller.run_single_stage("Chapter-3", force_overwrite=False))
+    assert "older than its input" not in caplog.text
