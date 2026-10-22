@@ -273,15 +273,19 @@ class Chapter3Runner:
         if collisions:
             listed = "; ".join(f"'{k}' ({len(v)} Zielobjekte: {', '.join(v)})" for k, v in sorted(collisions.items()))
             first_kuerzel, first_names = sorted(collisions.items())[0]
+            # A Kürzel that stands for several Zielobjekte violates the unique identification
+            # BSI-Standard 200-2 (Kap. 8.1) requires of the Strukturanalyse, and every later
+            # document inherits the ambiguity: an AG, not a recommendation.
             findings.append({
-                "category": "E",
+                "category": "AG",
                 "description": (
                     f"Die Zielobjekt-Kürzel {listed} sind in den Referenzdokumenten A.1, A.3 und A.4 nicht eindeutig: "
                     f"dasselbe Kürzel bezeichnet mehrere Zielobjekte, der eigentliche Bezeichner steht nur im Namen. "
-                    f"Die Anforderungen des IT-Grundschutz-Checks wurden diesen Zielobjekten über den Namen zugeordnet; "
-                    f"dieser Bericht adressiert sie als '<Kürzel> <Name>' (z. B. '{first_kuerzel} {first_names[0]}'). "
-                    f"Es wird empfohlen, in der Strukturanalyse eindeutige Kürzel zu vergeben und sie in Modellierung "
-                    f"und IT-Grundschutz-Check zu übernehmen."
+                    f"BSI-Standard 200-2 (Kapitel 8.1, Strukturanalyse) verlangt eine eindeutige Kennung je Zielobjekt, "
+                    f"die Modellierung und IT-Grundschutz-Check übernehmen. Die Anforderungen des IT-Grundschutz-Checks "
+                    f"wurden diesen Zielobjekten über den Namen zugeordnet; dieser Bericht adressiert sie als "
+                    f"'<Kürzel> <Name>' (z. B. '{first_kuerzel} {first_names[0]}'). In der Strukturanalyse sind eindeutige "
+                    f"Kürzel zu vergeben und in Modellierung und IT-Grundschutz-Check zu übernehmen."
                 ),
             })
             logging.warning(f"Zielobjekt Kürzel shared by several Zielobjekte: {listed}")

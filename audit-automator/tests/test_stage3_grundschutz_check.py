@@ -211,9 +211,9 @@ def test_mapped_kuerzel_that_resolves_through_the_name_counts_as_covered():
                     "baustein_to_zielobjekt_mapping": {"NET.3.2": ["FW-01", "FW-02"]}}
     result = _run(_runner_with_check(anforderungen, FW_REGISTRY, {"Firewall": ["FW-01", "FW-02"]}, ground_truth))
     assert not [f for f in _findings(result) if "keine Anforderungen" in f["description"]]
-    # The shared Kürzel is a data-quality finding of its own, an E, not a coverage gap.
+    # The shared Kürzel is a finding of its own (200-2 requires unique Kennungen), not a coverage gap.
     [collision] = [f for f in _findings(result) if "nicht eindeutig" in f["description"]]
-    assert collision["category"] == "E"
+    assert collision["category"] == "AG"
     assert "'Firewall' (2 Zielobjekte: FW-01, FW-02)" in collision["description"]
     assert "'Firewall FW-01'" in collision["description"]
 
@@ -228,7 +228,7 @@ def test_ambiguous_map_kuerzel_is_covered_when_any_candidate_has_requirements():
                     "baustein_to_zielobjekt_mapping": {"NET.1.1": ["GP"]}}
     result = _run(_runner_with_check(anforderungen, registry, ground_truth=ground_truth))
     assert not [f for f in _findings(result) if "keine Anforderungen" in f["description"]]
-    assert [f["category"] for f in _findings(result) if "nicht eindeutig" in f["description"]] == ["E"]
+    assert [f["category"] for f in _findings(result) if "nicht eindeutig" in f["description"]] == ["AG"]
 
 
 def test_unresolvable_mapped_kuerzel_is_reported_as_missing_with_its_name():
