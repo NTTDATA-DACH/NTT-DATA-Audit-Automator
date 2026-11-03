@@ -935,8 +935,10 @@
 
                     mBlock.appendChild(createReadOnlyField('Maßnahme', massnahme.massnahme));
                     mBlock.appendChild(createReadOnlyField('Zielobjekt', massnahme.zielobjekt));
-                    
-                    mBlock.appendChild(createInputField('Bewertung', massnahme.bewertung, 'text', `${mPath}.bewertung`));
+
+                    mBlock.appendChild(createChoiceField('Bewertung der Maßnahme', massnahme.bewertung, `${mPath}.bewertung`,
+                        ['Umgesetzt', 'Teilweise umgesetzt', 'Nicht umgesetzt', 'Entbehrlich', 'N/A']));
+                    mBlock.appendChild(createReadOnlyField('Dokumentation des Antragstellers zur Umsetzung', massnahme.dokuAntragsteller));
 
                     const pmGroup = document.createElement('div');
                     pmGroup.className = 'pruefmethode-group';
