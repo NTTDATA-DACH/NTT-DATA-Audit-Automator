@@ -170,6 +170,19 @@ def test_all_muss_requirements_met_answers_q3_true():
     assert _run(runner)["answers"][2] is True
 
 
+def test_an_entbehrlich_muss_requirement_is_not_an_unmet_muss():
+    """A Basis-Anforderung may be entbehrlich when its subject does not exist in the
+    Informationsverbund (e.g. no external ISB, so no contract with one); whether the
+    Begründung holds is Q2's plausibility check, not an automatic Q3 deviation."""
+    runner = _runner([_anforderung("ISMS.1.A5", "entbehrlich"), _anforderung("ORP.2.A5", "entbehrlich")])
+    runner.control_catalog.get_muss_control_ids = lambda: ["ISMS.1.A5", "ORP.2.A5"]
+
+    result = _run(runner)
+
+    assert result["answers"][2] is True
+    assert "Basis-Anforderungen (MUSS)" not in _text(result)
+
+
 def test_requirements_outside_the_official_catalog_are_named_in_the_report():
     """Custom Bausteine are not in the Kompendium, so no MUSS check covers them.
     Losing them silently would shrink the audited scope."""

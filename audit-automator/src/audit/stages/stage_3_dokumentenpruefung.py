@@ -164,15 +164,18 @@ class Chapter3Runner:
         # The catalog knows the Basis-Anforderungen and the extracted check carries each
         # status, so the answer is a filter, not a judgment. The model used to be asked the
         # question with exactly the unmet items as input, i.e. with the answer already fixed.
+        # A Basis-Anforderung marked 'entbehrlich' is no deviation by itself: a MUSS can be
+        # entbehrlich when its subject does not exist in the Informationsverbund; whether the
+        # Begründung holds is Q2's plausibility check, so it is not counted here again.
         muss_ids = set(self.control_catalog.get_muss_control_ids())
         unmet_muss: Dict[str, set] = {}
         for a in anforderungen:
-            if a.get("id") in muss_ids and a.get("umsetzungsstatus") != STATUS_JA:
+            if a.get("id") in muss_ids and a.get("umsetzungsstatus") not in (STATUS_JA, STATUS_ENTBEHRLICH):
                 unmet_muss.setdefault(a["id"], set()).add(str(a.get("umsetzungsstatus")))
         answers[2] = not unmet_muss
         logging.info(
             f"3.6.1-Q3: {sum(1 for a in anforderungen if a.get('id') in muss_ids)} MUSS requirements "
-            f"checked in code, {len(unmet_muss)} not 'Ja'; no model call."
+            f"checked in code, {len(unmet_muss)} neither 'Ja' nor 'entbehrlich'; no model call."
         )
         if unmet_muss:
             listed = [f"{rid} ({'/'.join(sorted(st))})" for rid, st in sorted(unmet_muss.items())]
