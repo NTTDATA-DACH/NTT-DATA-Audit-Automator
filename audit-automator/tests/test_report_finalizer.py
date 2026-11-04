@@ -459,3 +459,50 @@ def test_prompt_names_the_sammelfeststellung_and_neubewertung_rules():
     assert "andere Mängel benennen" in prompt
     assert "desselben Audits mit unterschiedlicher Kategorie" in prompt
     assert "Neubewertung" in prompt and "behalten ist dann immer die aktuelle Feststellung" in prompt
+
+
+def _behebung(report):
+    return report["bsiAuditReport"]["vorOrtAudit"]["behebungAbweichungen"]["content"]
+
+
+def _answers_5_3(report):
+    return {str(i.get("questionText"))[:30]: i.get("answer") for i in _behebung(report) if i.get("type") == "question"}
+
+
+def test_5_3_names_the_open_previous_deviation_and_answers_the_questions():
+    out, log, _, _ = _finalize(_report(), NO_GROUPS)
+    answers = list(_answers_5_3(out).values())
+    # previous findings exist; AG-85 is still open, the previous E-01 is closed
+    assert answers == [True, False, True]
+    [feststellung] = [i for i in _behebung(out) if i.get("type") == "finding"]
+    assert "AG-85" in feststellung["findingText"]
+    assert not feststellung["findingText"].startswith("[")  # never shaped like a chapter finding
+    assert log["counts"]["previous_open_deviations"] == 1
+    assert log["counts"]["previous_open_recommendations"] == 0
+
+
+def test_5_3_reports_all_clear_once_the_open_previous_finding_is_closed():
+    response = {"gruppen": [], "dokumentenpruefung_ids": ["AG-85"]}
+    out, log, _, _ = _finalize(_report(), response)
+    answers = list(_answers_5_3(out).values())
+    assert answers == [True, True, True]
+    [feststellung] = [i for i in _behebung(out) if i.get("type") == "finding"]
+    assert "behoben bzw. berücksichtigt" in feststellung["findingText"]
+    assert log["counts"]["previous_open_deviations"] == 0
+
+
+def test_5_4_first_question_follows_the_auflagen_table_and_bearbeitung_stays_open():
+    report = _report()
+    auflagen = report["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"]
+    auflagen["table"]["rows"] = [{"Nummer": "1", "Beschreibung der Auflage": "Härtungskonzept nachliefern", "Auflage erteilt am": "01.09.2020"}]
+    out, log, _, _ = _finalize(report, NO_GROUPS)
+    filled = out["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"]
+    assert [i["answer"] for i in filled["content"] if i.get("type") == "question"] == [True]
+    assert all(i.get("answer") is None for i in filled["bearbeitungAuflagen"]["content"] if i.get("type") == "question")
+    assert log["counts"]["auflagen_rows"] == 1
+
+
+def test_5_4_without_rows_stays_unanswered():
+    out, _, _, _ = _finalize(_report(), NO_GROUPS)
+    filled = out["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"]
+    assert [i["answer"] for i in filled["content"] if i.get("type") == "question"] == [None]

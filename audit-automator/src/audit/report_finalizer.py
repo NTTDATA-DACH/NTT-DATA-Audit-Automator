@@ -527,6 +527,73 @@ class ReportFinalizer:
                 walk(content, f"bsiAuditReport.{chapter}")
         return references, unmatched
 
+    # ------------------------------------------------------------------ chapters 5.3 / 5.4
+    MAX_LISTED_OPEN = 15
+
+    def _fill_behebung_und_auflagen(self, report: Dict[str, Any], findings: List[Finding],
+                                    findings_by_key: Dict[str, Finding]) -> Dict[str, int]:
+        """Answers 5.3 from the closure analysis and 5.4's first question from its table.
+
+        5.3: Q1 is whether the previous report carried findings at all, Q2 whether every
+        previous deviation (AG/AS) is closed by now, Q3 the same for recommendations (E).
+        Closure cannot attest the Frist was met, only that nothing stayed open; what is
+        still open is named in the Feststellung with its final number and status. The text
+        carries no [Kategorie] prefix, so _reference_chapters never takes it for a finding.
+        5.4's Bearbeitung questions need the on-site judgment and stay with the auditor.
+        """
+        voa = report.get("bsiAuditReport", {}).get("vorOrtAudit", {})
+
+        def open_at_end(f: Finding) -> bool:
+            return f.previous and f.open and not f.closed_by and not f.closed_not_refound and not f.dropped
+
+        previous = [f for f in findings if f.previous]
+        open_dev = [f for f in previous if open_at_end(f) and f.category in ("AG", "AS")]
+        open_rec = [f for f in previous if open_at_end(f) and f.category == "E"]
+
+        def listed(items: List[Finding]) -> str:
+            ids = [f"{self._final_id_of(findings_by_key, f.key)} ({f.row.get('Status') or 'offen'})" for f in items]
+            if len(ids) > self.MAX_LISTED_OPEN:
+                ids = ids[:self.MAX_LISTED_OPEN] + [f"... (insgesamt {len(items)})"]
+            return ", ".join(ids)
+
+        filled = 0
+        for item in voa.get("behebungAbweichungen", {}).get("content", []):
+            if item.get("type") == "question":
+                question = str(item.get("questionText") or "")
+                if "vorhergehenden Auditbericht" in question:
+                    item["answer"] = bool(previous)
+                    filled += 1
+                elif previous and "behoben" in question:
+                    item["answer"] = not open_dev
+                    filled += 1
+                elif previous and "Empfehlungen" in question and "berücksichtigt" in question:
+                    item["answer"] = not open_rec
+                    filled += 1
+            elif item.get("type") == "finding" and not str(item.get("findingText") or "").strip():
+                parts = []
+                if open_dev:
+                    parts.append(f"Noch offene Abweichungen des vorherigen Audits: {listed(open_dev)}.")
+                if open_rec:
+                    parts.append(f"Noch nicht abschließend berücksichtigte Empfehlungen des vorherigen Audits: {listed(open_rec)}.")
+                if not parts and previous:
+                    parts.append("Alle Abweichungen und Empfehlungen des vorherigen Audits sind behoben bzw. berücksichtigt (siehe Kapitel 7.2).")
+                if parts:
+                    item["findingText"] = " ".join(parts)
+
+        auflagen = voa.get("einhaltungAuflagen", {})
+        auflagen_rows = auflagen.get("table", {}).get("rows", []) or []
+        if auflagen_rows:
+            for item in auflagen.get("content", []):
+                if item.get("type") == "question" and item.get("answer") is None:
+                    item["answer"] = True
+
+        return {
+            "behebung_questions": filled,
+            "previous_open_deviations": len(open_dev),
+            "previous_open_recommendations": len(open_rec),
+            "auflagen_rows": len(auflagen_rows),
+        }
+
     # ------------------------------------------------------------------ orchestration
     async def finalize(self, report: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Returns the finalized report (the input dict, modified) and the decision log."""
@@ -555,6 +622,13 @@ class ReportFinalizer:
         renumbered = self._assign_numbers(findings)
         self._rebuild_tables(report, findings, findings_by_key)
         references, unmatched = self._reference_chapters(report, findings, findings_by_key)
+        behebung_counts = self._fill_behebung_und_auflagen(report, findings, findings_by_key)
+        logging.info(
+            f"5.3/5.4: {behebung_counts['behebung_questions']} question(s) answered, "
+            f"{behebung_counts['previous_open_deviations']} previous deviation(s) and "
+            f"{behebung_counts['previous_open_recommendations']} recommendation(s) still open, "
+            f"{behebung_counts['auflagen_rows']} Auflage(n) in 5.4."
+        )
 
         applied = [d for d in decisions if d.status.startswith("angewendet")]
         manual = [d for d in decisions if d.status.startswith("manuell")]
@@ -576,6 +650,7 @@ class ReportFinalizer:
             "renumbered": len(renumbered),
             "chapter_references": len(references),
             "chapter_unmatched": len(unmatched),
+            **behebung_counts,
         }
         logging.info(
             f"Finalize: {counts['groups_applied']} group(s) applied ({counts['regraded']} re-graded), "

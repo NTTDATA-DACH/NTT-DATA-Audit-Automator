@@ -74,7 +74,7 @@ class PreviousReportScanner:
         logging.info(f"Found previous audit report to scan: {report_uri}")
 
         # 2. Define and run all extraction tasks in parallel
-        extraction_tasks = ["extract_chapter_1", "extract_chapter_4", "extract_chapter_7"]
+        extraction_tasks = ["extract_chapter_1", "extract_chapter_4", "extract_auflagen", "extract_chapter_7"]
         coroutines = [self._run_extraction_task(task_name, report_uri) for task_name in extraction_tasks]
 
         # Fail-fast (MAX-7): the merged result is persisted AND pinned — later runs skip

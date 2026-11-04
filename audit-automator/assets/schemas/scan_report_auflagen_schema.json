@@ -1,0 +1,33 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Scanned Previous Report Data (Auflagen)",
+    "description": "Extracts the Auflagen (conditions) the previous audit or certification imposed, as chapter 5.4 of the Muster-Auditbericht lists them.",
+    "type": "object",
+    "properties": {
+        "auflagen": {
+            "type": "object",
+            "properties": {
+                "table": {
+                    "type": "object",
+                    "properties": {
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "Nummer": { "type": "string" },
+                                    "Beschreibung der Auflage": { "type": "string" },
+                                    "Auflage erteilt am": { "type": "string" }
+                                },
+                                "required": ["Nummer", "Beschreibung der Auflage", "Auflage erteilt am"]
+                            }
+                        }
+                    },
+                    "required": ["rows"]
+                }
+            },
+            "required": ["table"]
+        }
+    },
+    "required": ["auflagen"]
+}

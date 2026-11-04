@@ -154,3 +154,34 @@ def test_chapter_5_writes_the_risikoanalyse_answers_and_findings():
     assert [item["findingText"] for item in content if item["type"] == "finding"] == ["[AG] RA.1.A2 ist nur teilweise umgesetzt."]
     assert section["einzelergebnisseDerRisikoanalyse"]["massnahmenPruefungen"][0]["bewertung"] == "Umgesetzt"
     assert schema_validate(report) is True
+
+
+def test_auflagen_from_the_scan_fill_5_4_and_answer_its_first_question():
+    report = _load_template()
+    scan = dict(SCAN)
+    scan["auflagen"] = {"table": {"rows": [
+        {"Nummer": "1", "Beschreibung der Auflage": "Härtungskonzept nachliefern", "Auflage erteilt am": "16.06.2020"},
+    ]}}
+    _generator("Zertifizierungsaudit")._populate_from_scan_report(report, scan)
+    section = report["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"]
+    assert section["table"]["rows"][0]["Nummer"] == "1"
+    assert [i["answer"] for i in section["content"] if i.get("type") == "question"] == [True]
+
+
+def test_scan_without_auflagen_key_leaves_5_4_untouched():
+    # An older Scan-Report result has no 'auflagen' key; attesting 'keine Auflagen' from
+    # its absence would be wrong, so the section stays as the template delivers it.
+    report = _load_template()
+    before = json.dumps(report["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"], sort_keys=True)
+    _generator("Zertifizierungsaudit")._populate_from_scan_report(report, SCAN)
+    after = json.dumps(report["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"], sort_keys=True)
+    assert before == after
+
+
+def test_empty_auflagen_extraction_answers_no():
+    report = _load_template()
+    scan = dict(SCAN)
+    scan["auflagen"] = {"table": {"rows": []}}
+    _generator("Zertifizierungsaudit")._populate_from_scan_report(report, scan)
+    section = report["bsiAuditReport"]["vorOrtAudit"]["einhaltungAuflagen"]
+    assert [i["answer"] for i in section["content"] if i.get("type") == "question"] == [False]

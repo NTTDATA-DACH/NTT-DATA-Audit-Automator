@@ -448,6 +448,18 @@ class ReportGenerator:
             self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlBausteine1Ueberwachungsaudit.table.rows', stage_data.get('auswahlBausteine1Ueberwachungsaudit', {}).get('table', {}).get('rows', []))
         self._set_value_by_path(report, 'bsiAuditReport.erstellungEinesPruefplans.auditplanung.auswahlStandorte.table.rows', stage_data.get('auswahlStandorte', {}).get('table', {}).get('rows', []))
 
+        # 3. Populate 5.4 'Einhaltung der Auflagen' from the previous report's Auflagen. The
+        # key is only present when the scan ran the extraction, so an older Scan-Report
+        # result leaves the section untouched instead of wrongly attesting 'keine Auflagen'.
+        if 'auflagen' in stage_data:
+            auflagen_rows = stage_data.get('auflagen', {}).get('table', {}).get('rows', [])
+            self._set_value_by_path(report, 'bsiAuditReport.vorOrtAudit.einhaltungAuflagen.table.rows', auflagen_rows)
+            content = report.get('bsiAuditReport', {}).get('vorOrtAudit', {}).get('einhaltungAuflagen', {}).get('content', [])
+            for item in content:
+                if item.get('type') == 'question' and 'Auflagen' in str(item.get('questionText', '')):
+                    item['answer'] = bool(auflagen_rows)
+            logging.info(f"Populated 5.4 with {len(auflagen_rows)} Auflage(n) from the previous report.")
+
 
     def _populate_report(self, report: dict, stage_name: str, stage_data: dict) -> None:
         """Router function to call the correct population logic for a given stage."""
